@@ -11,7 +11,10 @@ interface CatchComboProps {
 const MAX_HITS = 5;
 const ZONE_SHRINK = 0.82;
 const SPEED_BOOST = 1.18;
-const LEGENDARY_ZONE_MULT = 0.75;
+// Legendaries get a bigger starting zone and a gentler per-hit shrink so the
+// 5-combo is challenging but fair (speed is intentionally left untouched).
+const LEGENDARY_ZONE_MULT = 1.15;
+const LEGENDARY_ZONE_SHRINK = 0.92;
 const LEGENDARY_SPEED_MULT = 1.25;
 
 function safePower(power: number): number {
@@ -45,7 +48,8 @@ export function CatchCombo({ powerLevel, isLegendary = false, onResult, disabled
   const [locked, setLocked] = useState(false);
   const [failed, setFailed] = useState(false);
 
-  const zoneSize = baseZone * Math.pow(ZONE_SHRINK, hits);
+  const shrink = isLegendary ? LEGENDARY_ZONE_SHRINK : ZONE_SHRINK;
+  const zoneSize = baseZone * Math.pow(shrink, hits);
   const zoneStart = 0.5 - zoneSize / 2;
   const speed = baseSpeed * Math.pow(SPEED_BOOST, hits);
 
