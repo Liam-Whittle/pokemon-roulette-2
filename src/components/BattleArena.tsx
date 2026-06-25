@@ -6,7 +6,7 @@ import { TypeBadge } from './TypeBadge';
 import { Wheel } from './Wheel';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
-import { playClip } from '../utils/music';
+import { playClip, stopClips } from '../utils/music';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import type { Badge, BattleWheelSegment, GymLeader, PokemonData } from '../types/game';
 
@@ -106,6 +106,8 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
   useEffect(() => {
     fetchPokemon(leader.pokemon[leader.pokemon.length - 1].id).then(setEnemy);
   }, [leader]);
+
+  useEffect(() => () => stopClips(), []);
 
   useEffect(() => {
     if (phase !== 'intro') return;
@@ -335,7 +337,10 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
           <button
             type="button"
             className="btn btn--primary btn--lg"
-            onClick={onWin}
+            onClick={() => {
+              stopClips();
+              onWin();
+            }}
           >
             Continue
           </button>

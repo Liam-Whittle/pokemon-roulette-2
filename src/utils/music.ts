@@ -95,6 +95,10 @@ export function setMusicVolume(nextVolume: number) {
   if (audio) audio.volume = userMuted ? 0 : volume;
 }
 
+// One-shot clips that are currently playing, so they can be stopped on demand
+// (e.g. when the player leaves the victory screen).
+let activeClips: HTMLAudioElement[] = [];
+
 /**
  * Plays a short one-shot audio clip (e.g. a victory jingle) over the top of the
  * background music. Respects the global mute toggle and volume slider, but
@@ -104,11 +108,24 @@ export function playClip(src: string) {
   if (userMuted) return;
   try {
     const clip = new Audio(src);
-    clip.volume = Math.min(1, Math.max(volume, volume * 4, 0.2));
+    clip.volume = Math.min(1, Math.max(volume, volume * 2, 0.1));
+    activeClips.push(clip);
+    clip.addEventListener('ended', () => {
+      activeClips = activeClips.filter((c) => c !== clip);
+    });
     clip.play().catch(() => {
       /* Autoplay blocked until a user gesture; safe to ignore. */
     });
   } catch {
     /* Audio not available. */
   }
+}
+
+/** Immediately stops any one-shot clips started via playClip. */
+export function stopClips() {
+  for (const clip of activeClips) {
+    clip.pause();
+    clip.currentTime = 0;
+  }
+  activeClips = [];
 }
