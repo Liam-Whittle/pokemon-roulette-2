@@ -7,6 +7,7 @@ const MINI_GAMES: WheelSegment[] = WHEEL_SEGMENTS;
 
 export function DebugMenu() {
   const startActivity = useGameStore((s) => s.startActivity);
+  const startDebugLegendary = useGameStore((s) => s.startDebugLegendary);
   const setScreen = useGameStore((s) => s.setScreen);
   const setDebugGym = useGameStore((s) => s.setDebugGym);
   const setDebugEliteStage = useGameStore((s) => s.setDebugEliteStage);
@@ -28,6 +29,11 @@ export function DebugMenu() {
 
   function launchMiniGame(segment: WheelSegment) {
     startActivity(segment);
+    setOpen(false);
+  }
+
+  function launchLegendary() {
+    startDebugLegendary();
     setOpen(false);
   }
 
@@ -72,6 +78,9 @@ export function DebugMenu() {
                   {segment.icon} {segment.label}
                 </button>
               ))}
+              <button type="button" className="debug-panel__btn" onClick={launchLegendary}>
+                ✨ Legendary Encounter
+              </button>
             </div>
           </div>
 

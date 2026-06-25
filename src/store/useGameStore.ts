@@ -63,6 +63,7 @@ interface GameState {
   setMusicVolume: (volume: number) => void;
   setActivePanel: (tab: PanelTab) => void;
   startActivity: (segment: WheelSegment) => void;
+  startDebugLegendary: () => void;
   setCurrentPokemon: (pokemon: PokemonData | null) => void;
   clearEncounter: () => void;
   addStarterPokemon: (pokemon: PokemonData) => void;
@@ -187,6 +188,17 @@ export const useGameStore = create<GameState>()(
           currentEncounterId: encounterId,
           currentPokemon: null,
           screen: screenMap[segment.activity] ?? 'coming-soon',
+        });
+      },
+
+      startDebugLegendary: () => {
+        resetEncounterSession();
+        set({
+          currentSegment: null,
+          currentActivity: 'tallgrass',
+          currentEncounterId: pickRandomPokemonId(GEN1_LEGENDARY),
+          currentPokemon: null,
+          screen: 'catch',
         });
       },
 
