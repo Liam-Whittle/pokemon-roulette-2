@@ -5,13 +5,18 @@ import type { WheelSegment } from '../types/game';
 
 const MINI_GAMES: WheelSegment[] = WHEEL_SEGMENTS;
 
-export function DebugMenu() {
+interface DebugMenuProps {
+  onUberSpin?: () => void;
+}
+
+export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   const startActivity = useGameStore((s) => s.startActivity);
   const startDebugLegendary = useGameStore((s) => s.startDebugLegendary);
   const setScreen = useGameStore((s) => s.setScreen);
   const setDebugGym = useGameStore((s) => s.setDebugGym);
   const setDebugEliteStage = useGameStore((s) => s.setDebugEliteStage);
   const addItem = useGameStore((s) => s.addItem);
+  const addMoney = useGameStore((s) => s.addMoney);
 
   const [open, setOpen] = useState(false);
 
@@ -37,6 +42,11 @@ export function DebugMenu() {
     setOpen(false);
   }
 
+  function launchUberSpin() {
+    onUberSpin?.();
+    setOpen(false);
+  }
+
   function launchChampionScreen() {
     const store = useGameStore.getState();
     store.setEliteCleared(true);
@@ -47,6 +57,11 @@ export function DebugMenu() {
 
   function launchGameOverScreen() {
     setScreen('gameover');
+    setOpen(false);
+  }
+
+  function launchShop() {
+    setScreen('shop');
     setOpen(false);
   }
 
@@ -80,6 +95,21 @@ export function DebugMenu() {
               ))}
               <button type="button" className="debug-panel__btn" onClick={launchLegendary}>
                 ✨ Legendary Encounter
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={launchUberSpin}>
+                🌀 Uber Spin
+              </button>
+            </div>
+          </div>
+
+          <div className="debug-panel__section">
+            <p className="debug-panel__label">Shop & Money</p>
+            <div className="debug-panel__grid">
+              <button type="button" className="debug-panel__btn" onClick={launchShop}>
+                🏪 Visit Shop
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={() => addMoney(100)}>
+                ¥ +100 Dollars
               </button>
             </div>
           </div>

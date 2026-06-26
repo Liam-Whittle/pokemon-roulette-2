@@ -2,7 +2,19 @@ import { motion } from 'framer-motion';
 import { useGameStore } from '../store/useGameStore';
 
 export function GameOverScreen() {
+  const bag = useGameStore((s) => s.bag);
   const resetGame = useGameStore((s) => s.resetGame);
+  const consumeItem = useGameStore((s) => s.consumeItem);
+  const restoreOneLife = useGameStore((s) => s.restoreOneLife);
+  const setScreen = useGameStore((s) => s.setScreen);
+
+  const maxReviveCount = bag.find((item) => item.id === 'maxrevive')?.quantity ?? 0;
+
+  function handleMaxRevive() {
+    if (!consumeItem('maxrevive', 1)) return;
+    restoreOneLife();
+    setScreen('hub');
+  }
 
   return (
     <motion.div
@@ -19,7 +31,14 @@ export function GameOverScreen() {
       >
         <div className="gameover-card__icon">💀</div>
         <h1 className="gameover-card__title">Better luck next time</h1>
-        <p className="gameover-card__subtitle">You ran out of lives and your journey ends here.</p>
+        <p className="gameover-card__subtitle">
+          You ran out of PokeCenter visits and your journey ends here.
+        </p>
+        {maxReviveCount > 0 && (
+          <button type="button" className="btn btn--accent btn--lg" onClick={handleMaxRevive}>
+            Use Max Revive (×{maxReviveCount})
+          </button>
+        )}
         <button type="button" className="btn btn--primary btn--lg" onClick={resetGame}>
           Back to Title
         </button>

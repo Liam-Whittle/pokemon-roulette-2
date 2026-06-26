@@ -32,6 +32,11 @@ export const sfx = {
     playTone(300, 0.1, 'square', 0.1);
     setTimeout(() => playTone(500, 0.15, 'sine', 0.08), 80);
   },
+  dig: () => playTone(120, 0.08, 'square', 0.1),
+  clink: () => {
+    playTone(620, 0.06, 'sine', 0.1);
+    setTimeout(() => playTone(920, 0.1, 'sine', 0.09), 50);
+  },
   hit: () => playTone(200, 0.12, 'square', 0.12),
   shake: () => playTone(150, 0.08, 'triangle', 0.1),
   catch: () => {

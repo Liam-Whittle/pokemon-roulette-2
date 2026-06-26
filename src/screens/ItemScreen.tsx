@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ITEMS, pickRandom } from '../data/pools';
+import { ITEMS, pickFindItemId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
+import { ItemIcon } from '../components/ItemIcon';
 import { playSfx } from '../utils/sound';
 
 export function ItemScreen() {
@@ -16,7 +17,8 @@ export function ItemScreen() {
   useEffect(() => {
     playSfx('click', muted);
     const t = setTimeout(() => {
-      const item = pickRandom(ITEMS);
+      const itemId = pickFindItemId();
+      const item = ITEMS.find((entry) => entry.id === itemId) ?? ITEMS[0];
       setFoundItem(item);
       addItem(item.id);
       playSfx('item', muted);
@@ -58,7 +60,7 @@ export function ItemScreen() {
             animate={{ scale: 1, rotate: 0 }}
             transition={{ type: 'spring', stiffness: 200 }}
           >
-            <span className="item-found__icon">{foundItem.icon}</span>
+            <ItemIcon id={foundItem.id} icon={foundItem.icon} name={foundItem.name} className="item-found__icon" />
             <h3>You found a {foundItem.name}!</h3>
             <p className="item-found__msg">Added to your bag.</p>
             <button type="button" className="btn btn--primary" onClick={() => setScreen('hub')}>
@@ -67,7 +69,6 @@ export function ItemScreen() {
           </motion.div>
         )}
       </div>
-      <p className="item-found__msg">Items are now limited to Potion, Rare Candy, and X-Attack.</p>
     </motion.div>
   );
 }

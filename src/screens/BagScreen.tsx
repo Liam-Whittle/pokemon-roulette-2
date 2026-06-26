@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { useGameStore } from '../store/useGameStore';
+import { ItemIcon } from '../components/ItemIcon';
 import { playSfx } from '../utils/sound';
 
 export function BagScreen() {
@@ -30,7 +31,7 @@ export function BagScreen() {
           <div className="bag-grid">
             {bag.map((item) => (
               <div key={item.id} className="bag-item">
-                <span className="bag-item__icon">{item.icon}</span>
+                <ItemIcon id={item.id} icon={item.icon} name={item.name} className="bag-item__icon" />
                 <span className="bag-item__name">{item.name}</span>
                 <span className="bag-item__qty">×{item.quantity}</span>
               </div>

@@ -21,6 +21,7 @@ import { BagScreen } from './screens/BagScreen';
 import { ChampionScreen } from './screens/ChampionScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 import { HallOfChampionsScreen } from './screens/HallOfChampionsScreen';
+import { ShopScreen } from './screens/ShopScreen';
 import { ComingSoonScreen } from './screens/ComingSoonScreen';
 import { primeMusic, unlockMusic, setMusicMuted, setMusicTrack, setMusicVolume } from './utils/music';
 import { asset } from './utils/asset';
@@ -64,6 +65,8 @@ function ScreenRouter() {
       return <GameOverScreen key="gameover" />;
     case 'hall':
       return <HallOfChampionsScreen key="hall" />;
+    case 'shop':
+      return <ShopScreen key="shop" />;
     case 'coming-soon':
       return <ComingSoonScreen key="coming-soon" />;
     default:
@@ -147,7 +150,7 @@ export default function App() {
       setMusicTrack('gamewin');
     } else if (screen === 'gameover') {
       setMusicTrack('gamelose');
-    } else if (screen === 'title' || screen === 'hall') {
+    } else if (screen === 'title' || screen === 'hall' || screen === 'shop') {
       setMusicTrack('title');
     } else if (screen === 'catch' || screen === 'fishing' || screen === 'fossil' || screen === 'cave') {
       setMusicTrack('pokemon');

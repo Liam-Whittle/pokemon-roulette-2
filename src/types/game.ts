@@ -17,7 +17,8 @@ export type Screen =
   | 'champion'
   | 'gameover'
   | 'hall'
-  | 'coming-soon';
+  | 'coming-soon'
+  | 'shop';
 
 export type ActivityType =
   | 'wild'
@@ -27,7 +28,13 @@ export type ActivityType =
   | 'gym'
   | 'fossil'
   | 'cave'
-  | 'coming-soon';
+  | 'coming-soon'
+  | 'legendary'
+  | 'shop'
+  | 'uber'
+  | 'evolve'
+  | 'potion'
+  | 'battlegym';
 
 export interface WheelSegment {
   id: string;
@@ -36,6 +43,7 @@ export interface WheelSegment {
   color: string;
   icon: string;
   comingSoon?: boolean;
+  weight?: number;
 }
 
 export interface PokemonData {
@@ -45,6 +53,8 @@ export interface PokemonData {
   types: string[];
   sprite: string;
   artwork: string;
+  shinySprite?: string;
+  shinyArtwork?: string;
   catchRate: number;
   isLegendary: boolean;
   powerLevel: number;
@@ -58,10 +68,12 @@ export interface CaughtPokemon {
   displayName: string;
   types: string[];
   sprite: string;
+  shinySprite?: string;
   caughtAt: number;
   nickname?: string;
   powerLevel: number;
   evolvesToId?: number | null;
+  shiny?: boolean;
 }
 
 export interface BagItem {
@@ -99,6 +111,20 @@ export interface ActivityResult {
   item?: BagItem;
   badge?: Badge;
   message: string;
+}
+
+export interface EvolutionInfo {
+  fromName: string;
+  fromArtwork: string;
+  fromTypes: string[];
+  toName: string;
+  toArtwork: string;
+  toTypes: string[];
+}
+
+export interface EvolveResult {
+  message: string;
+  evolution: EvolutionInfo | null;
 }
 
 export interface GymLeader {

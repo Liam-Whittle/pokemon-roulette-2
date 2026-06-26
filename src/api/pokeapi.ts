@@ -4,7 +4,7 @@ import { PLACEHOLDER_SPRITE } from '../utils/asset';
 const BASE = 'https://pokeapi.co/api/v2';
 // Bump the version suffix whenever the cached shape changes so stale entries
 // (e.g. cached before powerLevel/baseStatTotal existed) are ignored.
-const CACHE_PREFIX = 'poke-cache-v2-';
+const CACHE_PREFIX = 'poke-cache-v3-';
 const memoryCache = new Map<string, unknown>();
 
 function capitalize(s: string): string {
@@ -48,7 +48,8 @@ interface PokeApiPokemon {
   stats: { base_stat: number }[];
   sprites: {
     front_default: string | null;
-    other: { 'official-artwork': { front_default: string | null } };
+    front_shiny: string | null;
+    other: { 'official-artwork': { front_default: string | null; front_shiny: string | null } };
   };
   species: { url: string };
 }
@@ -135,6 +136,11 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
         data.sprites.other['official-artwork'].front_default ??
         data.sprites.front_default ??
         PLACEHOLDER_SPRITE,
+      shinySprite: data.sprites.front_shiny ?? undefined,
+      shinyArtwork:
+        data.sprites.other['official-artwork'].front_shiny ??
+        data.sprites.front_shiny ??
+        undefined,
       catchRate,
       isLegendary,
       powerLevel: normalizePowerLevel(baseStatTotal),

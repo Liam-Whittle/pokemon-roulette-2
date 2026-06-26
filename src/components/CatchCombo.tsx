@@ -4,6 +4,9 @@ import { asset } from '../utils/asset';
 interface CatchComboProps {
   powerLevel: number;
   isLegendary?: boolean;
+  zoneBonus?: number;
+  speedMult?: number;
+  ballSprite?: string;
   onResult: (success: boolean) => void;
   disabled?: boolean;
 }
@@ -36,7 +39,15 @@ function computeBaseSpeed(power: number, isLegendary: boolean): number {
   return isLegendary ? speed * LEGENDARY_SPEED_MULT : speed;
 }
 
-export function CatchCombo({ powerLevel, isLegendary = false, onResult, disabled }: CatchComboProps) {
+export function CatchCombo({
+  powerLevel,
+  isLegendary = false,
+  zoneBonus = 0,
+  speedMult = 1,
+  ballSprite,
+  onResult,
+  disabled,
+}: CatchComboProps) {
   const power = safePower(powerLevel);
   const requiredHits = useMemo(() => computeRequiredHits(power, isLegendary), [power, isLegendary]);
   const baseZone = useMemo(() => computeBaseZone(power, isLegendary), [power, isLegendary]);
@@ -49,9 +60,9 @@ export function CatchCombo({ powerLevel, isLegendary = false, onResult, disabled
   const [failed, setFailed] = useState(false);
 
   const shrink = isLegendary ? LEGENDARY_ZONE_SHRINK : ZONE_SHRINK;
-  const zoneSize = baseZone * Math.pow(shrink, hits);
+  const zoneSize = Math.min(0.9, baseZone * (1 + zoneBonus) * Math.pow(shrink, hits));
   const zoneStart = 0.5 - zoneSize / 2;
-  const speed = baseSpeed * Math.pow(SPEED_BOOST, hits);
+  const speed = baseSpeed * speedMult * Math.pow(SPEED_BOOST, hits);
 
   useEffect(() => {
     if (locked || disabled || failed) return;
@@ -130,7 +141,7 @@ export function CatchCombo({ powerLevel, isLegendary = false, onResult, disabled
             style={{ left: `${zoneStart * 100}%`, width: `${zoneSize * 100}%` }}
           />
           <img
-            src={asset('pokeball.svg')}
+            src={ballSprite ?? asset('pokeball.svg')}
             alt="Pokeball"
             className="catch-combo__ball"
             style={{ left: `${position * 100}%` }}

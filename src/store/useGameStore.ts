@@ -7,8 +7,8 @@ import {
   GEN1_CAVE,
   GEN1_FISHING,
   GEN1_LEGENDARY,
-  GEN1_WILD_HIGH,
   GEN1_WILD_LOW,
+  GEN1_WILD_HIGH,
   ITEMS,
   LEGENDARY_ENCOUNTER_CHANCE,
   MAX_PARTY,
@@ -22,6 +22,7 @@ import type {
   BagItem,
   CaughtPokemon,
   ChampionRecord,
+  EvolveResult,
   PokedexEntry,
   PokemonData,
   Screen,
@@ -41,6 +42,7 @@ interface GameState {
   hallOfChampions: ChampionRecord[];
   muted: boolean;
   musicVolume: number;
+  money: number;
   currentActivity: ActivityType | null;
   currentSegment: WheelSegment | null;
   currentPokemon: PokemonData | null;
@@ -54,6 +56,7 @@ interface GameState {
   activePanel: PanelTab;
   debugGymId: string | null;
   debugEliteStage: number | null;
+  lastCaughtAt: number | null;
 
   setScreen: (screen: Screen) => void;
   setDebugGym: (id: string | null) => void;
@@ -63,15 +66,18 @@ interface GameState {
   setMusicVolume: (volume: number) => void;
   setActivePanel: (tab: PanelTab) => void;
   startActivity: (segment: WheelSegment) => void;
+  startLegendaryEncounter: () => void;
   startDebugLegendary: () => void;
   setCurrentPokemon: (pokemon: PokemonData | null) => void;
   clearEncounter: () => void;
   addStarterPokemon: (pokemon: PokemonData) => void;
   catchPokemon: (pokemon: PokemonData, nickname?: string) => void;
+  setShinyOnCatch: (caughtAt: number) => void;
   swapPartyMember: (caughtAt: number, pokemonId: number) => void;
   addItem: (itemId: string, quantity?: number) => void;
   consumeItem: (itemId: string, quantity?: number) => boolean;
-  useRareCandy: () => Promise<string>;
+  useRareCandy: () => Promise<EvolveResult>;
+  evolveRandomPartyMember: () => Promise<EvolveResult>;
   earnBadge: (badge: Badge) => void;
   recordChampion: () => void;
   setLastResult: (result: ActivityResult) => void;
@@ -80,6 +86,9 @@ interface GameState {
   setEliteCleared: (cleared: boolean) => void;
   loseLife: () => number;
   restoreLives: () => void;
+  restoreOneLife: () => void;
+  addMoney: (amount: number) => void;
+  spendMoney: (amount: number) => boolean;
   markSeen: (pokemon: PokemonData) => void;
   getEncounterId: (activity: ActivityType) => number;
   getAttackTypes: () => string[];
@@ -88,6 +97,7 @@ interface GameState {
 
 const defaultBag: BagItem[] = [
   { id: 'potion', name: 'Potion', quantity: 1, icon: '💊' },
+  { id: 'pokeball', name: 'Poké Ball', quantity: 5, icon: '🔴' },
 ];
 
 function toCaughtPokemon(pokemon: PokemonData, nickname?: string): CaughtPokemon {
@@ -97,10 +107,79 @@ function toCaughtPokemon(pokemon: PokemonData, nickname?: string): CaughtPokemon
     displayName: pokemon.displayName,
     types: pokemon.types,
     sprite: pokemon.sprite,
+    shinySprite: pokemon.shinySprite,
     caughtAt: Date.now(),
     nickname,
     powerLevel: pokemon.powerLevel,
     evolvesToId: pokemon.evolvesToId ?? null,
+    shiny: false,
+  };
+}
+
+interface EvolvableMember {
+  member: CaughtPokemon;
+  fromData: PokemonData;
+  evolvesToId: number;
+}
+
+/**
+ * Resolves which party members can currently evolve by re-fetching their
+ * species data (cached). This is more reliable than the stored `evolvesToId`,
+ * which can be stale on older saves or cleared when a Pokémon is swapped in.
+ */
+async function findEvolvableMembers(party: CaughtPokemon[]): Promise<EvolvableMember[]> {
+  const datas = await Promise.all(
+    party.map((member) => fetchPokemon(member.id).catch(() => null)),
+  );
+  const result: EvolvableMember[] = [];
+  party.forEach((member, index) => {
+    const data = datas[index];
+    if (data && data.evolvesToId) {
+      result.push({ member, fromData: data, evolvesToId: data.evolvesToId });
+    }
+  });
+  return result;
+}
+
+async function performEvolution(
+  set: (updater: (state: GameState) => Partial<GameState>) => void,
+  chosen: EvolvableMember,
+): Promise<EvolveResult> {
+  const { member, fromData, evolvesToId } = chosen;
+  const evolved = await fetchPokemon(evolvesToId);
+
+  set((state) => {
+    const party = state.party.map((entry) =>
+      entry.caughtAt === member.caughtAt
+        ? { ...toCaughtPokemon(evolved, member.nickname), shiny: member.shiny }
+        : entry,
+    );
+    return {
+      party,
+      pokedex: {
+        ...state.pokedex,
+        [evolved.id]: {
+          seen: true,
+          caught: true,
+          name: evolved.displayName,
+          sprite: evolved.sprite,
+          types: evolved.types,
+          powerLevel: evolved.powerLevel,
+        },
+      },
+    };
+  });
+
+  return {
+    message: `${member.displayName} evolved into ${evolved.displayName}!`,
+    evolution: {
+      fromName: member.nickname ?? member.displayName,
+      fromArtwork: fromData.artwork,
+      fromTypes: fromData.types,
+      toName: evolved.displayName,
+      toArtwork: evolved.artwork,
+      toTypes: evolved.types,
+    },
   };
 }
 
@@ -139,6 +218,7 @@ export const useGameStore = create<GameState>()(
       hallOfChampions: [],
       muted: false,
       musicVolume: 0.05,
+      money: 100,
       currentActivity: null,
       currentSegment: null,
       currentPokemon: null,
@@ -152,6 +232,7 @@ export const useGameStore = create<GameState>()(
       activePanel: 'party',
       debugGymId: null,
       debugEliteStage: null,
+      lastCaughtAt: null,
 
       setScreen: (screen) => set({ screen }),
       setDebugGym: (debugGymId) => set({ debugGymId }),
@@ -173,25 +254,30 @@ export const useGameStore = create<GameState>()(
           fossil: 'fossil',
           cave: 'cave',
           'coming-soon': 'coming-soon',
+          legendary: 'catch',
+          shop: 'shop',
         };
 
         const isGrass = segment.activity === 'wild' || segment.activity === 'tallgrass';
-        const encounterId = isGrass
-          ? pickGrassEncounterId(segment.activity as 'wild' | 'tallgrass')
-          : null;
+        const isLegendary = segment.activity === 'legendary';
+        const encounterId = isLegendary
+          ? pickRandomPokemonId(GEN1_LEGENDARY)
+          : isGrass
+            ? pickGrassEncounterId(segment.activity as 'wild' | 'tallgrass')
+            : null;
 
-        if (isGrass) resetEncounterSession();
+        if (isGrass || isLegendary) resetEncounterSession();
 
         set({
           currentSegment: segment,
-          currentActivity: segment.activity,
+          currentActivity: isLegendary ? 'tallgrass' : segment.activity,
           currentEncounterId: encounterId,
           currentPokemon: null,
           screen: screenMap[segment.activity] ?? 'coming-soon',
         });
       },
 
-      startDebugLegendary: () => {
+      startLegendaryEncounter: () => {
         resetEncounterSession();
         set({
           currentSegment: null,
@@ -200,6 +286,10 @@ export const useGameStore = create<GameState>()(
           currentPokemon: null,
           screen: 'catch',
         });
+      },
+
+      startDebugLegendary: () => {
+        get().startLegendaryEncounter();
       },
 
       addStarterPokemon: (pokemon) => {
@@ -233,6 +323,7 @@ export const useGameStore = create<GameState>()(
 
           return {
             party: nextParty,
+            lastCaughtAt: caught.caughtAt,
             pokedex: {
               ...state.pokedex,
               [pokemon.id]: {
@@ -259,11 +350,18 @@ export const useGameStore = create<GameState>()(
         });
       },
 
+      setShinyOnCatch: (caughtAt) => {
+        set((state) => ({
+          party: state.party.map((member) =>
+            member.caughtAt === caughtAt ? { ...member, shiny: true } : member,
+          ),
+        }));
+      },
+
       swapPartyMember: (caughtAt, pokemonId) => {
         set((state) => {
           const entry = state.pokedex[pokemonId];
           if (!entry) return state;
-          // Don't allow swapping in a species that is already in the party.
           if (state.party.some((member) => member.id === pokemonId)) return state;
           const replacement: CaughtPokemon = {
             id: pokemonId,
@@ -295,37 +393,30 @@ export const useGameStore = create<GameState>()(
 
       useRareCandy: async () => {
         if (!get().consumeItem('rarecandy', 1)) {
-          return 'No Rare Candy left.';
+          return { message: 'No Rare Candy left.', evolution: null };
         }
 
-        const evolvable = get().party.filter((pokemon) => pokemon.evolvesToId);
+        const evolvable = await findEvolvableMembers(get().party);
         if (evolvable.length === 0) {
           get().addItem('potion', 1);
-          return 'No party Pokemon could evolve, so you received a free Potion.';
+          return {
+            message: 'None of your Pokémon can evolve right now, so you received a Potion!',
+            evolution: null,
+          };
         }
 
         const chosen = pickRandom(evolvable);
-        const evolved = await fetchPokemon(chosen.evolvesToId!);
-        set((state) => {
-          const party = state.party.map((member) =>
-            member.caughtAt === chosen.caughtAt ? toCaughtPokemon(evolved, member.nickname) : member,
-          );
-          return {
-            party,
-            pokedex: {
-              ...state.pokedex,
-              [evolved.id]: {
-                seen: true,
-                caught: true,
-                name: evolved.displayName,
-                sprite: evolved.sprite,
-                types: evolved.types,
-                powerLevel: evolved.powerLevel,
-              },
-            },
-          };
-        });
-        return `${chosen.displayName} evolved into ${evolved.displayName}!`;
+        return performEvolution(set, chosen);
+      },
+
+      evolveRandomPartyMember: async () => {
+        const evolvable = await findEvolvableMembers(get().party);
+        if (evolvable.length === 0) {
+          return { message: 'None of your Pokémon can evolve right now.', evolution: null };
+        }
+
+        const chosen = pickRandom(evolvable);
+        return performEvolution(set, chosen);
       },
 
       earnBadge: (badge) => {
@@ -365,6 +456,13 @@ export const useGameStore = create<GameState>()(
         return lives;
       },
       restoreLives: () => set({ lives: 2 }),
+      restoreOneLife: () => set({ lives: 1 }),
+      addMoney: (amount) => set((state) => ({ money: state.money + amount })),
+      spendMoney: (amount) => {
+        if (get().money < amount) return false;
+        set((state) => ({ money: state.money - amount }));
+        return true;
+      },
 
       markSeen: (pokemon) => {
         set((state) => ({
@@ -391,6 +489,7 @@ export const useGameStore = create<GameState>()(
           case 'fossil':
             return pickRandomPokemonId(FOSSIL_POKEMON);
           case 'tallgrass':
+          case 'legendary':
             return pickGrassEncounterId('tallgrass');
           case 'wild':
             return pickGrassEncounterId('wild');
@@ -423,6 +522,8 @@ export const useGameStore = create<GameState>()(
           lives: 2,
           starterClaimed: false,
           activePanel: 'party',
+          money: 100,
+          lastCaughtAt: null,
         }),
     }),
     {
@@ -436,6 +537,7 @@ export const useGameStore = create<GameState>()(
         hallOfChampions: state.hallOfChampions,
         muted: state.muted,
         musicVolume: state.musicVolume,
+        money: state.money,
         spinsCount: state.spinsCount,
         lastGymSpin: state.lastGymSpin,
         eliteCleared: state.eliteCleared,

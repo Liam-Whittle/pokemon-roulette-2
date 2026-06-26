@@ -1,27 +1,38 @@
 import { useState, type ReactNode } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { TypeBadge } from './TypeBadge';
+import { PokeDollarAmount } from './PokeDollar';
+import { ItemIcon } from './ItemIcon';
+import { EvolutionModal } from './EvolutionModal';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import type { EvolutionInfo } from '../types/game';
 
 interface SidePanelProps {
   compact?: boolean;
   extra?: ReactNode;
+  allowSwap?: boolean;
+  allowItems?: boolean;
 }
 
-export function SidePanel({ compact = false, extra }: SidePanelProps) {
+export function SidePanel({ compact = false, extra, allowSwap = true, allowItems = true }: SidePanelProps) {
   const party = useGameStore((state) => state.party);
   const pokedex = useGameStore((state) => state.pokedex);
   const bag = useGameStore((state) => state.bag);
   const badges = useGameStore((state) => state.badges);
+  const money = useGameStore((state) => state.money);
   const activePanel = useGameStore((state) => state.activePanel);
   const setActivePanel = useGameStore((state) => state.setActivePanel);
   const triggerRareCandy = useGameStore((state) => state.useRareCandy);
   const swapPartyMember = useGameStore((state) => state.swapPartyMember);
-  const setLastResult = useGameStore((state) => state.setLastResult);
 
   const [swappingFor, setSwappingFor] = useState<number | null>(null);
+  const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [usingCandy, setUsingCandy] = useState(false);
 
   const entries = Object.values(pokedex).sort((a, b) => a.name.localeCompare(b.name));
+
+  const rareCandy = bag.find((item) => item.id === 'rarecandy');
 
   const partyIds = new Set(party.map((member) => member.id));
   const caughtBox = Object.entries(pokedex)
@@ -30,8 +41,18 @@ export function SidePanel({ compact = false, extra }: SidePanelProps) {
     .sort((a, b) => a.name.localeCompare(b.name));
 
   async function handleUseRareCandy() {
-    const message = await triggerRareCandy();
-    setLastResult({ type: 'item', success: true, message });
+    if (usingCandy) return;
+    setUsingCandy(true);
+    try {
+      const result = await triggerRareCandy();
+      if (result.evolution) {
+        setEvolution(result.evolution);
+      } else {
+        setNotice(result.message);
+      }
+    } finally {
+      setUsingCandy(false);
+    }
   }
 
   function handleSwap(pokemonId: number) {
@@ -64,7 +85,9 @@ export function SidePanel({ compact = false, extra }: SidePanelProps) {
               party.map((pokemon) => (
                 <div key={`${pokemon.id}-${pokemon.caughtAt}`} className="side-panel__card">
                   <img
-                    src={pokemon.sprite}
+                    src={
+                      pokemon.shiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite
+                    }
                     alt={pokemon.displayName}
                     className="side-panel__sprite"
                     onError={(event) => {
@@ -72,7 +95,10 @@ export function SidePanel({ compact = false, extra }: SidePanelProps) {
                     }}
                   />
                   <div className="side-panel__card-body">
-                    <strong>{pokemon.nickname ?? pokemon.displayName}</strong>
+                    <strong>
+                      {pokemon.shiny ? '✨ ' : ''}
+                      {pokemon.nickname ?? pokemon.displayName}
+                    </strong>
                     <span>Power {Math.round((Number.isFinite(pokemon.powerLevel) ? pokemon.powerLevel : 0.3) * 100)}</span>
                     <div className="side-panel__types">
                       {pokemon.types.map((type) => (
@@ -80,18 +106,20 @@ export function SidePanel({ compact = false, extra }: SidePanelProps) {
                       ))}
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="btn btn--ghost btn--sm side-panel__swap-btn"
-                    onClick={() => setSwappingFor((current) => (current === pokemon.caughtAt ? null : pokemon.caughtAt))}
-                  >
-                    {swappingFor === pokemon.caughtAt ? 'Cancel' : 'Swap'}
-                  </button>
+                  {allowSwap ? (
+                    <button
+                      type="button"
+                      className="btn btn--ghost btn--sm side-panel__swap-btn"
+                      onClick={() => setSwappingFor((current) => (current === pokemon.caughtAt ? null : pokemon.caughtAt))}
+                    >
+                      {swappingFor === pokemon.caughtAt ? 'Cancel' : 'Swap'}
+                    </button>
+                  ) : null}
                 </div>
               ))
             )}
 
-            {swappingFor !== null && (
+            {allowSwap && swappingFor !== null && (
               <div className="side-panel__swap">
                 <p className="side-panel__swap-title">Choose a Pokémon to swap in</p>
                 {caughtBox.length === 0 ? (
@@ -148,16 +176,22 @@ export function SidePanel({ compact = false, extra }: SidePanelProps) {
         )}
 
         {activePanel === 'bag' && (
-          <div className="side-panel__list">
+          <div className="side-panel__list side-panel__list--bag">
             {bag.map((item) => (
               <div key={item.id} className="side-panel__card">
-                <span className="side-panel__icon">{item.icon}</span>
+                <ItemIcon id={item.id} icon={item.icon} name={item.name} className="side-panel__icon" />
                 <div className="side-panel__card-body">
                   <strong>{item.name}</strong>
                   <span>x{item.quantity}</span>
                 </div>
                 {item.id === 'rarecandy' && (
-                  <button type="button" className="btn btn--ghost btn--sm" onClick={handleUseRareCandy}>
+                  <button
+                    type="button"
+                    className="btn btn--ghost btn--sm"
+                    onClick={handleUseRareCandy}
+                    disabled={!allowItems || usingCandy}
+                    title={allowItems ? undefined : "You can't use Rare Candy during battle."}
+                  >
                     Use
                   </button>
                 )}
@@ -195,6 +229,42 @@ export function SidePanel({ compact = false, extra }: SidePanelProps) {
       </div>
 
       {extra ? <div className="side-panel__extra">{extra}</div> : null}
+
+      <div className="side-panel__footer">
+        <div className="side-panel__money">
+          <PokeDollarAmount amount={money} />
+        </div>
+        {activePanel === 'party' && allowItems && rareCandy && rareCandy.quantity > 0 && (
+          <button
+            type="button"
+            className="side-panel__quick-candy"
+            onClick={handleUseRareCandy}
+            disabled={usingCandy}
+            title="Use Rare Candy"
+          >
+            <ItemIcon
+              id={rareCandy.id}
+              icon={rareCandy.icon}
+              name={rareCandy.name}
+              className="side-panel__quick-candy-icon"
+            />
+            <span className="side-panel__quick-candy-qty">x{rareCandy.quantity}</span>
+          </button>
+        )}
+      </div>
+
+      {evolution && <EvolutionModal evolution={evolution} onClose={() => setEvolution(null)} />}
+
+      {notice && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal hub-notice-modal">
+            <p className="hub-notice-modal__text">{notice}</p>
+            <button type="button" className="btn btn--primary" onClick={() => setNotice(null)}>
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
     </aside>
   );
 }

@@ -93,20 +93,29 @@ export function FishingScreen() {
           </motion.div>
         )}
 
-        {phase === 'missed' && (
-          <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="fishing-missed">
-            <p>The fish got away. You missed the reel-in window.</p>
-            <button type="button" className="btn btn--primary" onClick={startFishing}>
-              Cast Again
-            </button>
-          </motion.div>
-        )}
       </div>
 
-      {phase !== 'done' && (
+      {phase !== 'done' && phase !== 'missed' && (
         <button type="button" className="btn btn--ghost" onClick={() => setScreen('hub')}>
           Leave
         </button>
+      )}
+
+      {phase === 'missed' && (
+        <div className="battle-modal__backdrop">
+          <motion.div
+            className="battle-modal hub-notice-modal"
+            initial={{ scale: 0.85, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            transition={{ type: 'spring', stiffness: 220, damping: 22 }}
+          >
+            <div className="fishing-missed__icon">🎣</div>
+            <p className="hub-notice-modal__text">The fish got away! You missed the reel-in window.</p>
+            <button type="button" className="btn btn--primary" onClick={() => setScreen('hub')}>
+              Back to Hub
+            </button>
+          </motion.div>
+        </div>
       )}
     </motion.div>
   );

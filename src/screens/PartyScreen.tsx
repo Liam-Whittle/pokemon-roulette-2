@@ -38,13 +38,16 @@ export function PartyScreen() {
             >
               <span className="party-slot__num">{i + 1}</span>
               <img
-                src={mon.sprite}
+                src={mon.shiny && mon.shinySprite ? mon.shinySprite : mon.sprite}
                 alt={mon.displayName}
                 className="party-slot__sprite"
                 onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
               />
               <div className="party-slot__info">
-                <span className="party-slot__name">{mon.nickname ?? mon.displayName}</span>
+                <span className="party-slot__name">
+                  {mon.shiny ? '✨ ' : ''}
+                  {mon.nickname ?? mon.displayName}
+                </span>
                 <div className="party-slot__types">
                   {mon.types.map((t) => <TypeBadge key={t} type={t} size="sm" />)}
                 </div>

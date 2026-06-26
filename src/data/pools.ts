@@ -1,5 +1,8 @@
 import type { GymLeader, WheelSegment } from '../types/game';
 
+/** Small slice weight for rare wheel outcomes (Legendary, Uber Spin). */
+export const RARE_WHEEL_WEIGHT = 0.35;
+
 export const WHEEL_SEGMENTS: WheelSegment[] = [
   { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
   { id: 'fishing', label: 'Fishing', activity: 'fishing', color: '#38bdf8', icon: '🎣' },
@@ -8,6 +11,135 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   { id: 'cave', label: 'Explore Cave', activity: 'cave', color: '#a78bfa', icon: '🕳️' },
   { id: 'fossil', label: 'Fossil Revive', activity: 'fossil', color: '#fb923c', icon: '🦴' },
 ];
+
+const HUB_WHEEL_BASE: WheelSegment[] = [
+  { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
+  { id: 'fishing', label: 'Fishing', activity: 'fishing', color: '#38bdf8', icon: '🎣', weight: 0.6 },
+  { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
+  { id: 'wild2', label: 'Tall Grass', activity: 'tallgrass', color: '#22c55e', icon: '🍃' },
+  { id: 'cave', label: 'Explore Cave', activity: 'cave', color: '#a78bfa', icon: '🕳️' },
+  { id: 'fossil', label: 'Fossil Revive', activity: 'fossil', color: '#fb923c', icon: '🦴', weight: 0.6 },
+  { id: 'shop', label: 'Visit Shop', activity: 'shop', color: '#f472b6', icon: '🏪' },
+];
+
+export const HUB_WHEEL_LAYOUT_A: WheelSegment[] = [
+  ...HUB_WHEEL_BASE,
+  {
+    id: 'legendary',
+    label: 'Legendary',
+    activity: 'legendary',
+    color: '#fde047',
+    icon: '✨',
+    weight: RARE_WHEEL_WEIGHT,
+  },
+];
+
+export const HUB_WHEEL_LAYOUT_B: WheelSegment[] = [
+  { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
+  { id: 'battlegym', label: 'Battle Gym', activity: 'battlegym', color: '#ef4444', icon: '🏆', weight: 0.6 },
+  { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
+  { id: 'wild2', label: 'Tall Grass', activity: 'tallgrass', color: '#22c55e', icon: '🍃' },
+  { id: 'evolve', label: 'Evolve', activity: 'evolve', color: '#a78bfa', icon: '🧬' },
+  { id: 'potion', label: 'Potion', activity: 'potion', color: '#fb923c', icon: '💊', weight: 0.6 },
+  { id: 'shop', label: 'Visit Shop', activity: 'shop', color: '#f472b6', icon: '🏪' },
+  {
+    id: 'uber',
+    label: 'Uber Spin',
+    activity: 'uber',
+    color: '#c084fc',
+    icon: '🌀',
+    weight: RARE_WHEEL_WEIGHT,
+  },
+];
+
+export const UBER_SPIN_SEGMENTS = [
+  { id: 'legendary', label: 'Legendary', color: '#fde047', icon: '✨', weight: 1 },
+  { id: 'bonus-item', label: '+1 Item', color: '#fbbf24', icon: '🎁', weight: 1 },
+  { id: 'shinycharm', label: 'Shiny Charm', color: '#f9a8d4', icon: '✨', weight: 1 },
+  { id: 'masterball', label: 'Master Ball', color: '#a855f7', icon: '🔮', weight: 1 },
+];
+
+export const SHINY_WHEEL_SEGMENTS = [
+  { id: 'shiny', label: 'Shiny', color: '#fde047', icon: '', weight: 1 },
+  { id: 'normal', label: 'Normal', color: '#94a3b8', icon: '', weight: 39 },
+];
+
+export const SHINY_WHEEL_CHARM_SEGMENTS = [
+  { id: 'shiny', label: 'Shiny', color: '#fde047', icon: '', weight: 1 },
+  { id: 'normal', label: 'Normal', color: '#94a3b8', icon: '', weight: 14 },
+];
+
+export const ITEMS = [
+  { id: 'potion', name: 'Potion', icon: '💊' },
+  { id: 'rarecandy', name: 'Rare Candy', icon: '🍬' },
+  { id: 'xattack', name: 'X-Attack', icon: '⚔️' },
+  { id: 'maxrevive', name: 'Max Revive', icon: '💉' },
+  { id: 'pokeball', name: 'Poké Ball', icon: '🔴' },
+  { id: 'greatball', name: 'Great Ball', icon: '🔵' },
+  { id: 'ultraball', name: 'Ultra Ball', icon: '🟡' },
+  { id: 'masterball', name: 'Master Ball', icon: '🟣' },
+  { id: 'shinycharm', name: 'Shiny Charm', icon: '✨' },
+];
+
+export const BALL_ITEM_IDS = ['pokeball', 'greatball', 'ultraball', 'masterball'] as const;
+export type BallItemId = (typeof BALL_ITEM_IDS)[number];
+
+const BALL_SPRITE_BASE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items';
+
+export const BALL_SPRITES: Record<string, string> = {
+  pokeball: `${BALL_SPRITE_BASE}/poke-ball.png`,
+  greatball: `${BALL_SPRITE_BASE}/great-ball.png`,
+  ultraball: `${BALL_SPRITE_BASE}/ultra-ball.png`,
+  masterball: `${BALL_SPRITE_BASE}/master-ball.png`,
+};
+
+export const SHOP_CATALOG = [
+  { id: 'potion', name: 'Potion', icon: '💊', price: 50 },
+  { id: 'xattack', name: 'X-Attack', icon: '⚔️', price: 50 },
+  { id: 'rarecandy', name: 'Rare Candy', icon: '🍬', price: 100 },
+  { id: 'pokeball', name: 'Poké Ball', icon: '🔴', price: 20 },
+  { id: 'greatball', name: 'Great Ball', icon: '🔵', price: 50 },
+  { id: 'ultraball', name: 'Ultra Ball', icon: '🟡', price: 100 },
+];
+
+interface WeightedLootEntry {
+  id: string;
+  weight: number;
+}
+
+const FIND_ITEM_LOOT: WeightedLootEntry[] = [
+  { id: 'maxrevive', weight: 10 },
+  { id: 'pokeball', weight: 8 },
+  { id: 'greatball', weight: 5 },
+  { id: 'ultraball', weight: 3 },
+  { id: 'potion', weight: 24 },
+  { id: 'rarecandy', weight: 25 },
+  { id: 'xattack', weight: 25 },
+];
+
+const UBER_BONUS_ITEMS = ['potion', 'xattack', 'rarecandy'];
+
+export function getHubWheelSegments(spinsSinceGym: number): WheelSegment[] {
+  return spinsSinceGym % 2 === 0 ? HUB_WHEEL_LAYOUT_A : HUB_WHEEL_LAYOUT_B;
+}
+
+export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
+  const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
+  let roll = Math.random() * total;
+  for (const entry of entries) {
+    roll -= entry.weight;
+    if (roll <= 0) return entry.id;
+  }
+  return entries[entries.length - 1].id;
+}
+
+export function pickFindItemId(): string {
+  return pickWeightedItemId(FIND_ITEM_LOOT);
+}
+
+export function pickUberBonusItemId(): string {
+  return pickRandom(UBER_BONUS_ITEMS);
+}
 
 /** BST <= 425 (power <= 45) — common wild encounters (fossil Pokemon excluded) */
 export const GEN1_WILD_LOW: number[] = [
@@ -37,12 +169,6 @@ export const STARTER_IDS = [1, 4, 7];
 export const MAX_PARTY = 5;
 
 export const GEN1_LEGENDARY: number[] = [144, 145, 146, 150, 151];
-
-export const ITEMS = [
-  { id: 'potion', name: 'Potion', icon: '💊' },
-  { id: 'rarecandy', name: 'Rare Candy', icon: '🍬' },
-  { id: 'xattack', name: 'X-Attack', icon: '⚔️' },
-];
 
 export const GYM_LEADERS: GymLeader[] = [
   {

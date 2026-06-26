@@ -7,6 +7,7 @@ import { Wheel } from './Wheel';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { playClip, stopClips } from '../utils/music';
+import { PokeCenterVisits } from './PokeDollar';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import type { Badge, BattleWheelSegment, GymLeader, PokemonData } from '../types/game';
 
@@ -71,6 +72,7 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
   const consumeItem = useGameStore((state) => state.consumeItem);
   const loseLife = useGameStore((state) => state.loseLife);
   const earnBadge = useGameStore((state) => state.earnBadge);
+  const addMoney = useGameStore((state) => state.addMoney);
   const setLastResult = useGameStore((state) => state.setLastResult);
 
   const [enemy, setEnemy] = useState<PokemonData | null>(null);
@@ -167,7 +169,10 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
 
   function handleLand(segment: BattleWheelSegment) {
     if (segment.outcome === 'hit') {
-      if (winBadge) earnBadge(winBadge);
+      if (winBadge) {
+        earnBadge(winBadge);
+        if (!finalVictory) addMoney(100);
+      }
       setLastResult({
         type: 'gym',
         success: true,
@@ -219,7 +224,7 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
       <div className="battle-main">
         <h2 className="screen-title">{title}</h2>
         <div className="battle-hud">
-          <span>Lives: {lives}</span>
+          <PokeCenterVisits lives={lives} />
           <span>{leader.badgeName}</span>
         </div>
         <div className="gym-leader-info">
@@ -263,22 +268,40 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
           </div>
         )}
 
-        {phase === 'choose' && (
+        {phase === 'choose' && enemy && (
           <div className="gym-attack-select">
             <p>Choose one of your party's attack types.</p>
             <div className="gym-type-grid">
-              {attackOptions.map((option) => (
-                <button
-                  key={option.type}
-                  type="button"
-                  className="gym-type-btn"
-                  style={{ backgroundColor: TYPE_COLORS[option.type] ?? '#888' }}
-                  onClick={() => buildWheel(option.type)}
-                >
-                  <span className="gym-type-btn__type">{option.type}</span>
-                  <span className="gym-type-btn__power">Pwr {Math.round(option.attackerPower * 100)}</span>
-                </button>
-              ))}
+              {attackOptions.map((option) => {
+                const multiplier = getTypeEffectiveness(option.type, enemy.types);
+                const effectiveness =
+                  multiplier >= 2
+                    ? 'Super'
+                    : multiplier <= 0
+                      ? 'No Effect'
+                      : multiplier < 1
+                        ? 'Not Very'
+                        : 'Effective';
+                const effectivenessClass =
+                  multiplier >= 2
+                    ? 'gym-effectiveness--super'
+                    : multiplier < 1
+                      ? 'gym-effectiveness--weak'
+                      : 'gym-effectiveness--normal';
+                return (
+                  <button
+                    key={option.type}
+                    type="button"
+                    className="gym-type-btn"
+                    style={{ backgroundColor: TYPE_COLORS[option.type] ?? '#888' }}
+                    onClick={() => buildWheel(option.type)}
+                  >
+                    <span className="gym-type-btn__type">{option.type}</span>
+                    <span className={`gym-effectiveness ${effectivenessClass}`}>{effectiveness}</span>
+                    <span className="gym-type-btn__power">Pwr {Math.round(option.attackerPower * 100)}</span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         )}
@@ -286,14 +309,20 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
         {phase === 'result' && <p className="battle-message battle-message--result">{message}</p>}
       </div>
 
-      <SidePanel compact />
+      <SidePanel compact allowSwap={false} allowItems={false} />
     </div>
 
     {phase === 'prep' && (
       <div className="battle-modal__backdrop">
         <div className="battle-modal battle-prep">
           <h3 className="battle-modal__title">Prepare for Battle</h3>
-          <p className="battle-modal__subtitle">Swap your party before you face {leader.name}.</p>
+          <p className="battle-modal__subtitle">
+            Swap your party before you face {leader.name}. You can&apos;t swap Pokémon once the battle starts.
+          </p>
+          <div className="battle-prep__gym-type">
+            <span>Gym type:</span>
+            <TypeBadge type={leader.type} />
+          </div>
           <SidePanel />
           <button type="button" className="btn btn--primary btn--lg" onClick={() => setPhase('intro')}>
             Start Battle

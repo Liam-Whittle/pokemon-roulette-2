@@ -1,14 +1,16 @@
-import { useRef, useCallback, useEffect, useState } from 'react';
+import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
-import { useWheelPhysics, getSegmentIndex } from '../hooks/useWheelPhysics';
+import { useWheelPhysics, getSegmentWeights, getWeightedSegmentIndex } from '../hooks/useWheelPhysics';
 import { playSfx } from '../utils/sound';
 import { useGameStore } from '../store/useGameStore';
+
 export interface SpinnerSegment {
   id: string;
   label: string;
   color: string;
   icon: string;
   comingSoon?: boolean;
+  weight?: number;
 }
 
 interface WheelProps {
@@ -23,6 +25,17 @@ function normalize(angle: number): number {
   return a;
 }
 
+function buildSegmentArcs(weights: number[]): { startDeg: number; endDeg: number; midDeg: number }[] {
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  let cumulative = 0;
+  return weights.map((weight) => {
+    const startDeg = (cumulative / total) * 360;
+    cumulative += weight;
+    const endDeg = (cumulative / total) * 360;
+    return { startDeg, endDeg, midDeg: (startDeg + endDeg) / 2 };
+  });
+}
+
 export function Wheel({ segments, onLand, disabled }: WheelProps) {
   const wheelRef = useRef<HTMLDivElement>(null);
   const muted = useGameStore((s) => s.muted);
@@ -33,16 +46,24 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
 
   segmentsRef.current = segments;
 
+  const weights = useMemo(() => getSegmentWeights(segments), [segments]);
+  const arcs = useMemo(() => buildSegmentArcs(weights), [weights]);
+
+  const resolveIndex = useCallback(
+    (angle: number) => getWeightedSegmentIndex(angle, weights),
+    [weights],
+  );
+
   const handleSpinEnd = useCallback(
     (finalAngle: number) => {
       if (landedRef.current) return;
       landedRef.current = true;
       playSfx('spinStop', muted);
       const current = segmentsRef.current;
-      const idx = getSegmentIndex(finalAngle, current.length);
+      const idx = resolveIndex(finalAngle);
       onLand(current[idx]);
     },
-    [onLand, muted],
+    [onLand, muted, resolveIndex],
   );
 
   const { angle, isSpinning, isDragging, dragPower, quickSpin, handlePointerDown, handlePointerMove, handlePointerUp } =
@@ -60,17 +81,14 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
       },
     });
 
-  // Ratchet tick each time a segment boundary passes the pointer while spinning.
   useEffect(() => {
     if (!isSpinning) return;
-    const idx = getSegmentIndex(normalize(angle), segments.length);
+    const idx = resolveIndex(normalize(angle));
     if (idx !== prevIdxRef.current) {
       prevIdxRef.current = idx;
       playSfx('tick', muted);
     }
-  }, [angle, isSpinning, segments.length, muted]);
-
-  const segmentAngle = 360 / segments.length;
+  }, [angle, isSpinning, resolveIndex, muted]);
 
   return (
     <div className="wheel-wrapper">
@@ -88,19 +106,22 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
       >
         <svg viewBox="0 0 400 400" className="wheel__svg">
           {segments.map((seg, i) => {
-            const startAngle = (i * segmentAngle - 90) * (Math.PI / 180);
-            const endAngle = ((i + 1) * segmentAngle - 90) * (Math.PI / 180);
+            const { startDeg, endDeg, midDeg } = arcs[i];
+            const spanDeg = endDeg - startDeg;
+            const startAngle = (startDeg - 90) * (Math.PI / 180);
+            const endAngle = (endDeg - 90) * (Math.PI / 180);
             const x1 = 200 + 195 * Math.cos(startAngle);
             const y1 = 200 + 195 * Math.sin(startAngle);
             const x2 = 200 + 195 * Math.cos(endAngle);
             const y2 = 200 + 195 * Math.sin(endAngle);
-            const largeArc = segmentAngle > 180 ? 1 : 0;
-            const midAngle = ((i + 0.5) * segmentAngle - 90) * (Math.PI / 180);
+            const largeArc = spanDeg > 180 ? 1 : 0;
+            const midAngle = (midDeg - 90) * (Math.PI / 180);
             const iconX = 200 + 128 * Math.cos(midAngle);
             const iconY = 200 + 128 * Math.sin(midAngle);
             const labelX = 200 + 172 * Math.cos(midAngle);
             const labelY = 200 + 172 * Math.sin(midAngle);
-            const rotation = (i + 0.5) * segmentAngle;
+            const rotation = midDeg;
+            const labelFontSize = spanDeg < 30 ? 10 : spanDeg < 45 ? 11 : 13;
 
             return (
               <g key={`${i}-${seg.label}-${seg.color}`}>
@@ -111,24 +132,26 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
                   strokeWidth="3"
                   opacity={seg.comingSoon ? 0.55 : 1}
                 />
-                <text
-                  x={iconX}
-                  y={iconY}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fontSize="48"
-                  transform={`rotate(${rotation}, ${iconX}, ${iconY})`}
-                  style={{ pointerEvents: 'none' }}
-                >
-                  {seg.icon}
-                </text>
+                {seg.icon ? (
+                  <text
+                    x={iconX}
+                    y={iconY}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fontSize={spanDeg < 30 ? 28 : 48}
+                    transform={`rotate(${rotation}, ${iconX}, ${iconY})`}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {seg.icon}
+                  </text>
+                ) : null}
                 <text
                   x={labelX}
                   y={labelY}
                   textAnchor="middle"
                   dominantBaseline="central"
                   fill="#0f0f1a"
-                  fontSize="13"
+                  fontSize={labelFontSize}
                   fontWeight="800"
                   transform={`rotate(${rotation}, ${labelX}, ${labelY})`}
                   style={{ pointerEvents: 'none' }}

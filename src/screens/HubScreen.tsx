@@ -2,11 +2,19 @@ import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { SidePanel } from '../components/SidePanel';
 import { DebugMenu } from '../components/DebugMenu';
-import { Wheel, type SpinnerSegment } from '../components/Wheel';
-import { WHEEL_SEGMENTS, TOTAL_GYMS } from '../data/pools';
+import { Wheel } from '../components/Wheel';
+import {
+  getHubWheelSegments,
+  ITEMS,
+  pickUberBonusItemId,
+  TOTAL_GYMS,
+  UBER_SPIN_SEGMENTS,
+} from '../data/pools';
+import { PokeCenterVisits } from '../components/PokeDollar';
+import { EvolutionModal } from '../components/EvolutionModal';
 import { useGameStore } from '../store/useGameStore';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
-import type { WheelSegment } from '../types/game';
+import type { EvolutionInfo, WheelSegment } from '../types/game';
 
 export function HubScreen() {
   const trainer = useGameStore((s) => s.trainer);
@@ -18,45 +26,136 @@ export function HubScreen() {
   const lives = useGameStore((s) => s.lives);
   const setScreen = useGameStore((s) => s.setScreen);
   const startActivity = useGameStore((s) => s.startActivity);
+  const startLegendaryEncounter = useGameStore((s) => s.startLegendaryEncounter);
   const incrementSpins = useGameStore((s) => s.incrementSpins);
   const setLastGymSpin = useGameStore((s) => s.setLastGymSpin);
+  const addItem = useGameStore((s) => s.addItem);
+  const evolveRandomPartyMember = useGameStore((s) => s.evolveRandomPartyMember);
 
   const [wheelLocked, setWheelLocked] = useState(false);
+  const [uberSpinOpen, setUberSpinOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
 
   const gymBadges = badges.length;
   const allGymsDone = gymBadges >= TOTAL_GYMS;
-  const spinsUntilNext = Math.max(0, 2 - (spinsCount - lastGymSpin));
+  const spinsSinceGym = spinsCount - lastGymSpin;
+  const spinsUntilNext = Math.max(0, 2 - spinsSinceGym);
+  // Freeze the displayed wheel layout for the current spin so it doesn't visibly
+  // swap between Layout A/B the instant a spin resolves. It updates only after an
+  // outcome completes (notice dismissed) or when the Hub remounts after activity.
+  const [displaySpinsSinceGym, setDisplaySpinsSinceGym] = useState(spinsSinceGym);
+  const wheelSegments = getHubWheelSegments(displaySpinsSinceGym);
 
-  // Progression: a Gym Leader challenges you after every 2 spins until all 8
-  // badges are won. Once every gym is cleared, you get 2 more spins before the
-  // Elite Four challenge begins automatically. Checked once when the Hub
-  // (re)mounts after an activity so you always finish the spin's activity first.
-  useEffect(() => {
+  const maybeTriggerGym = useCallback(() => {
     const state = useGameStore.getState();
     const gymsDone = state.badges.length >= TOTAL_GYMS;
     if (state.spinsCount - state.lastGymSpin >= 2) {
       if (!gymsDone) {
         setLastGymSpin(state.spinsCount);
         setScreen('gym');
-      } else if (!state.eliteCleared) {
+        return true;
+      }
+      if (!state.eliteCleared) {
         setLastGymSpin(state.spinsCount);
         setScreen('elite');
+        return true;
       }
     }
-    // Mount-only: relies on fresh remount when returning to the hub.
+    return false;
+  }, [setLastGymSpin, setScreen]);
+
+  useEffect(() => {
+    maybeTriggerGym();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const handleLand = useCallback(
-    (segment: SpinnerSegment) => {
+    (segment: { activity?: string; id: string }) => {
       incrementSpins();
       setWheelLocked(true);
-      setTimeout(() => {
-        startActivity(segment as WheelSegment);
+
+      setTimeout(async () => {
+        if (segment.activity === 'legendary') {
+          startLegendaryEncounter();
+        } else if (segment.activity === 'shop') {
+          setScreen('shop');
+        } else if (segment.activity === 'uber') {
+          setUberSpinOpen(true);
+        } else if (segment.activity === 'battlegym') {
+          const state = useGameStore.getState();
+          setLastGymSpin(state.spinsCount);
+          setScreen('gym');
+        } else if (segment.activity === 'potion') {
+          addItem('potion', 1);
+          setNotice('You received a free Potion!');
+        } else if (segment.activity === 'evolve') {
+          const result = await evolveRandomPartyMember();
+          if (result.evolution) {
+            setEvolution(result.evolution);
+          } else {
+            setNotice(result.message);
+          }
+        } else {
+          startActivity(segment as WheelSegment);
+        }
         setWheelLocked(false);
       }, 800);
     },
-    [incrementSpins, startActivity],
+    [
+      incrementSpins,
+      startActivity,
+      startLegendaryEncounter,
+      setScreen,
+      setLastGymSpin,
+      addItem,
+      evolveRandomPartyMember,
+    ],
+  );
+
+  const dismissNotice = useCallback(() => {
+    setNotice(null);
+    const navigated = maybeTriggerGym();
+    if (!navigated) {
+      const s = useGameStore.getState();
+      setDisplaySpinsSinceGym(s.spinsCount - s.lastGymSpin);
+    }
+  }, [maybeTriggerGym]);
+
+  const dismissEvolution = useCallback(() => {
+    setEvolution(null);
+    const navigated = maybeTriggerGym();
+    if (!navigated) {
+      const s = useGameStore.getState();
+      setDisplaySpinsSinceGym(s.spinsCount - s.lastGymSpin);
+    }
+  }, [maybeTriggerGym]);
+
+  const handleUberLand = useCallback(
+    (segment: { id: string; label: string }) => {
+      setUberSpinOpen(false);
+      if (segment.id === 'legendary') {
+        startLegendaryEncounter();
+        return;
+      }
+      if (segment.id === 'bonus-item') {
+        const itemId = pickUberBonusItemId();
+        const item = ITEMS.find((entry) => entry.id === itemId);
+        addItem(itemId);
+        setNotice(`Uber Spin awarded a ${item?.name ?? 'bonus item'}!`);
+        return;
+      }
+      if (segment.id === 'shinycharm') {
+        addItem('shinycharm');
+        setNotice('Uber Spin awarded a Shiny Charm!');
+        return;
+      }
+      if (segment.id === 'masterball') {
+        addItem('masterball');
+        setNotice('Uber Spin awarded a Master Ball!');
+      }
+    },
+    [addItem, startLegendaryEncounter],
   );
 
   return (
@@ -83,7 +182,8 @@ export function HubScreen() {
           <div>
             <h2 className="hub-header__name">{trainer?.name}</h2>
             <p className="hub-header__stats">
-              Party: {party.length}/5 · Badges: {gymBadges}/{TOTAL_GYMS} · Spins: {spinsCount} · Lives: {lives}
+              Party: {party.length}/5 · Badges: {gymBadges}/{TOTAL_GYMS} · Spins: {spinsCount} ·{' '}
+              <PokeCenterVisits lives={lives} />
             </p>
           </div>
         </div>
@@ -95,7 +195,7 @@ export function HubScreen() {
       <div className="hub-layout">
         <div className="hub-wheel-area">
           <h3 className="hub-wheel-title">Which Path Will You Take?</h3>
-          <Wheel segments={WHEEL_SEGMENTS} onLand={handleLand} disabled={wheelLocked} />
+          <Wheel segments={wheelSegments} onLand={handleLand} disabled={wheelLocked} />
           {!eliteCleared && (
             <p className="hub-gym-counter">
               {allGymsDone ? (
@@ -121,7 +221,33 @@ export function HubScreen() {
         <SidePanel />
       </div>
 
-      {trainer?.name.toLowerCase() === 'debug' && <DebugMenu />}
+      {uberSpinOpen && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal uber-spin-modal">
+            <h3 className="battle-modal__title">Uber Spin</h3>
+            <p className="battle-modal__subtitle">A secret wheel with rare rewards!</p>
+            <Wheel segments={UBER_SPIN_SEGMENTS} onLand={handleUberLand} />
+            <button type="button" className="btn btn--ghost" onClick={() => setUberSpinOpen(false)}>
+              Close
+            </button>
+          </div>
+        </div>
+      )}
+
+      {notice && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal hub-notice-modal">
+            <p className="hub-notice-modal__text">{notice}</p>
+            <button type="button" className="btn btn--primary" onClick={dismissNotice}>
+              Continue
+            </button>
+          </div>
+        </div>
+      )}
+
+      {evolution && <EvolutionModal evolution={evolution} onClose={dismissEvolution} />}
+
+      {trainer?.name.toLowerCase() === 'debug' && <DebugMenu onUberSpin={() => setUberSpinOpen(true)} />}
     </motion.div>
   );
 }

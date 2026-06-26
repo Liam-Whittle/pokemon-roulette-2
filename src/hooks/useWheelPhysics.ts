@@ -200,3 +200,20 @@ export function getSegmentIndex(angle: number, segmentCount: number, pointerOffs
   const segmentAngle = (2 * Math.PI) / segmentCount;
   return Math.floor(normalized / segmentAngle) % segmentCount;
 }
+
+export function getSegmentWeights(segments: { weight?: number }[]): number[] {
+  return segments.map((segment) => segment.weight ?? 1);
+}
+
+export function getWeightedSegmentIndex(angle: number, weights: number[], pointerOffset = 0): number {
+  const normalized = normalizeAngle(-angle + pointerOffset);
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0) return 0;
+
+  let cumulative = 0;
+  for (let i = 0; i < weights.length; i++) {
+    cumulative += (weights[i] / total) * (2 * Math.PI);
+    if (normalized < cumulative) return i;
+  }
+  return weights.length - 1;
+}

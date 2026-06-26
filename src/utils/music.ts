@@ -12,10 +12,17 @@ const TRACKS: Record<MusicTrack, string> = {
   gamelose: asset('sounds/game_lose.mp3'),
 };
 
+/** Scales the user volume slider so music stays comfortable across the full range. */
+const MASTER_GAIN = 0.3;
+
 let audio: HTMLAudioElement | null = null;
 let unlocked = false; // becomes true after the first user gesture
 let userMuted = false;
 let volume = 0.05;
+
+function effectiveVolume(): number {
+  return userMuted ? 0 : volume * MASTER_GAIN;
+}
 let currentTrack: MusicTrack | null = null;
 let pendingTrack: MusicTrack = 'title';
 
@@ -50,7 +57,7 @@ export function primeMusic() {
   const a = ensureAudio();
   applyTrack(a);
   a.muted = !unlocked;
-  a.volume = userMuted ? 0 : volume;
+  a.volume = effectiveVolume();
   tryPlay(a);
 }
 
@@ -60,7 +67,7 @@ export function unlockMusic() {
   const a = ensureAudio();
   applyTrack(a);
   a.muted = false;
-  a.volume = userMuted ? 0 : volume;
+  a.volume = effectiveVolume();
   if (a.paused) tryPlay(a);
 }
 
@@ -74,14 +81,14 @@ export function setMusicTrack(track: MusicTrack) {
   if (currentTrack === track && !audio.paused) return;
   applyTrack(audio);
   audio.muted = !unlocked;
-  audio.volume = userMuted ? 0 : volume;
+  audio.volume = effectiveVolume();
   tryPlay(audio);
 }
 
 export function setMusicMuted(value: boolean) {
   userMuted = value;
   if (!audio) return;
-  audio.volume = userMuted ? 0 : volume;
+  audio.volume = effectiveVolume();
   if (!userMuted) {
     // Toggling sound is a user gesture, so unlock + resume if needed.
     unlocked = true;
@@ -92,7 +99,7 @@ export function setMusicMuted(value: boolean) {
 
 export function setMusicVolume(nextVolume: number) {
   volume = Math.max(0, Math.min(1, nextVolume));
-  if (audio) audio.volume = userMuted ? 0 : volume;
+  if (audio) audio.volume = effectiveVolume();
 }
 
 // One-shot clips that are currently playing, so they can be stopped on demand
@@ -104,8 +111,8 @@ let activeClips: HTMLAudioElement[] = [];
  * background music. Respects the global mute toggle and volume slider, but
  * boosts the level a touch so the jingle is audible above the looping track.
  */
-export function playClip(src: string) {
-  if (userMuted) return;
+export function playClip(src: string): HTMLAudioElement | null {
+  if (userMuted) return null;
   try {
     const clip = new Audio(src);
     clip.volume = Math.min(1, Math.max(volume, volume * 2, 0.1));
@@ -116,9 +123,19 @@ export function playClip(src: string) {
     clip.play().catch(() => {
       /* Autoplay blocked until a user gesture; safe to ignore. */
     });
+    return clip;
   } catch {
     /* Audio not available. */
+    return null;
   }
+}
+
+/** Stops and removes a single clip previously started via playClip. */
+export function stopClip(clip: HTMLAudioElement | null) {
+  if (!clip) return;
+  clip.pause();
+  clip.currentTime = 0;
+  activeClips = activeClips.filter((c) => c !== clip);
 }
 
 /** Immediately stops any one-shot clips started via playClip. */
