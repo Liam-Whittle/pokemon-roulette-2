@@ -95,10 +95,12 @@ interface GameState {
   resetGame: () => void;
 }
 
-const defaultBag: BagItem[] = [
-  { id: 'potion', name: 'Potion', quantity: 1, icon: '💊' },
-  { id: 'pokeball', name: 'Poké Ball', quantity: 5, icon: '🔴' },
-];
+function createDefaultBag(): BagItem[] {
+  return [
+    { id: 'potion', name: 'Potion', quantity: 1, icon: '💊' },
+    { id: 'pokeball', name: 'Poké Ball', quantity: 5, icon: '🔴' },
+  ];
+}
 
 function toCaughtPokemon(pokemon: PokemonData, nickname?: string): CaughtPokemon {
   return {
@@ -196,14 +198,14 @@ function pickGrassEncounterId(activity: 'wild' | 'tallgrass'): number {
 function upsertBagItem(bag: BagItem[], itemId: string, quantity: number): BagItem[] {
   const itemDef = ITEMS.find((i) => i.id === itemId);
   if (!itemDef) return bag;
-  const next = [...bag];
-  const existing = next.find((i) => i.id === itemId);
+  const existing = bag.find((i) => i.id === itemId);
   if (existing) {
-    existing.quantity += quantity;
-  } else {
-    next.push({ id: itemDef.id, name: itemDef.name, quantity, icon: itemDef.icon });
+    const nextQty = existing.quantity + quantity;
+    if (nextQty <= 0) return bag.filter((i) => i.id !== itemId);
+    return bag.map((i) => (i.id === itemId ? { ...i, quantity: nextQty } : i));
   }
-  return next.filter((i) => i.quantity > 0);
+  if (quantity <= 0) return bag;
+  return [...bag, { id: itemDef.id, name: itemDef.name, quantity, icon: itemDef.icon }];
 }
 
 export const useGameStore = create<GameState>()(
@@ -213,7 +215,7 @@ export const useGameStore = create<GameState>()(
       trainer: null,
       party: [],
       pokedex: {},
-      bag: defaultBag,
+      bag: createDefaultBag(),
       badges: [],
       hallOfChampions: [],
       muted: false,
@@ -509,7 +511,7 @@ export const useGameStore = create<GameState>()(
           trainer: null,
           party: [],
           pokedex: {},
-          bag: defaultBag,
+          bag: createDefaultBag(),
           badges: [],
           currentActivity: null,
           currentSegment: null,
