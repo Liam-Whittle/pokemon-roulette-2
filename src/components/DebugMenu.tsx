@@ -1,5 +1,8 @@
 import { useState } from 'react';
 import { ELITE_FOUR, GYM_LEADERS, ITEMS, WHEEL_SEGMENTS } from '../data/pools';
+import { GameIcon } from './GameIcon';
+import { ItemIcon } from './ItemIcon';
+import { SegmentIcon } from './SegmentIcon';
 import { useGameStore } from '../store/useGameStore';
 import type { WheelSegment } from '../types/game';
 
@@ -17,6 +20,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   const setDebugEliteStage = useGameStore((s) => s.setDebugEliteStage);
   const addItem = useGameStore((s) => s.addItem);
   const addMoney = useGameStore((s) => s.addMoney);
+  const makeRandomPartyShiny = useGameStore((s) => s.makeRandomPartyShiny);
 
   const [open, setOpen] = useState(false);
 
@@ -65,6 +69,11 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
     setOpen(false);
   }
 
+  function launchRandomShiny() {
+    makeRandomPartyShiny();
+    setOpen(false);
+  }
+
   return (
     <>
       <button type="button" className="debug-fab" onClick={() => setOpen((v) => !v)}>
@@ -90,14 +99,19 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                   className="debug-panel__btn"
                   onClick={() => launchMiniGame(segment)}
                 >
-                  {segment.icon} {segment.label}
+                  <SegmentIcon
+                    id={segment.id}
+                    fallbackIcon={segment.icon}
+                    className="game-icon-img game-icon-img--btn"
+                  />{' '}
+                  {segment.label}
                 </button>
               ))}
               <button type="button" className="debug-panel__btn" onClick={launchLegendary}>
-                ✨ Legendary Encounter
+                <SegmentIcon id="legendary" className="game-icon-img game-icon-img--btn" /> Legendary Encounter
               </button>
               <button type="button" className="debug-panel__btn" onClick={launchUberSpin}>
-                🌀 Uber Spin
+                <SegmentIcon id="uber" className="game-icon-img game-icon-img--btn" /> Uber Spin
               </button>
             </div>
           </div>
@@ -106,10 +120,20 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
             <p className="debug-panel__label">Shop & Money</p>
             <div className="debug-panel__grid">
               <button type="button" className="debug-panel__btn" onClick={launchShop}>
-                🏪 Visit Shop
+                <GameIcon ui="shop" alt="" className="game-icon-img game-icon-img--btn" /> Visit Shop
               </button>
               <button type="button" className="debug-panel__btn" onClick={() => addMoney(100)}>
                 ¥ +100 Dollars
+              </button>
+            </div>
+          </div>
+
+          <div className="debug-panel__section">
+            <p className="debug-panel__label">Party</p>
+            <div className="debug-panel__grid">
+              <button type="button" className="debug-panel__btn" onClick={launchRandomShiny}>
+                <ItemIcon id="shinycharm" icon="✨" name="Shiny Charm" className="game-icon-img game-icon-img--btn" />{' '}
+                Make Random Party Pokémon Shiny
               </button>
             </div>
           </div>
@@ -124,7 +148,8 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                   className="debug-panel__btn"
                   onClick={() => addItem(item.id, 1)}
                 >
-                  {item.icon} +1 {item.name}
+                  <ItemIcon id={item.id} icon={item.icon} name={item.name} className="game-icon-img game-icon-img--btn" />{' '}
+                  +1 {item.name}
                 </button>
               ))}
             </div>
@@ -166,10 +191,10 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
             <p className="debug-panel__label">End Game</p>
             <div className="debug-panel__grid">
               <button type="button" className="debug-panel__btn" onClick={launchChampionScreen}>
-                🏆 Champion Victory Screen
+                <GameIcon ui="champion" alt="" className="game-icon-img game-icon-img--btn" /> Champion Victory Screen
               </button>
               <button type="button" className="debug-panel__btn" onClick={launchGameOverScreen}>
-                💀 Game Over Screen
+                <GameIcon ui="gameover" alt="" className="game-icon-img game-icon-img--btn" /> Game Over Screen
               </button>
             </div>
           </div>

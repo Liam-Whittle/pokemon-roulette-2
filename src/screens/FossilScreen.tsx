@@ -2,6 +2,7 @@ import { useCallback, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
 import { FOSSIL_POKEMON, pickRandom } from '../data/pools';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 
@@ -299,7 +300,9 @@ export function FossilScreen() {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 220, damping: 22 }}
           >
-            <div className="fossil-fail__icon">🦴</div>
+            <div className="fossil-fail__icon">
+              <GameIcon ui="fossil" alt="" className="game-icon-img game-icon-img--lg" />
+            </div>
             <p className="hub-notice-modal__text">
               The fossil shattered! The wall gave out before you could fully uncover it.
             </p>

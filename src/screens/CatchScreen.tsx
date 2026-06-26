@@ -4,11 +4,12 @@ import { CatchCombo } from '../components/CatchCombo';
 import { SpriteCard } from '../components/SpriteCard';
 import { Confetti } from '../components/Confetti';
 import { Wheel } from '../components/Wheel';
-import { BALL_SPRITES, SHINY_WHEEL_CHARM_SEGMENTS, SHINY_WHEEL_SEGMENTS } from '../data/pools';
+import { ITEM_SPRITES } from '../data/icons';
+import { SHINY_WHEEL_CHARM_SEGMENTS, SHINY_WHEEL_SEGMENTS } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { resolveEncounterPokemon, resetEncounterSession } from '../utils/encounterSession';
 import { playSfx } from '../utils/sound';
-import { playClip } from '../utils/music';
+import { playClip, stopClips } from '../utils/music';
 import { asset } from '../utils/asset';
 import type { ActivityType, PokemonData } from '../types/game';
 
@@ -16,10 +17,10 @@ type CatchPhase = 'ball' | 'catch' | 'caught' | 'shiny' | 'done';
 type BallId = 'pokeball' | 'greatball' | 'ultraball' | 'masterball';
 
 const BALL_OPTIONS: { id: BallId; label: string; sprite: string }[] = [
-  { id: 'pokeball', label: 'Poké Ball', sprite: BALL_SPRITES.pokeball },
-  { id: 'greatball', label: 'Great Ball', sprite: BALL_SPRITES.greatball },
-  { id: 'ultraball', label: 'Ultra Ball', sprite: BALL_SPRITES.ultraball },
-  { id: 'masterball', label: 'Master Ball', sprite: BALL_SPRITES.masterball },
+  { id: 'pokeball', label: 'Poké Ball', sprite: ITEM_SPRITES.pokeball },
+  { id: 'greatball', label: 'Great Ball', sprite: ITEM_SPRITES.greatball },
+  { id: 'ultraball', label: 'Ultra Ball', sprite: ITEM_SPRITES.ultraball },
+  { id: 'masterball', label: 'Master Ball', sprite: ITEM_SPRITES.masterball },
 ];
 
 function encounterFlavor(activity: ActivityType | null, isLegendary: boolean): string {
@@ -92,6 +93,7 @@ export function CatchScreen() {
   }
 
   function goHub() {
+    stopClips();
     resetEncounterSession();
     setScreen('hub');
   }
@@ -227,7 +229,7 @@ export function CatchScreen() {
               isLegendary={pokemon.isLegendary}
               zoneBonus={modifiers.zoneBonus}
               speedMult={modifiers.speedMult}
-              ballSprite={selectedBall ? BALL_SPRITES[selectedBall] : undefined}
+              ballSprite={selectedBall ? ITEM_SPRITES[selectedBall] : undefined}
               onResult={handleComboResult}
             />
           )}
@@ -268,7 +270,7 @@ export function CatchScreen() {
       {confirmMasterBall && (
         <div className="battle-modal__backdrop">
           <div className="battle-modal master-ball-confirm">
-            <img src={BALL_SPRITES.masterball} alt="Master Ball" className="master-ball-confirm__icon" />
+            <img src={ITEM_SPRITES.masterball} alt="Master Ball" className="master-ball-confirm__icon" />
             <h3 className="battle-modal__title">Use Master Ball?</h3>
             <p className="battle-modal__subtitle">This guarantees a catch.</p>
             <div className="master-ball-confirm__actions">

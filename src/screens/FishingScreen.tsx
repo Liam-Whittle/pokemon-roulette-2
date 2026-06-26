@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import type { PokemonData } from '../types/game';
@@ -58,7 +59,9 @@ export function FishingScreen() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      <h2 className="screen-title">🎣 Fishing</h2>
+      <h2 className="screen-title">
+        <GameIcon ui="fishing" alt="" className="game-icon-img game-icon-img--title" /> Fishing
+      </h2>
 
       <div className="fishing-scene">
         <div className="fishing-water" />
@@ -109,7 +112,9 @@ export function FishingScreen() {
             animate={{ scale: 1, opacity: 1 }}
             transition={{ type: 'spring', stiffness: 220, damping: 22 }}
           >
-            <div className="fishing-missed__icon">🎣</div>
+            <div className="fishing-missed__icon">
+              <GameIcon ui="fishing" alt="" className="game-icon-img game-icon-img--lg" />
+            </div>
             <p className="hub-notice-modal__text">The fish got away! You missed the reel-in window.</p>
             <button type="button" className="btn btn--primary" onClick={() => setScreen('hub')}>
               Back to Hub

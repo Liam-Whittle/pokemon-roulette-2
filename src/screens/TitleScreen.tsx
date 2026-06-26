@@ -1,7 +1,13 @@
+import { useState } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { asset } from '../utils/asset';
+
+const DEFAULT_SUBTITLE = 'Pokemon Roulette but actually good';
+const SECRET_SUBTITLE = 'Johnson is a Jew';
+const SECRET_CLICKS = 5;
 
 export function TitleScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
@@ -11,9 +17,13 @@ export function TitleScreen() {
   const muted = useGameStore((s) => s.muted);
   const hasChampions = useGameStore((s) => s.hallOfChampions.length > 0);
   const ballControls = useAnimationControls();
+  const [ballClicks, setBallClicks] = useState(0);
+
+  const secretUnlocked = ballClicks >= SECRET_CLICKS;
 
   const spinBall = async () => {
     playSfx('click', muted);
+    setBallClicks((count) => count + 1);
     await ballControls.start({ rotate: 360, transition: { duration: 0.6, ease: 'easeOut' } });
     ballControls.set({ rotate: 0 });
   };
@@ -34,7 +44,7 @@ export function TitleScreen() {
             setScreen('hall');
           }}
         >
-          🏆 Hall of Champions
+          <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--inline" /> Hall of Champions
         </button>
       )}
 
@@ -59,8 +69,10 @@ export function TitleScreen() {
             onClick={spinBall}
           />
         </motion.div>
-        <h1 className="title-screen__title">Pokémon Roulette 2</h1>
-        <p className="title-screen__subtitle">Johnson is bad at TFT</p>
+        <h1 className="title-screen__title">Pokéspin Nuzlocke</h1>
+        <p className="title-screen__subtitle">
+          {secretUnlocked ? SECRET_SUBTITLE : DEFAULT_SUBTITLE}
+        </p>
 
         <div className="title-screen__actions">
           <button

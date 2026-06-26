@@ -12,6 +12,7 @@ import {
 } from '../data/pools';
 import { PokeCenterVisits } from '../components/PokeDollar';
 import { EvolutionModal } from '../components/EvolutionModal';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import type { EvolutionInfo, WheelSegment } from '../types/game';
@@ -190,7 +191,11 @@ export function HubScreen() {
         <nav className="hub-nav" />
       </header>
 
-      {eliteCleared && <div className="hub-champion-banner">🏆 Kanto Champion!</div>}
+      {eliteCleared && (
+        <div className="hub-champion-banner">
+          <GameIcon ui="champion" alt="" className="game-icon-img game-icon-img--inline" /> Kanto Champion!
+        </div>
+      )}
 
       <div className="hub-layout">
         <div className="hub-wheel-area">

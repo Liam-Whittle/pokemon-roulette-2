@@ -1,5 +1,6 @@
 import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
+import { getItemSprite, getSegmentSprite } from '../data/icons';
 import { useWheelPhysics, getSegmentWeights, getWeightedSegmentIndex } from '../hooks/useWheelPhysics';
 import { playSfx } from '../utils/sound';
 import { useGameStore } from '../store/useGameStore';
@@ -122,6 +123,8 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
             const labelY = 200 + 172 * Math.sin(midAngle);
             const rotation = midDeg;
             const labelFontSize = spanDeg < 30 ? 10 : spanDeg < 45 ? 11 : 13;
+            const spriteSrc = getSegmentSprite(seg.id) ?? getItemSprite(seg.id);
+            const ICON_SIZE = 40;
 
             return (
               <g key={`${i}-${seg.label}-${seg.color}`}>
@@ -132,13 +135,23 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
                   strokeWidth="3"
                   opacity={seg.comingSoon ? 0.55 : 1}
                 />
-                {seg.icon ? (
+                {spriteSrc ? (
+                  <image
+                    href={spriteSrc}
+                    x={iconX - ICON_SIZE / 2}
+                    y={iconY - ICON_SIZE / 2}
+                    width={ICON_SIZE}
+                    height={ICON_SIZE}
+                    transform={`rotate(${rotation}, ${iconX}, ${iconY})`}
+                    style={{ pointerEvents: 'none' }}
+                  />
+                ) : seg.icon ? (
                   <text
                     x={iconX}
                     y={iconY}
                     textAnchor="middle"
                     dominantBaseline="central"
-                    fontSize={spanDeg < 30 ? 28 : 48}
+                    fontSize={ICON_SIZE}
                     transform={`rotate(${rotation}, ${iconX}, ${iconY})`}
                     style={{ pointerEvents: 'none' }}
                   >

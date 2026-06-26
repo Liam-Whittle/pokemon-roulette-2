@@ -59,6 +59,11 @@ interface PokeApiSpecies {
   capture_rate: number;
   is_legendary: boolean;
   evolution_chain?: { url: string };
+  flavor_text_entries?: {
+    flavor_text: string;
+    language: { name: string };
+  }[];
+  genera?: { genus: string; language: { name: string } }[];
 }
 
 interface EvolutionNode {
@@ -154,6 +159,57 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
 
 export async function fetchPokemonBatch(ids: number[]): Promise<PokemonData[]> {
   return Promise.all(ids.map((id) => fetchPokemon(id)));
+}
+
+export interface PokemonDetail {
+  flavorText: string;
+  genus: string;
+  heightM: number;
+  weightKg: number;
+}
+
+interface PokeApiPokemonDims {
+  height: number;
+  weight: number;
+}
+
+function cleanFlavorText(text: string): string {
+  return text.replace(/[\f\n\r\u000c]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+export async function fetchPokemonDetail(id: number): Promise<PokemonDetail> {
+  return cachedFetch(`detail-${id}`, async () => {
+    let flavorText = '';
+    let genus = '';
+    let heightM = 0;
+    let weightKg = 0;
+
+    try {
+      const res = await fetch(`${BASE}/pokemon/${id}`);
+      if (res.ok) {
+        const data = (await res.json()) as PokeApiPokemonDims;
+        heightM = data.height / 10;
+        weightKg = data.weight / 10;
+      }
+    } catch {
+      // dimensions optional
+    }
+
+    try {
+      const speciesRes = await fetch(`${BASE}/pokemon-species/${id}`);
+      if (speciesRes.ok) {
+        const species = (await speciesRes.json()) as PokeApiSpecies;
+        const enFlavor = species.flavor_text_entries?.find((e) => e.language.name === 'en');
+        if (enFlavor) flavorText = cleanFlavorText(enFlavor.flavor_text);
+        const enGenus = species.genera?.find((g) => g.language.name === 'en');
+        if (enGenus) genus = enGenus.genus;
+      }
+    } catch {
+      // flavor/genus optional
+    }
+
+    return { flavorText, genus, heightM, weightKg };
+  });
 }
 
 export function getPlaceholderPokemon(id: number): PokemonData {

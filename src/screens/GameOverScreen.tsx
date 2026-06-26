@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 
 export function GameOverScreen() {
@@ -29,7 +30,9 @@ export function GameOverScreen() {
         animate={{ scale: 1, opacity: 1 }}
         transition={{ type: 'spring', stiffness: 220, damping: 16 }}
       >
-        <div className="gameover-card__icon">💀</div>
+        <div className="gameover-card__icon">
+          <GameIcon ui="gameover" alt="" className="game-icon-img game-icon-img--xl" />
+        </div>
         <h1 className="gameover-card__title">Better luck next time</h1>
         <p className="gameover-card__subtitle">
           You ran out of PokeCenter visits and your journey ends here.

@@ -32,9 +32,10 @@ export function PokeDollarAmount({ amount, className = '' }: { amount: number; c
 }
 
 export function PokeCenterVisits({ lives }: { lives: number }) {
+  const count = Math.max(0, lives);
   return (
-    <span className="pokecenter-visits" title={`${lives} PokeCenter visit${lives === 1 ? '' : 's'} remaining`}>
-      Pokecenter Visits Left: <span className="pokecenter-visits__icons">{'⛨'.repeat(Math.max(0, lives))}</span>
+    <span className="pokecenter-visits" title={`${lives} ${lives === 1 ? 'life' : 'lives'} remaining`}>
+      Lives: <span className="pokecenter-visits__icons">{'❤️'.repeat(count)}</span>
     </span>
   );
 }

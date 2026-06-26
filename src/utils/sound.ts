@@ -56,6 +56,12 @@ export const sfx = {
     setTimeout(() => playTone(784, 0.12, 'sine', 0.12), 200);
     setTimeout(() => playTone(1047, 0.3, 'sine', 0.12), 300);
   },
+  sparkle: () => {
+    playTone(1318, 0.08, 'sine', 0.1);
+    setTimeout(() => playTone(1760, 0.08, 'sine', 0.1), 80);
+    setTimeout(() => playTone(2093, 0.1, 'sine', 0.1), 160);
+    setTimeout(() => playTone(2637, 0.18, 'sine', 0.1), 240);
+  },
 };
 
 export function playSfx(name: keyof typeof sfx, muted: boolean) {

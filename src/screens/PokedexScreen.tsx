@@ -32,15 +32,17 @@ export function PokedexScreen() {
       ) : (
         <div className="pokedex-grid">
           {entries.map(([id, entry]) => (
-            <div key={id} className={`pokedex-entry ${entry.caught ? 'pokedex-entry--caught' : ''}`}>
+            <div key={id} className={`pokedex-entry ${entry.caught ? 'pokedex-entry--caught' : ''} ${entry.caught && entry.shiny ? 'pokedex-entry--shiny' : ''}`}>
               <img
-                src={entry.sprite}
+                src={entry.caught && entry.shiny && entry.shinySprite ? entry.shinySprite : entry.sprite}
                 alt={entry.name}
                 className="pokedex-entry__sprite"
                 onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
               />
               <span className="pokedex-entry__id">#{String(id).padStart(3, '0')}</span>
-              <span className="pokedex-entry__name">{entry.caught ? entry.name : '???'}</span>
+              <span className="pokedex-entry__name">
+                {entry.caught ? `${entry.shiny ? '✨ ' : ''}${entry.name}` : '???'}
+              </span>
               {entry.caught && (
                 <span className="pokedex-entry__power">
                   Pwr {Math.round((Number.isFinite(entry.powerLevel) ? entry.powerLevel : 0.3) * 100)}

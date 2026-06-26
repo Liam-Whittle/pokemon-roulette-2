@@ -81,6 +81,28 @@ export const ITEMS = [
   { id: 'shinycharm', name: 'Shiny Charm', icon: '✨' },
 ];
 
+/** What each item actually does in THIS game (not the mainline Pokémon games). */
+export const ITEM_DESCRIPTIONS: Record<string, string> = {
+  potion:
+    'During Gym and Elite Four battles, if you miss a spin a Potion is automatically used to give you one extra spin so your turn isn\u2019t wasted.',
+  rarecandy:
+    'Evolves one random eligible Pokémon in your party. If none of your Pokémon can evolve right now, it turns into a Potion instead.',
+  xattack:
+    'Used in battle: converts the "Miss" wedges on the battle wheel into "Hit" wedges for a single spin. Refunded if there are no Misses to convert.',
+  maxrevive:
+    'If you run out of lives, use a Max Revive on the Game Over screen to revive with one more life and keep your run going.',
+  pokeball:
+    'The basic ball for catching wild Pokémon. Standard timing zone in the catch mini-game.',
+  greatball:
+    'A better ball: widens the timing zone in the catch mini-game, making catches easier than a regular Poké Ball.',
+  ultraball:
+    'A premium ball: widens the timing zone and slows the marker down in the catch mini-game for the easiest standard catch.',
+  masterball:
+    'Instantly catches any Pokémon with no mini-game \u2014 a guaranteed catch. Best saved for Legendaries.',
+  shinycharm:
+    'While in your bag, it improves the post-catch Shiny Check, boosting the shiny chance from 1 in 40 to 1 in 15.',
+};
+
 export const BALL_ITEM_IDS = ['pokeball', 'greatball', 'ultraball', 'masterball'] as const;
 export type BallItemId = (typeof BALL_ITEM_IDS)[number];
 

@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
 import { ITEMS, pickRandom } from '../data/pools';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import type { BagItem } from '../types/game';
@@ -84,7 +85,7 @@ export function CaveScreen() {
             onClick={() => choosePath(index)}
             disabled={busy}
           >
-            <span>🕳️</span>
+            <GameIcon ui="cave" alt="" className="game-icon-img game-icon-img--md" />
             <strong>{path.label}</strong>
           </button>
         ))}

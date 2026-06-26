@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { SHOP_CATALOG } from '../data/pools';
 import { PokeDollarAmount } from '../components/PokeDollar';
 import { ItemIcon } from '../components/ItemIcon';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 
@@ -30,7 +31,9 @@ export function ShopScreen() {
         <button type="button" className="btn btn--ghost btn--sm" onClick={() => setScreen('hub')}>
           ← Back to Hub
         </button>
-        <h2 className="screen-title">🏪 Poké Mart</h2>
+        <h2 className="screen-title">
+          <GameIcon ui="shop" alt="" className="game-icon-img game-icon-img--title" /> Poké Mart
+        </h2>
         <p className="shop-balance">
           Balance: <PokeDollarAmount amount={money} />
         </p>

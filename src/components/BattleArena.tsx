@@ -43,6 +43,21 @@ function computeHitCount(multiplier: number, attackerPower: number, enemyPower: 
   return clamp(base + powerMod, 1, 9);
 }
 
+/**
+ * Overwhelming advantage: the chosen attack type is at least effective AND the
+ * attacker outpowers the enemy by 20+ points (power is normalized 0-1, shown
+ * x100). In that case the wheel is stacked to all Hits except a single Miss.
+ */
+const OVERWHELMING_POWER_DIFF = 0.2;
+
+function hasOverwhelmingAdvantage(
+  multiplier: number,
+  attackerPower: number,
+  enemyPower: number,
+): boolean {
+  return multiplier >= 1 && attackerPower - enemyPower >= OVERWHELMING_POWER_DIFF;
+}
+
 function powerNote(attackerPower: number, enemyPower: number): string {
   const diff = attackerPower - enemyPower;
   if (diff > 0.05) return 'power advantage';
@@ -123,7 +138,8 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
     const option = attackOptions.find((entry) => entry.type === type);
     const attackerPower = option?.attackerPower ?? 0.3;
     const multiplier = getTypeEffectiveness(type, enemy.types);
-    const hitCount = computeHitCount(multiplier, attackerPower, enemyPower);
+    const overwhelming = hasOverwhelmingAdvantage(multiplier, attackerPower, enemyPower);
+    const hitCount = overwhelming ? 9 : computeHitCount(multiplier, attackerPower, enemyPower);
     const effectiveness = getEffectivenessLabel(multiplier);
     const note = powerNote(attackerPower, enemyPower);
 
@@ -131,7 +147,11 @@ export function BattleArena({ title, leader, onWin, onLose, winBadge, finalVicto
     setUsedXAttack(false);
     setWheelKey((value) => value + 1);
     setPhase('spin');
-    setMessage(`${effectiveness} + ${note} → ${hitCount}/10 Hits!`);
+    setMessage(
+      overwhelming
+        ? `Overwhelming advantage! Only one Miss on the wheel — ${hitCount}/10 Hits!`
+        : `${effectiveness} + ${note} → ${hitCount}/10 Hits!`,
+    );
   }
 
   function applyXAttack() {

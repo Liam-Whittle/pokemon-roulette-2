@@ -70,7 +70,7 @@ interface GameState {
   startDebugLegendary: () => void;
   setCurrentPokemon: (pokemon: PokemonData | null) => void;
   clearEncounter: () => void;
-  addStarterPokemon: (pokemon: PokemonData) => void;
+  addStarterPokemon: (pokemon: PokemonData, shiny?: boolean) => void;
   catchPokemon: (pokemon: PokemonData, nickname?: string) => void;
   setShinyOnCatch: (caughtAt: number) => void;
   swapPartyMember: (caughtAt: number, pokemonId: number) => void;
@@ -92,6 +92,7 @@ interface GameState {
   markSeen: (pokemon: PokemonData) => void;
   getEncounterId: (activity: ActivityType) => number;
   getAttackTypes: () => string[];
+  makeRandomPartyShiny: () => void;
   resetGame: () => void;
 }
 
@@ -167,19 +168,22 @@ async function performEvolution(
           sprite: evolved.sprite,
           types: evolved.types,
           powerLevel: evolved.powerLevel,
+          shiny: member.shiny ?? false,
+          shinySprite: evolved.shinySprite,
         },
       },
     };
   });
 
+  const isShiny = member.shiny ?? false;
   return {
     message: `${member.displayName} evolved into ${evolved.displayName}!`,
     evolution: {
       fromName: member.nickname ?? member.displayName,
-      fromArtwork: fromData.artwork,
+      fromArtwork: (isShiny && fromData.shinyArtwork) || fromData.artwork,
       fromTypes: fromData.types,
       toName: evolved.displayName,
-      toArtwork: evolved.artwork,
+      toArtwork: (isShiny && evolved.shinyArtwork) || evolved.artwork,
       toTypes: evolved.types,
     },
   };
@@ -294,8 +298,8 @@ export const useGameStore = create<GameState>()(
         get().startLegendaryEncounter();
       },
 
-      addStarterPokemon: (pokemon) => {
-        const caught = toCaughtPokemon(pokemon);
+      addStarterPokemon: (pokemon, shiny = false) => {
+        const caught = { ...toCaughtPokemon(pokemon), shiny };
         set((state) => ({
           party: [caught],
           starterClaimed: true,
@@ -308,6 +312,8 @@ export const useGameStore = create<GameState>()(
               sprite: pokemon.sprite,
               types: pokemon.types,
               powerLevel: pokemon.powerLevel,
+              shiny,
+              shinySprite: pokemon.shinySprite,
             },
           },
         }));
@@ -335,6 +341,8 @@ export const useGameStore = create<GameState>()(
                 sprite: pokemon.sprite,
                 types: pokemon.types,
                 powerLevel: pokemon.powerLevel,
+                shiny: state.pokedex[pokemon.id]?.shiny ?? false,
+                shinySprite: state.pokedex[pokemon.id]?.shinySprite ?? pokemon.shinySprite,
               },
             },
             lastResult: {
@@ -353,11 +361,44 @@ export const useGameStore = create<GameState>()(
       },
 
       setShinyOnCatch: (caughtAt) => {
-        set((state) => ({
-          party: state.party.map((member) =>
+        set((state) => {
+          const target = state.party.find((member) => member.caughtAt === caughtAt);
+          const party = state.party.map((member) =>
             member.caughtAt === caughtAt ? { ...member, shiny: true } : member,
-          ),
-        }));
+          );
+          const existing = target ? state.pokedex[target.id] : undefined;
+          return {
+            party,
+            pokedex:
+              target && existing
+                ? {
+                    ...state.pokedex,
+                    [target.id]: { ...existing, shiny: true, shinySprite: target.shinySprite },
+                  }
+                : state.pokedex,
+          };
+        });
+      },
+
+      makeRandomPartyShiny: () => {
+        const { party } = get();
+        if (party.length === 0) return;
+        const chosen = pickRandom(party);
+        set((state) => {
+          const partyNext = state.party.map((member) =>
+            member.caughtAt === chosen.caughtAt ? { ...member, shiny: true } : member,
+          );
+          const existing = state.pokedex[chosen.id];
+          return {
+            party: partyNext,
+            pokedex: existing
+              ? {
+                  ...state.pokedex,
+                  [chosen.id]: { ...existing, shiny: true, shinySprite: chosen.shinySprite },
+                }
+              : state.pokedex,
+          };
+        });
       },
 
       swapPartyMember: (caughtAt, pokemonId) => {
@@ -371,9 +412,11 @@ export const useGameStore = create<GameState>()(
             displayName: entry.name,
             types: entry.types,
             sprite: entry.sprite,
+            shinySprite: entry.shinySprite,
             caughtAt: Date.now(),
             powerLevel: entry.powerLevel,
             evolvesToId: null,
+            shiny: entry.shiny ?? false,
           };
           return {
             party: state.party.map((member) => (member.caughtAt === caughtAt ? replacement : member)),
@@ -477,6 +520,8 @@ export const useGameStore = create<GameState>()(
               sprite: pokemon.sprite,
               types: pokemon.types,
               powerLevel: pokemon.powerLevel,
+              shiny: state.pokedex[pokemon.id]?.shiny ?? false,
+              shinySprite: state.pokedex[pokemon.id]?.shinySprite,
             },
           },
         }));

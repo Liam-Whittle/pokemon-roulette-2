@@ -34,6 +34,7 @@ const SPARKLES = Array.from({ length: 12 }, (_, i) => {
 export function EvolutionModal({ evolution, onClose }: EvolutionModalProps) {
   const [phase, setPhase] = useState<Phase>('intro');
   const closingRef = useRef(false);
+  const clipRef = useRef<HTMLAudioElement | null>(null);
 
   const handleClose = () => {
     if (closingRef.current) return;
@@ -41,8 +42,15 @@ export function EvolutionModal({ evolution, onClose }: EvolutionModalProps) {
     onClose();
   };
 
+  const handleSkip = () => {
+    stopClip(clipRef.current);
+    clipRef.current = null;
+    setPhase('done');
+  };
+
   useEffect(() => {
     const clip = playClip(asset('sounds/evolve.mp3'));
+    clipRef.current = clip;
     return () => stopClip(clip);
   }, []);
 
@@ -143,13 +151,21 @@ export function EvolutionModal({ evolution, onClose }: EvolutionModalProps) {
           )}
         </div>
 
-        {phase === 'done' && (
+        {phase === 'done' ? (
           <button
             type="button"
             className="btn btn--primary evo-continue"
             onClick={handleClose}
           >
             Continue
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm evo-skip"
+            onClick={handleSkip}
+          >
+            Skip
           </button>
         )}
       </motion.div>

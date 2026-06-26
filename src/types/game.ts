@@ -154,6 +154,8 @@ export interface PokedexEntry {
   sprite: string;
   types: string[];
   powerLevel: number;
+  shiny?: boolean;
+  shinySprite?: string;
 }
 
 export interface BattleWheelSegment {

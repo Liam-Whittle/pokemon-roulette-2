@@ -4,8 +4,18 @@ import { TypeBadge } from './TypeBadge';
 import { PokeDollarAmount } from './PokeDollar';
 import { ItemIcon } from './ItemIcon';
 import { EvolutionModal } from './EvolutionModal';
+import { PokemonDetailModal } from './PokemonDetailModal';
+import { ItemDetailModal } from './ItemDetailModal';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
-import type { EvolutionInfo } from '../types/game';
+import type { BagItem, EvolutionInfo } from '../types/game';
+
+interface SelectedMon {
+  id: number;
+  name: string;
+  types: string[];
+  powerLevel: number;
+  shiny: boolean;
+}
 
 interface SidePanelProps {
   compact?: boolean;
@@ -29,8 +39,12 @@ export function SidePanel({ compact = false, extra, allowSwap = true, allowItems
   const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [usingCandy, setUsingCandy] = useState(false);
+  const [selectedMon, setSelectedMon] = useState<SelectedMon | null>(null);
+  const [selectedItem, setSelectedItem] = useState<BagItem | null>(null);
 
-  const entries = Object.values(pokedex).sort((a, b) => a.name.localeCompare(b.name));
+  const entries = Object.entries(pokedex)
+    .map(([id, entry]) => ({ id: Number(id), ...entry }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 
   const rareCandy = bag.find((item) => item.id === 'rarecandy');
 
@@ -89,7 +103,16 @@ export function SidePanel({ compact = false, extra, allowSwap = true, allowItems
                       pokemon.shiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite
                     }
                     alt={pokemon.displayName}
-                    className="side-panel__sprite"
+                    className="side-panel__sprite side-panel__sprite--clickable"
+                    onClick={() =>
+                      setSelectedMon({
+                        id: pokemon.id,
+                        name: pokemon.nickname ?? pokemon.displayName,
+                        types: pokemon.types,
+                        powerLevel: pokemon.powerLevel,
+                        shiny: pokemon.shiny ?? false,
+                      })
+                    }
                     onError={(event) => {
                       (event.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
                     }}
@@ -134,13 +157,16 @@ export function SidePanel({ compact = false, extra, allowSwap = true, allowItems
                         onClick={() => handleSwap(entry.id)}
                       >
                         <img
-                          src={entry.sprite}
+                          src={entry.shiny && entry.shinySprite ? entry.shinySprite : entry.sprite}
                           alt={entry.name}
                           onError={(event) => {
                             (event.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
                           }}
                         />
-                        <span>{entry.name}</span>
+                        <span>
+                          {entry.shiny ? '✨ ' : ''}
+                          {entry.name}
+                        </span>
                       </button>
                     ))}
                   </div>
@@ -158,11 +184,26 @@ export function SidePanel({ compact = false, extra, allowSwap = true, allowItems
               entries.map((entry) => (
                 <div key={entry.name} className="side-panel__dex-entry">
                   <img
-                    src={entry.sprite}
+                    src={entry.caught && entry.shiny && entry.shinySprite ? entry.shinySprite : entry.sprite}
                     alt={entry.name}
-                    className="side-panel__sprite side-panel__sprite--small"
+                    className={`side-panel__sprite side-panel__sprite--small${entry.caught ? ' side-panel__sprite--clickable' : ''}`}
+                    onClick={
+                      entry.caught
+                        ? () =>
+                            setSelectedMon({
+                              id: entry.id,
+                              name: entry.name,
+                              types: entry.types,
+                              powerLevel: entry.powerLevel,
+                              shiny: entry.shiny ?? false,
+                            })
+                        : undefined
+                    }
                   />
-                  <strong className="side-panel__dex-name">{entry.name}</strong>
+                  <strong className="side-panel__dex-name">
+                    {entry.shiny ? '✨ ' : ''}
+                    {entry.name}
+                  </strong>
                   <span className="side-panel__dex-power">
                     Pwr {Math.round((Number.isFinite(entry.powerLevel) ? entry.powerLevel : 0.3) * 100)}
                   </span>
@@ -179,7 +220,14 @@ export function SidePanel({ compact = false, extra, allowSwap = true, allowItems
           <div className="side-panel__list side-panel__list--bag">
             {bag.map((item) => (
               <div key={item.id} className="side-panel__card">
-                <ItemIcon id={item.id} icon={item.icon} name={item.name} className="side-panel__icon" />
+                <button
+                  type="button"
+                  className="side-panel__icon-btn"
+                  onClick={() => setSelectedItem(item)}
+                  title={`What does ${item.name} do?`}
+                >
+                  <ItemIcon id={item.id} icon={item.icon} name={item.name} className="side-panel__icon" />
+                </button>
                 <div className="side-panel__card-body">
                   <strong>{item.name}</strong>
                   <span>x{item.quantity}</span>
@@ -254,6 +302,26 @@ export function SidePanel({ compact = false, extra, allowSwap = true, allowItems
       </div>
 
       {evolution && <EvolutionModal evolution={evolution} onClose={() => setEvolution(null)} />}
+
+      {selectedMon && (
+        <PokemonDetailModal
+          id={selectedMon.id}
+          name={selectedMon.name}
+          types={selectedMon.types}
+          powerLevel={selectedMon.powerLevel}
+          shiny={selectedMon.shiny}
+          onClose={() => setSelectedMon(null)}
+        />
+      )}
+
+      {selectedItem && (
+        <ItemDetailModal
+          id={selectedItem.id}
+          name={selectedItem.name}
+          icon={selectedItem.icon}
+          onClose={() => setSelectedItem(null)}
+        />
+      )}
 
       {notice && (
         <div className="battle-modal__backdrop">

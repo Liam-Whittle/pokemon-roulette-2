@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { ITEMS, pickFindItemId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { ItemIcon } from '../components/ItemIcon';
+import { SegmentIcon } from '../components/SegmentIcon';
 import { playSfx } from '../utils/sound';
 
 export function ItemScreen() {
@@ -40,17 +41,22 @@ export function ItemScreen() {
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
-      <h2 className="screen-title">🎒 Searching...</h2>
+      <h2 className="screen-title">
+        <SegmentIcon id="item" alt="" className="game-icon-img game-icon-img--title" /> Searching...
+      </h2>
 
       <div className="item-scene">
         {phase === 'search' && (
-          <motion.div
-            className="item-search"
-            animate={{ rotate: [0, 10, -10, 0] }}
-            transition={{ repeat: Infinity, duration: 1 }}
-          >
-            🔍
-          </motion.div>
+          <div className="item-search" role="img" aria-label="Scanning for items">
+            <div className="radar">
+              <span className="radar__ring radar__ring--outer" />
+              <span className="radar__ring radar__ring--inner" />
+              <span className="radar__grid radar__grid--h" />
+              <span className="radar__grid radar__grid--v" />
+              <div className="radar__sweep" />
+              <span className="radar__blip" />
+            </div>
+          </div>
         )}
 
         {phase === 'found' && foundItem && (

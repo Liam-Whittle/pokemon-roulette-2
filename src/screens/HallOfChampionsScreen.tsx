@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { TypeBadge } from '../components/TypeBadge';
@@ -31,7 +32,9 @@ export function HallOfChampionsScreen() {
         >
           ← Back
         </button>
-        <h2 className="screen-title hall-title">🏆 Hall of Champions</h2>
+        <h2 className="screen-title hall-title">
+          <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--title" /> Hall of Champions
+        </h2>
       </header>
 
       {hallOfChampions.length === 0 ? (
@@ -71,14 +74,17 @@ export function HallOfChampionsScreen() {
                 {record.party.map((member) => (
                   <div key={`${member.id}-${member.caughtAt}`} className="hall-mon">
                     <img
-                      src={member.sprite}
+                      src={member.shiny && member.shinySprite ? member.shinySprite : member.sprite}
                       alt={member.displayName}
                       className="hall-mon__sprite"
                       onError={(e) => {
                         (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
                       }}
                     />
-                    <span className="hall-mon__name">{member.nickname ?? member.displayName}</span>
+                    <span className="hall-mon__name">
+                      {member.shiny ? '✨ ' : ''}
+                      {member.nickname ?? member.displayName}
+                    </span>
                     <span className="hall-mon__power">Pwr {power(member.powerLevel)}</span>
                     <div className="hall-mon__types">
                       {member.types.map((type) => (

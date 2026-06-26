@@ -17,6 +17,7 @@ export function StarterScreen() {
   const [revealed, setRevealed] = useState(false);
 
   const starterId = useMemo(() => pickRandom(STARTER_IDS), []);
+  const isShiny = useMemo(() => Math.random() < 1 / 40, []);
 
   useEffect(() => {
     fetchPokemon(starterId).then(setStarter);
@@ -50,13 +51,16 @@ export function StarterScreen() {
         />
       ) : (
         <motion.div initial={{ scale: 0.7, opacity: 0 }} animate={{ scale: 1, opacity: 1 }}>
-          <SpriteCard pokemon={starter} size="lg" />
-          <p className="starter-screen__subtitle">Your starter is {starter.displayName}.</p>
+          <SpriteCard pokemon={starter} size="lg" shiny={isShiny} />
+          <p className="starter-screen__subtitle">
+            Your starter is {starter.displayName}
+            {isShiny ? ' — and it\'s shiny!' : '.'}
+          </p>
           <button
             type="button"
             className="btn btn--primary"
             onClick={() => {
-              addStarterPokemon(starter);
+              addStarterPokemon(starter, isShiny);
               setScreen('hub');
             }}
           >
