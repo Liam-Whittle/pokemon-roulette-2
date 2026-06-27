@@ -4,7 +4,12 @@ import { GameIcon } from './GameIcon';
 import { ItemIcon } from './ItemIcon';
 import { SegmentIcon } from './SegmentIcon';
 import { useGameStore } from '../store/useGameStore';
+import { fetchGen1List, fetchPokemon, type PokemonListEntry } from '../api/pokeapi';
 import type { WheelSegment } from '../types/game';
+
+function titleCase(name: string): string {
+  return name.replace(/(^|-)([a-z])/g, (_, sep, c) => (sep ? ' ' : '') + c.toUpperCase());
+}
 
 const MINI_GAMES: WheelSegment[] = WHEEL_SEGMENTS;
 
@@ -21,8 +26,14 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   const addItem = useGameStore((s) => s.addItem);
   const addMoney = useGameStore((s) => s.addMoney);
   const makeRandomPartyShiny = useGameStore((s) => s.makeRandomPartyShiny);
+  const debugAddToParty = useGameStore((s) => s.debugAddToParty);
 
   const [open, setOpen] = useState(false);
+  const [pokemonList, setPokemonList] = useState<PokemonListEntry[]>([]);
+  const [listOpen, setListOpen] = useState(false);
+  const [loadingList, setLoadingList] = useState(false);
+  const [addingId, setAddingId] = useState<number | null>(null);
+  const [search, setSearch] = useState('');
 
   function launchGym(id: string) {
     setDebugGym(id);
@@ -73,6 +84,39 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
     makeRandomPartyShiny();
     setOpen(false);
   }
+
+  async function togglePokemonList() {
+    const next = !listOpen;
+    setListOpen(next);
+    if (next && pokemonList.length === 0 && !loadingList) {
+      setLoadingList(true);
+      try {
+        setPokemonList(await fetchGen1List());
+      } catch {
+        // network optional; list stays empty
+      } finally {
+        setLoadingList(false);
+      }
+    }
+  }
+
+  async function addPokemonToParty(id: number) {
+    setAddingId(id);
+    try {
+      const pokemon = await fetchPokemon(id);
+      debugAddToParty(pokemon);
+    } catch {
+      // ignore fetch failures
+    } finally {
+      setAddingId(null);
+    }
+  }
+
+  const filteredList = pokemonList.filter((entry) => {
+    const q = search.trim().toLowerCase();
+    if (!q) return true;
+    return entry.name.includes(q) || String(entry.id) === q || `#${entry.id}` === q;
+  });
 
   return (
     <>
@@ -135,7 +179,43 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                 <ItemIcon id="shinycharm" icon="✨" name="Shiny Charm" className="game-icon-img game-icon-img--btn" />{' '}
                 Make Random Party Pokémon Shiny
               </button>
+              <button type="button" className="debug-panel__btn" onClick={togglePokemonList}>
+                {listOpen ? '▾' : '▸'} Add Gen 1 Pokémon
+              </button>
             </div>
+
+            {listOpen && (
+              <div className="debug-pokelist">
+                <input
+                  type="text"
+                  className="debug-pokelist__search"
+                  placeholder="Search name or #id…"
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+                {loadingList ? (
+                  <p className="debug-pokelist__status">Loading…</p>
+                ) : pokemonList.length === 0 ? (
+                  <p className="debug-pokelist__status">Couldn’t load list.</p>
+                ) : (
+                  <div className="debug-pokelist__scroll">
+                    {filteredList.map((entry) => (
+                      <button
+                        key={entry.id}
+                        type="button"
+                        className="debug-pokelist__item"
+                        disabled={addingId === entry.id}
+                        onClick={() => addPokemonToParty(entry.id)}
+                      >
+                        <span className="debug-pokelist__id">#{String(entry.id).padStart(3, '0')}</span>
+                        {titleCase(entry.name)}
+                        {addingId === entry.id ? ' …' : ''}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           <div className="debug-panel__section">

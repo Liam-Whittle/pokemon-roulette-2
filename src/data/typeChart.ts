@@ -31,6 +31,7 @@ export function getTypeEffectiveness(attackType: string, defenderTypes: string[]
 }
 
 export function getEffectivenessLabel(multiplier: number): string {
+  if (multiplier >= 4) return '4x Super Effective!';
   if (multiplier >= 2) return 'Super Effective!';
   if (multiplier <= 0) return 'No Effect!';
   if (multiplier < 1) return 'Not Very Effective...';

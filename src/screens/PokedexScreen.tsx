@@ -31,28 +31,34 @@ export function PokedexScreen() {
         <p className="collection-empty">No Pokémon registered yet. Go spin the wheel!</p>
       ) : (
         <div className="pokedex-grid">
-          {entries.map(([id, entry]) => (
-            <div key={id} className={`pokedex-entry ${entry.caught ? 'pokedex-entry--caught' : ''} ${entry.caught && entry.shiny ? 'pokedex-entry--shiny' : ''}`}>
-              <img
-                src={entry.caught && entry.shiny && entry.shinySprite ? entry.shinySprite : entry.sprite}
-                alt={entry.name}
-                className="pokedex-entry__sprite"
-                onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
-              />
-              <span className="pokedex-entry__id">#{String(id).padStart(3, '0')}</span>
-              <span className="pokedex-entry__name">
-                {entry.caught ? `${entry.shiny ? '✨ ' : ''}${entry.name}` : '???'}
-              </span>
-              {entry.caught && (
-                <span className="pokedex-entry__power">
-                  Pwr {Math.round((Number.isFinite(entry.powerLevel) ? entry.powerLevel : 0.3) * 100)}
+          {entries.map(([id, entry]) => {
+            const displayName = entry.caught ? `${entry.shiny ? '✨ ' : ''}${entry.name}` : '???';
+            const nameLen = entry.caught ? entry.name.length : 3;
+            const nameSize =
+              nameLen > 9 ? ' pokedex-entry__name--xs' : nameLen > 7 ? ' pokedex-entry__name--sm' : '';
+            return (
+              <div key={id} className={`pokedex-entry ${entry.caught ? 'pokedex-entry--caught' : ''} ${entry.caught && entry.shiny ? 'pokedex-entry--shiny' : ''}`}>
+                {entry.caught && (
+                  <span className="pokedex-entry__power">
+                    {Math.round((Number.isFinite(entry.powerLevel) ? entry.powerLevel : 0.3) * 100)}
+                  </span>
+                )}
+                <img
+                  src={entry.caught && entry.shiny && entry.shinySprite ? entry.shinySprite : entry.sprite}
+                  alt={entry.name}
+                  className="pokedex-entry__sprite"
+                  onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
+                />
+                <span className="pokedex-entry__id">#{String(id).padStart(3, '0')}</span>
+                <span className={`pokedex-entry__name${nameSize}`} title={displayName}>
+                  {displayName}
                 </span>
-              )}
-              <div className="pokedex-entry__types">
-                {entry.caught && entry.types.map((t) => <TypeBadge key={t} type={t} size="sm" />)}
+                <div className="pokedex-entry__types">
+                  {entry.caught && entry.types.map((t) => <TypeBadge key={t} type={t} size="sm" />)}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </motion.div>

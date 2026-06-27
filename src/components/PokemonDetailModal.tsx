@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, useSpring } from 'framer-motion';
 import { fetchPokemon, fetchPokemonDetail, type PokemonDetail } from '../api/pokeapi';
@@ -6,7 +6,9 @@ import type { PokemonData } from '../types/game';
 import { TypeBadge } from './TypeBadge';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import { useGameStore } from '../store/useGameStore';
-import { playClip } from '../utils/music';
+import { playClip, stopClip } from '../utils/music';
+import { REGION_CRY_STYLE } from '../data/pools';
+import { MAGIKARP_ID } from '../data/moves';
 
 interface PokemonDetailModalProps {
   id: number;
@@ -60,6 +62,11 @@ export function PokemonDetailModal({
   const [data, setData] = useState<PokemonData | null>(null);
   const [detail, setDetail] = useState<PokemonDetail | null>(null);
   const muted = useGameStore((s) => s.muted);
+  // Easter egg: a SHINY Magikarp becomes "Magichad" with a cosmic card and joke stats.
+  const isMagichad = shiny && id === MAGIKARP_ID;
+  // For shinies, the cry waits until the shiny chime has finished.
+  const [introDone, setIntroDone] = useState(!shiny);
+  const cryPlayedRef = useRef(false);
 
   const rotateX = useSpring(0, { stiffness: 160, damping: 18 });
   const rotateY = useSpring(0, { stiffness: 160, damping: 18 });
@@ -96,21 +103,93 @@ export function PokemonDetailModal({
     };
   }, [id]);
 
+  // Shiny chime intro: play it first, then unblock the cry once it ends.
   useEffect(() => {
-    if (shiny && !muted) playClip(asset('sounds/shiny.mp3'));
+    if (!shiny) return;
+    // Magichad skips the shiny chime entirely and plays its own line immediately.
+    if (isMagichad) {
+      setIntroDone(true);
+      return;
+    }
+    if (muted) {
+      setIntroDone(true);
+      return;
+    }
+    const clip = playClip(asset('sounds/shiny.mp3'));
+    if (!clip) {
+      setIntroDone(true);
+      return;
+    }
+    let finished = false;
+    const finish = () => {
+      if (!finished) {
+        finished = true;
+        setIntroDone(true);
+      }
+    };
+    clip.addEventListener('ended', finish, { once: true });
+    const fallback = setTimeout(finish, 2500);
+    return () => {
+      clearTimeout(fallback);
+      clip.removeEventListener('ended', finish);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const art = data
-    ? shiny && data.shinyArtwork
-      ? data.shinyArtwork
-      : data.artwork || data.sprite
-    : '';
+  // Play the Pokémon's region-appropriate cry once data is loaded (and, for
+  // shinies, after the chime has finished). Guarded so it only fires once.
+  useEffect(() => {
+    if (muted || cryPlayedRef.current || !introDone) return;
+
+    let clip: HTMLAudioElement | null = null;
+
+    if (isMagichad) {
+      cryPlayedRef.current = true;
+      clip = playClip(asset('sounds/magikarp_detail.mp3'));
+    } else if (data) {
+      const crySrc =
+        (REGION_CRY_STYLE === 'legacy' ? data.cryLegacy : data.cryLatest) ??
+        data.cryLatest ??
+        data.cryLegacy;
+      if (crySrc) {
+        cryPlayedRef.current = true;
+        clip = playClip(crySrc);
+      }
+    }
+
+    return () => stopClip(clip);
+  }, [muted, introDone, data, isMagichad]);
+
+  const art = isMagichad
+    ? asset('img/magikarp_shiny.png')
+    : data
+      ? shiny && data.shinyArtwork
+        ? data.shinyArtwork
+        : data.artwork || data.sprite
+      : '';
+
+  const displayName = isMagichad ? 'Magichad' : name;
+  const displayGenus = isMagichad ? 'Chad Pokémon' : detail?.genus;
+  const displayPower = isMagichad ? '∞' : powerPct(powerLevel);
+  const displayBst = isMagichad ? '∞' : data?.baseStatTotal;
+  const displayHeight = isMagichad
+    ? '7 foot without shoes'
+    : detail && detail.heightM > 0
+      ? `${detail.heightM.toFixed(1)} m`
+      : null;
+  const displayWeight = isMagichad
+    ? '100 kgs of pure muscle'
+    : detail && detail.weightKg > 0
+      ? `${detail.weightKg.toFixed(1)} kg`
+      : null;
+  const displayFlavor = isMagichad
+    ? 'A truly chad fish, stronger than the horribly weak chinned pokémon that exist today.'
+    : detail?.flavorText;
 
   return createPortal(
     <div className="mon-detail-backdrop" onClick={onClose}>
       <motion.div
-        className={`mon-detail${shiny ? ' mon-detail--shiny' : ''}`}
+        className={`mon-detail${shiny ? ' mon-detail--shiny' : ''}${isMagichad ? ' mon-detail--magichad' : ''}`}
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 240, damping: 24 }}
@@ -123,7 +202,7 @@ export function PokemonDetailModal({
           <>
             <div className="mon-detail__foil" aria-hidden />
             <div className="mon-detail__ribbon-wrap" aria-hidden>
-              <span className="mon-detail__ribbon">SHINY</span>
+              <span className="mon-detail__ribbon">{isMagichad ? 'CHAD' : 'SHINY'}</span>
             </div>
             <div className="mon-detail__burst" aria-hidden>
               {SHINY_BURST.map((b) => (
@@ -154,7 +233,7 @@ export function PokemonDetailModal({
               >
                 <motion.img
                   src={art}
-                  alt={name}
+                  alt={displayName}
                   className={`mon-detail__art${shiny ? ' mon-detail__art--shiny' : ''}`}
                   animate={
                     shiny
@@ -199,50 +278,56 @@ export function PokemonDetailModal({
             <h3 className="mon-detail__name">
               {shiny && <span className="mon-detail__name-emoji">✨</span>}
               <span className={`mon-detail__name-text${shiny ? ' mon-detail__name-text--shiny' : ''}`}>
-                {name}
+                {displayName}
               </span>
             </h3>
-            <span className="mon-detail__id">#{String(id).padStart(3, '0')}</span>
+            <span className="mon-detail__id">{isMagichad ? '#∞' : `#${String(id).padStart(3, '0')}`}</span>
           </div>
 
-          {shiny && <p className="mon-detail__rarity">Shiny variant · 1 in 40 encounter</p>}
+          {shiny && (
+            <p className="mon-detail__rarity">
+              {isMagichad ? 'Chad variant · 1 in ∞ encounter' : 'Shiny variant · 1 in 40 encounter'}
+            </p>
+          )}
 
-          {detail?.genus && <p className="mon-detail__genus">{detail.genus}</p>}
+          {displayGenus && <p className="mon-detail__genus">{displayGenus}</p>}
 
           <div className="mon-detail__types">
-            {types.map((t) => (
-              <TypeBadge key={t} type={t} size="sm" />
-            ))}
+            {isMagichad ? (
+              <span className="type-badge type-badge--sm type-badge--god">GOD</span>
+            ) : (
+              types.map((t) => <TypeBadge key={t} type={t} size="sm" />)
+            )}
           </div>
 
           <div className="mon-detail__stats">
             <div className="mon-detail__stat">
               <span className="mon-detail__stat-label">Power</span>
-              <span className="mon-detail__stat-value">{powerPct(powerLevel)}</span>
+              <span className="mon-detail__stat-value">{displayPower}</span>
             </div>
-            {data && (
+            {(isMagichad || data) && (
               <div className="mon-detail__stat">
                 <span className="mon-detail__stat-label">Base Stat Total</span>
-                <span className="mon-detail__stat-value">{data.baseStatTotal}</span>
+                <span className="mon-detail__stat-value">{displayBst}</span>
               </div>
             )}
-            {detail && detail.heightM > 0 && (
+            {displayHeight && (
               <div className="mon-detail__stat">
                 <span className="mon-detail__stat-label">Height</span>
-                <span className="mon-detail__stat-value">{detail.heightM.toFixed(1)} m</span>
+                <span className="mon-detail__stat-value">{displayHeight}</span>
               </div>
             )}
-            {detail && detail.weightKg > 0 && (
+            {displayWeight && (
               <div className="mon-detail__stat">
                 <span className="mon-detail__stat-label">Weight</span>
-                <span className="mon-detail__stat-value">{detail.weightKg.toFixed(1)} kg</span>
+                <span className="mon-detail__stat-value">{displayWeight}</span>
               </div>
             )}
           </div>
 
-          {data?.isLegendary && <span className="mon-detail__legendary">Legendary</span>}
+          {!isMagichad && data?.isLegendary && <span className="mon-detail__legendary">Legendary</span>}
 
-          {detail?.flavorText && <p className="mon-detail__flavor">{detail.flavorText}</p>}
+          {displayFlavor && <p className="mon-detail__flavor">{displayFlavor}</p>}
         </div>
       </motion.div>
     </div>,

@@ -23,6 +23,22 @@ const BALL_OPTIONS: { id: BallId; label: string; sprite: string }[] = [
   { id: 'masterball', label: 'Master Ball', sprite: ITEM_SPRITES.masterball },
 ];
 
+const BALL_EMOJI: Record<BallId, string> = {
+  pokeball: '🔴',
+  greatball: '🔵',
+  ultraball: '🟡',
+  masterball: '🟣',
+};
+
+/** Ball sprite with an emoji fallback if the remote image fails to load. */
+function BallIcon({ id, sprite, label, className }: { id: BallId; sprite: string; label: string; className: string }) {
+  const [failed, setFailed] = useState(false);
+  if (failed) {
+    return <span className={className} role="img" aria-label={label}>{BALL_EMOJI[id]}</span>;
+  }
+  return <img src={sprite} alt={label} className={className} onError={() => setFailed(true)} />;
+}
+
 function encounterFlavor(activity: ActivityType | null, isLegendary: boolean): string {
   if (activity === 'fishing') return 'You hooked something from the water!';
   if (activity === 'tallgrass' && isLegendary) return 'A legendary Pokémon appeared in the tall grass!';
@@ -171,6 +187,12 @@ export function CatchScreen() {
   const safePower = Number.isFinite(pokemon.powerLevel) ? pokemon.powerLevel : 0.3;
   const modifiers = selectedBall ? ballModifiers(selectedBall) : { zoneBonus: 0, speedMult: 1 };
   const shinyWheelSegments = hasShinyCharm ? SHINY_WHEEL_CHARM_SEGMENTS : SHINY_WHEEL_SEGMENTS;
+  const sceneVariant =
+    currentActivity === 'fishing'
+      ? 'catch-scene--water'
+      : currentActivity === 'cave' || currentActivity === 'fossil'
+        ? 'catch-scene--cave'
+        : 'catch-scene--grass';
 
   return (
     <motion.div
@@ -181,13 +203,13 @@ export function CatchScreen() {
     >
       <Confetti active={showConfetti} />
 
-      <div className="catch-scene">
+      <div className={`catch-scene ${sceneVariant}`}>
         <div className="catch-scene__grass" />
         <motion.div className="catch-scene__content" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
           <p className={`catch-flavor ${pokemon.isLegendary ? 'catch-flavor--legendary' : ''}`}>
             {encounterFlavor(currentActivity, pokemon.isLegendary)}
           </p>
-          <SpriteCard pokemon={pokemon} size="lg" />
+          <SpriteCard pokemon={pokemon} size="lg" shiny={shinyResult === 'shiny'} />
           <p className="catch-power">
             Catch difficulty scales with Power {Math.round(safePower * 100)}
             {pokemon.isLegendary ? ' — Legendary!' : ''}.
@@ -210,7 +232,7 @@ export function CatchScreen() {
                         title={`${ball.label} (×${qty})`}
                         onClick={() => handleSelectBall(ball.id)}
                       >
-                        <img src={ball.sprite} alt={ball.label} className="ball-picker__icon" />
+                        <BallIcon id={ball.id} sprite={ball.sprite} label={ball.label} className="ball-picker__icon" />
                         <span className="ball-picker__qty">×{qty}</span>
                       </button>
                     );
@@ -270,7 +292,7 @@ export function CatchScreen() {
       {confirmMasterBall && (
         <div className="battle-modal__backdrop">
           <div className="battle-modal master-ball-confirm">
-            <img src={ITEM_SPRITES.masterball} alt="Master Ball" className="master-ball-confirm__icon" />
+            <BallIcon id="masterball" sprite={ITEM_SPRITES.masterball} label="Master Ball" className="master-ball-confirm__icon" />
             <h3 className="battle-modal__title">Use Master Ball?</h3>
             <p className="battle-modal__subtitle">This guarantees a catch.</p>
             <div className="master-ball-confirm__actions">

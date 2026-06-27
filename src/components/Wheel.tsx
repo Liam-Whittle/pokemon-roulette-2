@@ -10,6 +10,8 @@ export interface SpinnerSegment {
   label: string;
   color: string;
   icon: string;
+  /** Explicit image URL for the wedge (e.g. a Pokémon sprite). Takes priority over id-based sprites. */
+  image?: string;
   comingSoon?: boolean;
   weight?: number;
 }
@@ -106,6 +108,18 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
         aria-label="Adventure wheel — drag and flick hard to spin"
       >
         <svg viewBox="0 0 400 400" className="wheel__svg">
+          <defs>
+            <radialGradient id="wheelShinyGrad" cx="50%" cy="50%" r="78%">
+              <stop offset="0%" stopColor="#fffef5" />
+              <stop offset="42%" stopColor="#fde047" />
+              <stop offset="100%" stopColor="#f59e0b" />
+            </radialGradient>
+            <radialGradient id="wheelNormalGrad" cx="200" cy="200" r="195" gradientUnits="userSpaceOnUse">
+              <stop offset="0%" stopColor="#c2ccdc" />
+              <stop offset="68%" stopColor="#8b97a8" />
+              <stop offset="100%" stopColor="#586273" />
+            </radialGradient>
+          </defs>
           {segments.map((seg, i) => {
             const { startDeg, endDeg, midDeg } = arcs[i];
             const spanDeg = endDeg - startDeg;
@@ -123,18 +137,36 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
             const labelY = 200 + 172 * Math.sin(midAngle);
             const rotation = midDeg;
             const labelFontSize = spanDeg < 30 ? 10 : spanDeg < 45 ? 11 : 13;
-            const spriteSrc = getSegmentSprite(seg.id) ?? getItemSprite(seg.id);
+            const spriteSrc = seg.image ?? getSegmentSprite(seg.id) ?? getItemSprite(seg.id);
             const ICON_SIZE = 40;
+            const isShinyWedge = seg.id === 'shiny';
+            const isNormalWedge = seg.id === 'normal';
+            const wedgeFill = isShinyWedge
+              ? 'url(#wheelShinyGrad)'
+              : isNormalWedge
+                ? 'url(#wheelNormalGrad)'
+                : seg.color;
+            const wedgePath = `M 200 200 L ${x1} ${y1} A 195 195 0 ${largeArc} 1 ${x2} ${y2} Z`;
 
             return (
               <g key={`${i}-${seg.label}-${seg.color}`}>
                 <path
-                  d={`M 200 200 L ${x1} ${y1} A 195 195 0 ${largeArc} 1 ${x2} ${y2} Z`}
-                  fill={seg.color}
+                  d={wedgePath}
+                  fill={wedgeFill}
                   stroke="#0f0f1a"
                   strokeWidth="3"
                   opacity={seg.comingSoon ? 0.55 : 1}
+                  className="wheel__wedge"
                 />
+                {isShinyWedge && (
+                  <path
+                    d={wedgePath}
+                    fill="#fff3b0"
+                    stroke="none"
+                    className="wheel__shiny-shimmer"
+                    style={{ pointerEvents: 'none' }}
+                  />
+                )}
                 {spriteSrc ? (
                   <image
                     href={spriteSrc}

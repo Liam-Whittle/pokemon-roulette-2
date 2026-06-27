@@ -3,6 +3,7 @@ import { AnimatePresence } from 'framer-motion';
 import { useGameStore } from './store/useGameStore';
 import { SoundToggle } from './components/SoundToggle';
 import { VolumeSlider } from './components/VolumeSlider';
+import { SettingsMenu } from './components/SettingsMenu';
 import { MusicPrompt } from './components/MusicPrompt';
 import { TitleScreen } from './screens/TitleScreen';
 import { TrainerSetup } from './screens/TrainerSetup';
@@ -19,6 +20,7 @@ import { PokedexScreen } from './screens/PokedexScreen';
 import { PartyScreen } from './screens/PartyScreen';
 import { BagScreen } from './screens/BagScreen';
 import { ChampionScreen } from './screens/ChampionScreen';
+import { ChadpionScreen } from './screens/ChadpionScreen';
 import { GameOverScreen } from './screens/GameOverScreen';
 import { HallOfChampionsScreen } from './screens/HallOfChampionsScreen';
 import { ShopScreen } from './screens/ShopScreen';
@@ -61,6 +63,8 @@ function ScreenRouter() {
       return <BagScreen key="bag" />;
     case 'champion':
       return <ChampionScreen key="champion" />;
+    case 'chadpion':
+      return <ChadpionScreen key="chadpion" />;
     case 'gameover':
       return <GameOverScreen key="gameover" />;
     case 'hall':
@@ -79,6 +83,7 @@ export default function App() {
   const musicVolume = useGameStore((s) => s.musicVolume);
   const setMuted = useGameStore((s) => s.setMuted);
   const screen = useGameStore((s) => s.screen);
+  const currentActivity = useGameStore((s) => s.currentActivity);
   const [showMusicPrompt, setShowMusicPrompt] = useState(true);
   const bgRef = useRef<HTMLDivElement>(null);
   const target = useRef({ x: 0, y: 0 });
@@ -146,7 +151,7 @@ export default function App() {
       setMusicTrack('gym');
     } else if (screen === 'elite') {
       setMusicTrack('elite4');
-    } else if (screen === 'champion') {
+    } else if (screen === 'champion' || screen === 'chadpion') {
       setMusicTrack('gamewin');
     } else if (screen === 'gameover') {
       setMusicTrack('gamelose');
@@ -159,16 +164,27 @@ export default function App() {
     }
   }, [screen]);
 
+  // On the catch screen, match the background to the activity that triggered the
+  // encounter (fishing/fossil/cave) instead of always showing the main hub art.
+  const catchBg =
+    currentActivity === 'fishing'
+      ? asset('img/fishing.jpg')
+      : currentActivity === 'cave' || currentActivity === 'fossil'
+        ? asset('img/cave.jpg')
+        : asset('img/main.jpg');
+
   const bgImage =
-    screen === 'gym' || screen === 'elite' || screen === 'champion' || screen === 'gameover'
+    screen === 'gym' || screen === 'elite' || screen === 'champion' || screen === 'chadpion' || screen === 'gameover'
       ? asset('img/battle.jpg')
       : screen === 'title' || screen === 'hall'
         ? asset('img/title.jpg')
         : screen === 'fishing'
-          ? asset('img/fishing.png')
+          ? asset('img/fishing.jpg')
           : screen === 'cave' || screen === 'fossil'
             ? asset('img/cave.jpg')
-            : asset('img/main.jpg');
+            : screen === 'catch'
+              ? catchBg
+              : asset('img/main.jpg');
 
   return (
     <div className="app">
@@ -179,8 +195,11 @@ export default function App() {
           backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), url('${bgImage}')`,
         }}
       />
-      <SoundToggle />
-      <VolumeSlider />
+      <div className="app-controls">
+        <VolumeSlider />
+        <SettingsMenu />
+        <SoundToggle />
+      </div>
       <AnimatePresence mode="wait">
         <ScreenRouter />
       </AnimatePresence>

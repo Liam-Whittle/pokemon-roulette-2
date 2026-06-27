@@ -1,10 +1,12 @@
 import type { PokemonData } from '../types/game';
+import { extractGen1MoveSlugs } from '../data/moves';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import { REGION_MAX_DEX_ID } from '../data/pools';
 
 const BASE = 'https://pokeapi.co/api/v2';
 // Bump the version suffix whenever the cached shape changes so stale entries
 // (e.g. cached before powerLevel/baseStatTotal existed) are ignored.
-const CACHE_PREFIX = 'poke-cache-v3-';
+const CACHE_PREFIX = 'poke-cache-v6-';
 const memoryCache = new Map<string, unknown>();
 
 function capitalize(s: string): string {
@@ -51,7 +53,12 @@ interface PokeApiPokemon {
     front_shiny: string | null;
     other: { 'official-artwork': { front_default: string | null; front_shiny: string | null } };
   };
+  cries?: { latest: string | null; legacy: string | null };
   species: { url: string };
+  moves?: {
+    move: { name: string };
+    version_group_details: { version_group: { name: string } }[];
+  }[];
 }
 
 interface PokeApiSpecies {
@@ -88,16 +95,16 @@ function normalizePowerLevel(baseStatTotal: number): number {
   return Math.max(0.1, Math.min(1, (baseStatTotal - 200) / 500));
 }
 
-function findEvolutionTarget(node: EvolutionNode, currentName: string): number | null {
+/** Species IDs of every direct evolution branch available to `currentName`. */
+function findEvolutionTargets(node: EvolutionNode, currentName: string): number[] {
   if (node.species.name === currentName) {
-    const next = node.evolves_to[0];
-    return next ? extractId(next.species.url) : null;
+    return node.evolves_to.map((next) => extractId(next.species.url));
   }
   for (const child of node.evolves_to) {
-    const target = findEvolutionTarget(child, currentName);
-    if (target) return target;
+    const targets = findEvolutionTargets(child, currentName);
+    if (targets.length) return targets;
   }
-  return null;
+  return [];
 }
 
 export async function fetchPokemon(id: number): Promise<PokemonData> {
@@ -110,7 +117,7 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
 
     let catchRate = 45;
     let isLegendary = false;
-    let evolvesToId: number | null = null;
+    let evolvesToIds: number[] = [];
     try {
       const speciesRes = await fetch(data.species.url);
       if (speciesRes.ok) {
@@ -121,7 +128,12 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
           const evoRes = await fetch(species.evolution_chain.url);
           if (evoRes.ok) {
             const evo = (await evoRes.json()) as EvolutionChain;
-            evolvesToId = findEvolutionTarget(evo.chain, data.name);
+            // Keep only evolutions inside the current region's dex range so we
+            // don't evolve into Pokémon from generations that aren't unlocked
+            // yet (e.g. Onix → Steelix, Eevee → Espeon/Umbreon).
+            evolvesToIds = findEvolutionTargets(evo.chain, data.name).filter(
+              (evoId) => evoId > 0 && evoId <= REGION_MAX_DEX_ID,
+            );
           }
         }
       }
@@ -130,6 +142,7 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
     }
 
     const baseStatTotal = getBaseStatTotal(data.stats);
+    const gen1Moves = data.moves ? extractGen1MoveSlugs(data.moves) : [];
 
     return {
       id: data.id,
@@ -150,15 +163,36 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
       isLegendary,
       powerLevel: normalizePowerLevel(baseStatTotal),
       baseStatTotal,
-      evolvesToId,
+      evolvesToId: evolvesToIds[0] ?? null,
+      evolvesToIds,
+      cryLatest: data.cries?.latest ?? undefined,
+      cryLegacy: data.cries?.legacy ?? undefined,
+      moves: gen1Moves,
     };
     },
-    (value) => Number.isFinite(value.powerLevel),
+    (value) => Number.isFinite(value.powerLevel) && Array.isArray(value.moves),
   );
 }
 
 export async function fetchPokemonBatch(ids: number[]): Promise<PokemonData[]> {
   return Promise.all(ids.map((id) => fetchPokemon(id)));
+}
+
+export interface PokemonListEntry {
+  id: number;
+  name: string;
+}
+
+/** Fetches the Gen 1 (Kanto, #1–151) name list in a single request. */
+export async function fetchGen1List(): Promise<PokemonListEntry[]> {
+  return cachedFetch('gen1-list', async () => {
+    const res = await fetch(`${BASE}/pokemon?limit=151&offset=0`);
+    if (!res.ok) throw new Error('Failed to fetch Pokémon list');
+    const data = (await res.json()) as { results: { name: string; url: string }[] };
+    return data.results
+      .map((r) => ({ id: extractId(r.url), name: r.name }))
+      .filter((entry) => entry.id > 0);
+  });
 }
 
 export interface PokemonDetail {
@@ -225,5 +259,7 @@ export function getPlaceholderPokemon(id: number): PokemonData {
     powerLevel: 0.3,
     baseStatTotal: 250,
     evolvesToId: null,
+    evolvesToIds: [],
+    moves: [],
   };
 }

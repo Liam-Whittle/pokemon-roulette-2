@@ -4,9 +4,11 @@ import { SidePanel } from '../components/SidePanel';
 import { DebugMenu } from '../components/DebugMenu';
 import { Wheel } from '../components/Wheel';
 import {
+  ELITE_PREP_SPINS,
   getHubWheelSegments,
   ITEMS,
   pickUberBonusItemId,
+  SPINS_PER_GYM,
   TOTAL_GYMS,
   UBER_SPIN_SEGMENTS,
 } from '../data/pools';
@@ -32,6 +34,7 @@ export function HubScreen() {
   const setLastGymSpin = useGameStore((s) => s.setLastGymSpin);
   const addItem = useGameStore((s) => s.addItem);
   const evolveRandomPartyMember = useGameStore((s) => s.evolveRandomPartyMember);
+  const restorePartyPp = useGameStore((s) => s.restorePartyPp);
 
   const [wheelLocked, setWheelLocked] = useState(false);
   const [uberSpinOpen, setUberSpinOpen] = useState(false);
@@ -41,7 +44,9 @@ export function HubScreen() {
   const gymBadges = badges.length;
   const allGymsDone = gymBadges >= TOTAL_GYMS;
   const spinsSinceGym = spinsCount - lastGymSpin;
-  const spinsUntilNext = Math.max(0, 2 - spinsSinceGym);
+  // After the 8th badge, give a longer prep run-up before the Elite Four gauntlet.
+  const spinsThreshold = allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM;
+  const spinsUntilNext = Math.max(0, spinsThreshold - spinsSinceGym);
   // Freeze the displayed wheel layout for the current spin so it doesn't visibly
   // swap between Layout A/B the instant a spin resolves. It updates only after an
   // outcome completes (notice dismissed) or when the Hub remounts after activity.
@@ -51,22 +56,26 @@ export function HubScreen() {
   const maybeTriggerGym = useCallback(() => {
     const state = useGameStore.getState();
     const gymsDone = state.badges.length >= TOTAL_GYMS;
-    if (state.spinsCount - state.lastGymSpin >= 2) {
-      if (!gymsDone) {
+    const spinsSince = state.spinsCount - state.lastGymSpin;
+    if (!gymsDone) {
+      if (spinsSince >= SPINS_PER_GYM) {
         setLastGymSpin(state.spinsCount);
         setScreen('gym');
         return true;
       }
-      if (!state.eliteCleared) {
-        setLastGymSpin(state.spinsCount);
-        setScreen('elite');
-        return true;
-      }
+    } else if (!state.eliteCleared && spinsSince >= ELITE_PREP_SPINS) {
+      setLastGymSpin(state.spinsCount);
+      setScreen('elite');
+      return true;
     }
     return false;
   }, [setLastGymSpin, setScreen]);
 
   useEffect(() => {
+    // Back at the hub: fully restore PP on every party member's moves. PP still drains
+    // for the duration of a whole Gym battle / Elite Four gauntlet, but refills here so
+    // players aren't forced to constantly farm Elixirs between battles.
+    restorePartyPp();
     maybeTriggerGym();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -223,7 +232,7 @@ export function HubScreen() {
             </p>
           )}
         </div>
-        <SidePanel />
+        <SidePanel highlightActive />
       </div>
 
       {uberSpinOpen && (

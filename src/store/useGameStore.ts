@@ -2,6 +2,8 @@ import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
 import { fetchPokemon } from '../api/pokeapi';
 import { resetEncounterSession } from '../utils/encounterSession';
+import { currentHp, maxHpFor } from '../utils/battle';
+import { hasReducedPp } from '../data/moves';
 import {
   FOSSIL_POKEMON,
   GEN1_CAVE,
@@ -36,12 +38,15 @@ interface GameState {
   screen: Screen;
   trainer: Trainer | null;
   party: CaughtPokemon[];
+  /** Species IDs that left the PC (e.g. evolved away) and shouldn't appear there. */
+  pcExcluded: number[];
   pokedex: Record<number, PokedexEntry>;
   bag: BagItem[];
   badges: Badge[];
   hallOfChampions: ChampionRecord[];
   muted: boolean;
   musicVolume: number;
+  showTypeEffectiveness: boolean;
   money: number;
   currentActivity: ActivityType | null;
   currentSegment: WheelSegment | null;
@@ -64,6 +69,7 @@ interface GameState {
   setTrainer: (trainer: Trainer) => void;
   setMuted: (muted: boolean) => void;
   setMusicVolume: (volume: number) => void;
+  setShowTypeEffectiveness: (show: boolean) => void;
   setActivePanel: (tab: PanelTab) => void;
   startActivity: (segment: WheelSegment) => void;
   startLegendaryEncounter: () => void;
@@ -74,6 +80,7 @@ interface GameState {
   catchPokemon: (pokemon: PokemonData, nickname?: string) => void;
   setShinyOnCatch: (caughtAt: number) => void;
   swapPartyMember: (caughtAt: number, pokemonId: number) => void;
+  swapPartyOrder: (caughtAtA: number, caughtAtB: number) => void;
   addItem: (itemId: string, quantity?: number) => void;
   consumeItem: (itemId: string, quantity?: number) => boolean;
   useRareCandy: () => Promise<EvolveResult>;
@@ -93,6 +100,15 @@ interface GameState {
   getEncounterId: (activity: ActivityType) => number;
   getAttackTypes: () => string[];
   makeRandomPartyShiny: () => void;
+  debugAddToParty: (pokemon: PokemonData) => void;
+  healPartyMember: (caughtAt: number, amount: number) => void;
+  damagePartyMember: (caughtAt: number, amount: number) => void;
+  setActivePartyMember: (caughtAt: number) => boolean;
+  reviveHealAllParty: () => void;
+  restorePartyPp: () => void;
+  usePotionOnMember: (caughtAt: number) => boolean;
+  useMovePp: (caughtAt: number, slug: string, maxPp: number) => void;
+  useMaxElixirOnMember: (caughtAt: number) => boolean;
   resetGame: () => void;
 }
 
@@ -116,13 +132,14 @@ function toCaughtPokemon(pokemon: PokemonData, nickname?: string): CaughtPokemon
     powerLevel: pokemon.powerLevel,
     evolvesToId: pokemon.evolvesToId ?? null,
     shiny: false,
+    hp: maxHpFor(pokemon.powerLevel),
   };
 }
 
 interface EvolvableMember {
   member: CaughtPokemon;
   fromData: PokemonData;
-  evolvesToId: number;
+  evolvesToIds: number[];
 }
 
 /**
@@ -137,8 +154,9 @@ async function findEvolvableMembers(party: CaughtPokemon[]): Promise<EvolvableMe
   const result: EvolvableMember[] = [];
   party.forEach((member, index) => {
     const data = datas[index];
-    if (data && data.evolvesToId) {
-      result.push({ member, fromData: data, evolvesToId: data.evolvesToId });
+    const evolvesToIds = data?.evolvesToIds ?? (data?.evolvesToId ? [data.evolvesToId] : []);
+    if (data && evolvesToIds.length > 0) {
+      result.push({ member, fromData: data, evolvesToIds });
     }
   });
   return result;
@@ -148,8 +166,21 @@ async function performEvolution(
   set: (updater: (state: GameState) => Partial<GameState>) => void,
   chosen: EvolvableMember,
 ): Promise<EvolveResult> {
-  const { member, fromData, evolvesToId } = chosen;
+  const { member, fromData, evolvesToIds } = chosen;
+  // Branching evolutions (e.g. Eevee) pick a random in-region target.
+  const evolvesToId = pickRandom(evolvesToIds);
   const evolved = await fetchPokemon(evolvesToId);
+
+  // Warm the browser image cache for the evolved forms so the sprite is ready
+  // immediately (e.g. when a gym battle starts right after evolving).
+  if (typeof Image !== 'undefined') {
+    [evolved.sprite, evolved.artwork, evolved.shinySprite, evolved.shinyArtwork].forEach((url) => {
+      if (url) {
+        const img = new Image();
+        img.src = url;
+      }
+    });
+  }
 
   set((state) => {
     const party = state.party.map((entry) =>
@@ -157,8 +188,16 @@ async function performEvolution(
         ? { ...toCaughtPokemon(evolved, member.nickname), shiny: member.shiny }
         : entry,
     );
+    // The pre-evolution is consumed by evolving; keep it dex-registered but
+    // remove it from the PC. The evolved form is now owned, so un-exclude it.
+    const stillOwnsPreEvo = party.some((entry) => entry.id === member.id);
+    const pcExcluded = [
+      ...state.pcExcluded.filter((id) => id !== evolved.id && id !== member.id),
+      ...(stillOwnsPreEvo ? [] : [member.id]),
+    ];
     return {
       party,
+      pcExcluded,
       pokedex: {
         ...state.pokedex,
         [evolved.id]: {
@@ -218,12 +257,14 @@ export const useGameStore = create<GameState>()(
       screen: 'title',
       trainer: null,
       party: [],
+      pcExcluded: [],
       pokedex: {},
       bag: createDefaultBag(),
       badges: [],
       hallOfChampions: [],
       muted: false,
       musicVolume: 0.05,
+      showTypeEffectiveness: true,
       money: 100,
       currentActivity: null,
       currentSegment: null,
@@ -246,6 +287,7 @@ export const useGameStore = create<GameState>()(
       setTrainer: (trainer) => set({ trainer }),
       setMuted: (muted) => set({ muted }),
       setMusicVolume: (musicVolume) => set({ musicVolume }),
+      setShowTypeEffectiveness: (showTypeEffectiveness) => set({ showTypeEffectiveness }),
       setActivePanel: (activePanel) => set({ activePanel }),
       setCurrentPokemon: (pokemon) => set({ currentPokemon: pokemon }),
       clearEncounter: () => set({ currentEncounterId: null, currentPokemon: null }),
@@ -299,9 +341,10 @@ export const useGameStore = create<GameState>()(
       },
 
       addStarterPokemon: (pokemon, shiny = false) => {
-        const caught = { ...toCaughtPokemon(pokemon), shiny };
+        const caught = { ...toCaughtPokemon(pokemon), shiny, hp: maxHpFor(pokemon.powerLevel) };
         set((state) => ({
           party: [caught],
+          pcExcluded: state.pcExcluded.filter((id) => id !== pokemon.id),
           starterClaimed: true,
           pokedex: {
             ...state.pokedex,
@@ -331,6 +374,7 @@ export const useGameStore = create<GameState>()(
 
           return {
             party: nextParty,
+            pcExcluded: state.pcExcluded.filter((id) => id !== pokemon.id),
             lastCaughtAt: caught.caughtAt,
             pokedex: {
               ...state.pokedex,
@@ -382,8 +426,9 @@ export const useGameStore = create<GameState>()(
 
       makeRandomPartyShiny: () => {
         const { party } = get();
-        if (party.length === 0) return;
-        const chosen = pickRandom(party);
+        const candidates = party.filter((member) => !member.shiny);
+        if (candidates.length === 0) return;
+        const chosen = pickRandom(candidates);
         set((state) => {
           const partyNext = state.party.map((member) =>
             member.caughtAt === chosen.caughtAt ? { ...member, shiny: true } : member,
@@ -397,6 +442,35 @@ export const useGameStore = create<GameState>()(
                   [chosen.id]: { ...existing, shiny: true, shinySprite: chosen.shinySprite },
                 }
               : state.pokedex,
+          };
+        });
+      },
+
+      debugAddToParty: (pokemon) => {
+        const caught = toCaughtPokemon(pokemon);
+        set((state) => {
+          // Append when there's room; otherwise replace the last slot so the
+          // requested Pokémon always lands in the party (debug convenience).
+          const party =
+            state.party.length < MAX_PARTY
+              ? [...state.party, caught]
+              : [...state.party.slice(0, MAX_PARTY - 1), caught];
+          return {
+            party,
+            lastCaughtAt: caught.caughtAt,
+            pokedex: {
+              ...state.pokedex,
+              [pokemon.id]: {
+                seen: true,
+                caught: true,
+                name: pokemon.displayName,
+                sprite: pokemon.sprite,
+                types: pokemon.types,
+                powerLevel: pokemon.powerLevel,
+                shiny: state.pokedex[pokemon.id]?.shiny ?? false,
+                shinySprite: state.pokedex[pokemon.id]?.shinySprite ?? pokemon.shinySprite,
+              },
+            },
           };
         });
       },
@@ -417,6 +491,7 @@ export const useGameStore = create<GameState>()(
             powerLevel: entry.powerLevel,
             evolvesToId: null,
             shiny: entry.shiny ?? false,
+            hp: maxHpFor(entry.powerLevel),
           };
           return {
             party: state.party.map((member) => (member.caughtAt === caughtAt ? replacement : member)),
@@ -550,11 +625,107 @@ export const useGameStore = create<GameState>()(
         return Array.from(allTypes);
       },
 
+      healPartyMember: (caughtAt, amount) => {
+        set((state) => ({
+          party: state.party.map((member) => {
+            if (member.caughtAt !== caughtAt) return member;
+            const max = maxHpFor(member.powerLevel);
+            const hp = currentHp(member);
+            if (hp <= 0) return member;
+            return { ...member, hp: Math.min(max, hp + amount) };
+          }),
+        }));
+      },
+
+      damagePartyMember: (caughtAt, amount) => {
+        set((state) => ({
+          party: state.party.map((member) => {
+            if (member.caughtAt !== caughtAt) return member;
+            const hp = currentHp(member);
+            return { ...member, hp: Math.max(0, hp - amount) };
+          }),
+        }));
+      },
+
+      swapPartyOrder: (caughtAtA, caughtAtB) => {
+        set((state) => {
+          const a = state.party.findIndex((m) => m.caughtAt === caughtAtA);
+          const b = state.party.findIndex((m) => m.caughtAt === caughtAtB);
+          if (a === -1 || b === -1 || a === b) return state;
+          const party = [...state.party];
+          [party[a], party[b]] = [party[b], party[a]];
+          return { party };
+        });
+      },
+
+      setActivePartyMember: (caughtAt) => {
+        const state = get();
+        const idx = state.party.findIndex((m) => m.caughtAt === caughtAt);
+        if (idx <= 0) return false;
+        const member = state.party[idx];
+        if (currentHp(member) <= 0) return false;
+        const newParty = [member, ...state.party.filter((_, i) => i !== idx)];
+        set({ party: newParty });
+        return true;
+      },
+
+      reviveHealAllParty: () => {
+        set((state) => ({
+          party: state.party.map((member) => ({
+            ...member,
+            hp: maxHpFor(member.powerLevel),
+            pp: {},
+          })),
+        }));
+      },
+
+      restorePartyPp: () => {
+        set((state) => ({
+          party: state.party.map((member) => ({ ...member, pp: {} })),
+        }));
+      },
+
+      useMovePp: (caughtAt, slug, maxPp) => {
+        set((state) => ({
+          party: state.party.map((member) => {
+            if (member.caughtAt !== caughtAt) return member;
+            const pp = { ...(member.pp ?? {}) };
+            const current = pp[slug] ?? maxPp;
+            pp[slug] = Math.max(0, current - 1);
+            return { ...member, pp };
+          }),
+        }));
+      },
+
+      useMaxElixirOnMember: (caughtAt) => {
+        const state = get();
+        const member = state.party.find((m) => m.caughtAt === caughtAt);
+        if (!member || !hasReducedPp(member.pp)) return false;
+        if (!get().consumeItem('maxelixer', 1)) return false;
+        set((s) => ({
+          party: s.party.map((m) => (m.caughtAt === caughtAt ? { ...m, pp: {} } : m)),
+        }));
+        return true;
+      },
+
+      usePotionOnMember: (caughtAt) => {
+        const state = get();
+        const member = state.party.find((m) => m.caughtAt === caughtAt);
+        if (!member) return false;
+        const hp = currentHp(member);
+        const max = maxHpFor(member.powerLevel);
+        if (hp <= 0 || hp >= max) return false;
+        if (!get().consumeItem('potion', 1)) return false;
+        get().healPartyMember(caughtAt, Math.round(max / 2));
+        return true;
+      },
+
       resetGame: () =>
         set({
           screen: 'title',
           trainer: null,
           party: [],
+          pcExcluded: [],
           pokedex: {},
           bag: createDefaultBag(),
           badges: [],
@@ -578,12 +749,14 @@ export const useGameStore = create<GameState>()(
       partialize: (state) => ({
         trainer: state.trainer,
         party: state.party,
+        pcExcluded: state.pcExcluded,
         pokedex: state.pokedex,
         bag: state.bag,
         badges: state.badges,
         hallOfChampions: state.hallOfChampions,
         muted: state.muted,
         musicVolume: state.musicVolume,
+        showTypeEffectiveness: state.showTypeEffectiveness,
         money: state.money,
         spinsCount: state.spinsCount,
         lastGymSpin: state.lastGymSpin,

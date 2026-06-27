@@ -11,6 +11,7 @@ export const ITEM_SPRITES: Record<string, string> = {
   potion: itemSprite('potion.png'),
   rarecandy: itemSprite('rare-candy.png'),
   xattack: itemSprite('x-attack.png'),
+  maxelixer: itemSprite('max-elixir.png'),
   maxrevive: itemSprite('max-revive.png'),
   pokeball: itemSprite('poke-ball.png'),
   greatball: itemSprite('great-ball.png'),
@@ -38,7 +39,7 @@ export const SEGMENT_SPRITES: Record<string, string> = {
 
 /** UI chrome sprites keyed by semantic name. */
 export const UI_SPRITES = {
-  hall: itemSprite('gold-bottle-cap.png'),
+  hall: itemSprite('kings-rock.png'),
   champion: itemSprite('gold-bottle-cap.png'),
   gameover: itemSprite('reaper-cloth.png'),
   comingSoonFallback: itemSprite('dubious-disc.png'),

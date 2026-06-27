@@ -33,7 +33,7 @@ export function HallOfChampionsScreen() {
           ← Back
         </button>
         <h2 className="screen-title hall-title">
-          <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--title" /> Hall of Champions
+          <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--title" /> Hall of Fame
         </h2>
       </header>
 

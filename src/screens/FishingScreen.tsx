@@ -1,127 +1,14 @@
-import { useEffect, useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { fetchPokemon } from '../api/pokeapi';
-import { GameIcon } from '../components/GameIcon';
-import { useGameStore } from '../store/useGameStore';
-import { playSfx } from '../utils/sound';
-import type { PokemonData } from '../types/game';
-
-type FishPhase = 'cast' | 'waiting' | 'bite' | 'missed' | 'done';
+import { EncounterWheel } from '../components/EncounterWheel';
+import { GEN1_FISHING } from '../data/pools';
 
 export function FishingScreen() {
-  const getEncounterId = useGameStore((s) => s.getEncounterId);
-  const setScreen = useGameStore((s) => s.setScreen);
-  const setCurrentPokemon = useGameStore((s) => s.setCurrentPokemon);
-  const muted = useGameStore((s) => s.muted);
-
-  const [phase, setPhase] = useState<FishPhase>('cast');
-  const [biteWindow, setBiteWindow] = useState(false);
-  const [pokemon, setPokemon] = useState<PokemonData | null>(null);
-
-  const startFishing = useCallback(() => {
-    playSfx('click', muted);
-    setPhase('waiting');
-    const waitTime = 1500 + Math.random() * 2500;
-    setTimeout(() => {
-      setPhase('bite');
-      setBiteWindow(true);
-      playSfx('spin', muted);
-      setTimeout(() => {
-        setBiteWindow(false);
-        setPhase((current) => (current === 'done' ? current : 'missed'));
-      }, 800);
-    }, waitTime);
-  }, [muted]);
-
-  const handleReel = useCallback(async () => {
-    if (!biteWindow) return;
-    setBiteWindow(false);
-    setPhase('done');
-    playSfx('throw', muted);
-
-    const id = getEncounterId('fishing');
-    const data = await fetchPokemon(id);
-    setPokemon(data);
-  }, [biteWindow, getEncounterId, muted]);
-
-  useEffect(() => {
-    if (phase === 'done' && pokemon) {
-      setCurrentPokemon(pokemon);
-      const t = setTimeout(() => setScreen('catch'), 1000);
-      return () => clearTimeout(t);
-    }
-  }, [phase, pokemon, setCurrentPokemon, setScreen]);
-
   return (
-    <motion.div
-      className="screen fishing-screen"
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-    >
-      <h2 className="screen-title">
-        <GameIcon ui="fishing" alt="" className="game-icon-img game-icon-img--title" /> Fishing
-      </h2>
-
-      <div className="fishing-scene">
-        <div className="fishing-water" />
-
-        {phase === 'cast' && (
-          <button type="button" className="btn btn--primary btn--lg" onClick={startFishing}>
-            Cast Line
-          </button>
-        )}
-
-        {phase === 'waiting' && (
-          <motion.p className="fishing-status" animate={{ opacity: [0.5, 1, 0.5] }} transition={{ repeat: Infinity, duration: 1.5 }}>
-            Waiting for a bite...
-          </motion.p>
-        )}
-
-        {phase === 'bite' && (
-          <motion.button
-            type="button"
-            className="btn btn--accent btn--lg fishing-reel-btn"
-            animate={{ scale: [1, 1.1, 1] }}
-            transition={{ repeat: Infinity, duration: 0.3 }}
-            onClick={handleReel}
-          >
-            REEL IN!
-          </motion.button>
-        )}
-
-        {phase === 'done' && pokemon && (
-          <motion.div initial={{ scale: 0 }} animate={{ scale: 1 }}>
-            <p className="fishing-caught">You hooked a {pokemon.displayName}!</p>
-          </motion.div>
-        )}
-
-      </div>
-
-      {phase !== 'done' && phase !== 'missed' && (
-        <button type="button" className="btn btn--ghost" onClick={() => setScreen('hub')}>
-          Leave
-        </button>
-      )}
-
-      {phase === 'missed' && (
-        <div className="battle-modal__backdrop">
-          <motion.div
-            className="battle-modal hub-notice-modal"
-            initial={{ scale: 0.85, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            transition={{ type: 'spring', stiffness: 220, damping: 22 }}
-          >
-            <div className="fishing-missed__icon">
-              <GameIcon ui="fishing" alt="" className="game-icon-img game-icon-img--lg" />
-            </div>
-            <p className="hub-notice-modal__text">The fish got away! You missed the reel-in window.</p>
-            <button type="button" className="btn btn--primary" onClick={() => setScreen('hub')}>
-              Back to Hub
-            </button>
-          </motion.div>
-        </div>
-      )}
-    </motion.div>
+    <EncounterWheel
+      title="Fishing"
+      uiKey="fishing"
+      subtitle="Cast out and spin the wheel — land on a Pokémon to reel it in!"
+      pool={GEN1_FISHING}
+      maxWedges={8}
+    />
   );
 }

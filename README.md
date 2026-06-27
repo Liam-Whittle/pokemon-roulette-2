@@ -1,17 +1,23 @@
-# Pokémon Catch Quest
+# Pokéspin Nuzlocke
 
-A polished, animation-rich Pokémon adventure game inspired by [pokemon-roulette](https://github.com/zeroxm/pokemon-roulette). Spin the Adventure Wheel with skill, throw Poké Balls, catch Pokémon, battle Gym Leaders, and build your collection.
+A polished, animation-rich Pokémon adventure game inspired by [pokemon-roulette](https://github.com/zeroxm/pokemon-roulette). Spin the Adventure Wheel, throw Poké Balls, catch Pokémon, battle Gym Leaders and the Elite Four, and build your collection.
 
-**Play locally:** run the dev server and open `http://localhost:5173`
+**▶️ Play now: [liam-whittle.github.io/pokemon-roulette-2](https://liam-whittle.github.io/pokemon-roulette-2/)**
 
 ## Features
 
-- **Skill-based manual spin wheel** — drag and flick to spin; outcome depends on your flick velocity and angle, not a random button click
-- **Interactive catch mini-game** — drag back and release to throw a Poké Ball, then tap a timing ring to secure the catch
-- **Adventure activities** — Wild Encounters, Fishing, Find Item, Gym Battles (type matchups)
-- **Persistent progress** — Pokédex, party (6 slots), bag, and badges saved to localStorage
-- **Polished UI** — Framer Motion animations, type-colored theming, confetti on catch, Web Audio SFX
-- **PokeAPI integration** — Pokémon sprites and data fetched live with caching
+- **Skill-based spin wheel** — drag and flick to spin; the outcome depends on your flick velocity and angle, not a random button click
+- **Interactive catch mini-game** — drag back and release to throw a Poké Ball, then nail a timing ring to secure the catch (ball type affects difficulty)
+- **Encounter wheels** — Wild Encounters, Fishing, Cave, and Fossil Revival each spin a wheel of the Pokémon you can run into, with backgrounds themed to the activity
+- **Gym gauntlet → Elite Four → Champion** — turn-based battles with type matchups, party switching, items (Potions, Max Elixir, X-Attack), and a prep phase before the Elite Four
+- **Battle depth** — type effectiveness tags, power-advantage damage bonuses, devastating 4× super-effective hits, and PP that drains across a battle but refills back at the hub
+- **Shiny hunting** — every catch rolls a shiny check (boosted by the Shiny Charm), with animated holographic detail cards
+- **Persistent progress** — Pokédex, party, bag, badges, money, and Hall of Fame saved to localStorage
+- **Polished UX** — Framer Motion animations, type-colored theming, confetti, music, and Web Audio SFX
+- **Settings & accessibility** — volume slider, mute, exit-to-title, and an option to hide type-effectiveness hints for a harder run
+- **PokeAPI integration** — sprites, cries, and data fetched live with caching
+
+> Tip: there may be a secret or two hiding for trainers who raise the right Pokémon. ✨
 
 ## Getting Started
 
@@ -34,11 +40,12 @@ npm run preview
 1. Create your trainer on the title screen
 2. On the **Adventure Hub**, drag the wheel and **flick** to spin it
 3. Land on a segment to start an activity:
-   - **Wild Encounter** — throw a Poké Ball and time your catch
-   - **Fishing** — cast, reel when you get a bite, then catch the Pokémon
-   - **Find Item** — discover items for your bag
-   - **Gym Battle** — pick the right attack type to earn badges
-4. Track progress in the **Pokédex**, **Party**, and **Bag**
+  - **Wild Encounter / Fishing / Cave / Fossil** — spin the encounter wheel, then play the catch mini-game
+  - **Find Item** — discover items for your bag
+  - **Shop** — spend your winnings on balls and helpful items
+  - **Gym Battle** — build a balanced team and exploit type matchups to earn badges
+4. Earn all 8 badges, survive the prep phase, then take on the **Elite Four and Champion**
+5. Track everything in the **Pokédex**, **Party**, **Bag**, and **Hall of Fame**
 
 ## Tech Stack
 
@@ -46,10 +53,6 @@ npm run preview
 - Framer Motion (animations)
 - Zustand (state + persistence)
 - [PokeAPI](https://pokeapi.co/) (Pokémon data)
-
-## Coming Soon
-
-Legendary hunts, cave exploration, fossil revival, and Elite Four battles are stubbed on the wheel for future updates.
 
 ## Disclaimer
 

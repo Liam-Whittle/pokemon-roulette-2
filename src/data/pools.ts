@@ -73,6 +73,7 @@ export const ITEMS = [
   { id: 'potion', name: 'Potion', icon: '💊' },
   { id: 'rarecandy', name: 'Rare Candy', icon: '🍬' },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️' },
+  { id: 'maxelixer', name: 'Max Elixir', icon: '🧪' },
   { id: 'maxrevive', name: 'Max Revive', icon: '💉' },
   { id: 'pokeball', name: 'Poké Ball', icon: '🔴' },
   { id: 'greatball', name: 'Great Ball', icon: '🔵' },
@@ -84,11 +85,13 @@ export const ITEMS = [
 /** What each item actually does in THIS game (not the mainline Pokémon games). */
 export const ITEM_DESCRIPTIONS: Record<string, string> = {
   potion:
-    'During Gym and Elite Four battles, if you miss a spin a Potion is automatically used to give you one extra spin so your turn isn\u2019t wasted.',
+    'Use in battle (bag or party icon): heal one non-fainted Pokémon by half its max HP. Cannot revive fainted Pokémon.',
   rarecandy:
     'Evolves one random eligible Pokémon in your party. If none of your Pokémon can evolve right now, it turns into a Potion instead.',
   xattack:
-    'Used in battle: converts the "Miss" wedges on the battle wheel into "Hit" wedges for a single spin. Refunded if there are no Misses to convert.',
+    'Use in battle on a move: boosts that move\u2019s power by +20 for the rest of the current enemy Pokémon fight only.',
+  maxelixer:
+    'Use on one Pokémon (bag or party icon) to fully restore the PP of all of that Pokémon\u2019s moves. Only affects the Pokémon you use it on.',
   maxrevive:
     'If you run out of lives, use a Max Revive on the Game Over screen to revive with one more life and keep your run going.',
   pokeball:
@@ -118,6 +121,7 @@ export const BALL_SPRITES: Record<string, string> = {
 export const SHOP_CATALOG = [
   { id: 'potion', name: 'Potion', icon: '💊', price: 50 },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️', price: 50 },
+  { id: 'maxelixer', name: 'Max Elixir', icon: '🧪', price: 100 },
   { id: 'rarecandy', name: 'Rare Candy', icon: '🍬', price: 100 },
   { id: 'pokeball', name: 'Poké Ball', icon: '🔴', price: 20 },
   { id: 'greatball', name: 'Great Ball', icon: '🔵', price: 50 },
@@ -156,6 +160,8 @@ export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
 }
 
 export function pickFindItemId(): string {
+  // 15% chance to find a Max Elixir; otherwise the standard weighted loot.
+  if (Math.random() < 0.15) return 'maxelixer';
   return pickWeightedItemId(FIND_ITEM_LOOT);
 }
 
@@ -192,6 +198,20 @@ export const MAX_PARTY = 5;
 
 export const GEN1_LEGENDARY: number[] = [144, 145, 146, 150, 151];
 
+/**
+ * National Pokédex ID ceiling for the currently-playable region. Evolutions
+ * that would cross into a later generation (e.g. Onix → Steelix, or Eevee →
+ * Espeon/Umbreon) are filtered out until the region that unlocks them is added.
+ * Kanto = 151. Raise this (or swap to a per-region value) when new regions ship.
+ */
+export const REGION_MAX_DEX_ID = 151;
+
+/**
+ * Which cry recording to play for the current region. Kanto uses the retro
+ * Game Boy ("legacy") cries; later regions can switch to 'latest'.
+ */
+export const REGION_CRY_STYLE: 'legacy' | 'latest' = 'legacy';
+
 export const GYM_LEADERS: GymLeader[] = [
   {
     id: 'brock',
@@ -226,6 +246,7 @@ export const GYM_LEADERS: GymLeader[] = [
     badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/3.png',
     pokemon: [
       { id: 100, name: 'voltorb', level: 21 },
+      { id: 25, name: 'pikachu', level: 18 },
       { id: 26, name: 'raichu', level: 24 },
     ],
   },
@@ -238,6 +259,7 @@ export const GYM_LEADERS: GymLeader[] = [
     badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/4.png',
     pokemon: [
       { id: 114, name: 'tangela', level: 24 },
+      { id: 70, name: 'weepinbell', level: 29 },
       { id: 45, name: 'vileplume', level: 29 },
     ],
   },
@@ -249,6 +271,7 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/koga.png',
     badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/5.png',
     pokemon: [
+      { id: 109, name: 'koffing', level: 37 },
       { id: 109, name: 'koffing', level: 37 },
       { id: 89, name: 'muk', level: 39 },
     ],
@@ -262,6 +285,7 @@ export const GYM_LEADERS: GymLeader[] = [
     badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/6.png',
     pokemon: [
       { id: 64, name: 'kadabra', level: 38 },
+      { id: 122, name: 'mr-mime', level: 37 },
       { id: 65, name: 'alakazam', level: 43 },
     ],
   },
@@ -274,6 +298,7 @@ export const GYM_LEADERS: GymLeader[] = [
     badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/7.png',
     pokemon: [
       { id: 58, name: 'growlithe', level: 42 },
+      { id: 77, name: 'ponyta', level: 47 },
       { id: 59, name: 'arcanine', level: 47 },
     ],
   },
@@ -285,7 +310,8 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/giovanni.png',
     badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/8.png',
     pokemon: [
-      { id: 112, name: 'rhydon', level: 45 },
+      { id: 111, name: 'rhyhorn', level: 45 },
+      { id: 51, name: 'dugtrio', level: 42 },
       { id: 31, name: 'nidoqueen', level: 50 },
     ],
   },
@@ -298,7 +324,13 @@ export const ELITE_FOUR: GymLeader[] = [
     type: 'ice',
     badgeName: 'Elite Four: Lorelei',
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/lorelei-gen1rb.png',
-    pokemon: [{ id: 131, name: 'lapras', level: 54 }],
+    pokemon: [
+      { id: 87, name: 'dewgong', level: 54 },
+      { id: 91, name: 'cloyster', level: 53 },
+      { id: 80, name: 'slowbro', level: 54 },
+      { id: 124, name: 'jynx', level: 56 },
+      { id: 131, name: 'lapras', level: 56 },
+    ],
   },
   {
     id: 'bruno',
@@ -306,7 +338,13 @@ export const ELITE_FOUR: GymLeader[] = [
     type: 'fighting',
     badgeName: 'Elite Four: Bruno',
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/bruno.png',
-    pokemon: [{ id: 68, name: 'machamp', level: 56 }],
+    pokemon: [
+      { id: 95, name: 'onix', level: 53 },
+      { id: 107, name: 'hitmonchan', level: 55 },
+      { id: 106, name: 'hitmonlee', level: 55 },
+      { id: 95, name: 'onix', level: 56 },
+      { id: 68, name: 'machamp', level: 58 },
+    ],
   },
   {
     id: 'agatha',
@@ -314,7 +352,13 @@ export const ELITE_FOUR: GymLeader[] = [
     type: 'ghost',
     badgeName: 'Elite Four: Agatha',
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/agatha-gen1rb.png',
-    pokemon: [{ id: 94, name: 'gengar', level: 58 }],
+    pokemon: [
+      { id: 94, name: 'gengar', level: 56 },
+      { id: 42, name: 'golbat', level: 56 },
+      { id: 93, name: 'haunter', level: 55 },
+      { id: 24, name: 'arbok', level: 58 },
+      { id: 94, name: 'gengar', level: 60 },
+    ],
   },
   {
     id: 'lance',
@@ -322,19 +366,42 @@ export const ELITE_FOUR: GymLeader[] = [
     type: 'dragon',
     badgeName: 'Elite Four: Lance',
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/lance.png',
-    pokemon: [{ id: 149, name: 'dragonite', level: 62 }],
+    pokemon: [
+      { id: 130, name: 'gyarados', level: 58 },
+      { id: 148, name: 'dragonair', level: 56 },
+      { id: 148, name: 'dragonair', level: 56 },
+      { id: 142, name: 'aerodactyl', level: 60 },
+      { id: 149, name: 'dragonite', level: 62 },
+    ],
   },
   {
     id: 'champion',
     name: 'Champion Blue',
-    type: 'flying',
+    type: 'mixed',
     badgeName: 'Champion',
     sprite: 'https://play.pokemonshowdown.com/sprites/trainers/blue.png',
-    pokemon: [{ id: 18, name: 'pidgeot', level: 65 }],
+    pokemon: [
+      { id: 18, name: 'pidgeot', level: 61 },
+      { id: 65, name: 'alakazam', level: 59 },
+      { id: 112, name: 'rhydon', level: 61 },
+      { id: 103, name: 'exeggutor', level: 61 },
+      { id: 59, name: 'arcanine', level: 61 },
+      { id: 9, name: 'blastoise', level: 63 },
+    ],
   },
 ];
 
 export const TOTAL_GYMS = GYM_LEADERS.length;
+
+/** Hub spins required between each Gym battle. */
+export const SPINS_PER_GYM = 2;
+
+/**
+ * Extra prep spins granted after the 8th badge before the Elite Four gauntlet.
+ * Gives the player a longer run-up to train/stock up since the Elite Four +
+ * Champion is a tough, uninterrupted gauntlet.
+ */
+export const ELITE_PREP_SPINS = 6;
 
 export function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];

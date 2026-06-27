@@ -44,7 +44,7 @@ export function TitleScreen() {
             setScreen('hall');
           }}
         >
-          <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--inline" /> Hall of Champions
+          <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--inline" /> Hall of Fame
         </button>
       )}
 

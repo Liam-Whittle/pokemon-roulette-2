@@ -15,6 +15,7 @@ export type Screen =
   | 'bag'
   | 'results'
   | 'champion'
+  | 'chadpion'
   | 'gameover'
   | 'hall'
   | 'coming-soon'
@@ -59,7 +60,38 @@ export interface PokemonData {
   isLegendary: boolean;
   powerLevel: number;
   baseStatTotal: number;
+  /** First in-region evolution target (kept for save/back-compat). */
   evolvesToId?: number | null;
+  /** All in-region evolution branches; a random one is chosen on evolve. */
+  evolvesToIds?: number[];
+  /** Modern cry audio URL. */
+  cryLatest?: string;
+  /** Retro Game Boy ("legacy") cry audio URL — used for Gen 1 / Kanto. */
+  cryLegacy?: string;
+  /** Gen 1 learnable move slugs (from cached /pokemon response). */
+  moves?: string[];
+}
+
+/** A battle move derived from a Pokemon's type(s) and movepool. */
+export interface BattleMove {
+  slug: string;
+  name: string;
+  type: string;
+  /** Fraction of the owner's power level (0–1). Dual-type splits power. */
+  power: number;
+  /** Party member that owns this move (caughtAt timestamp). */
+  ownerCaughtAt: number;
+  ownerDisplayName: string;
+  /** True when this move belongs to the active (slot-0) Pokemon. */
+  fromActive: boolean;
+  /** Max PP (uses) for this move. */
+  maxPp: number;
+  /** Remaining PP (uses) for this move. */
+  currentPp: number;
+  /** Magikarp's Splash easter egg: does nothing, plays a gag, never costs a turn. */
+  splashGag?: boolean;
+  /** Shiny Magikarp's "Hollow Purple": triggers the win cinematic, never costs a turn. */
+  hollowPurple?: boolean;
 }
 
 export interface CaughtPokemon {
@@ -74,6 +106,10 @@ export interface CaughtPokemon {
   powerLevel: number;
   evolvesToId?: number | null;
   shiny?: boolean;
+  /** Current HP; <= 0 means fainted. Defaults to max when unset (legacy saves). */
+  hp?: number;
+  /** Remaining PP per move slug. Missing slug = full PP. */
+  pp?: Record<string, number>;
 }
 
 export interface BagItem {

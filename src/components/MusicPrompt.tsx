@@ -28,7 +28,7 @@ export function MusicPrompt({ onEnable, onDecline }: MusicPromptProps) {
           🎵
         </motion.div>
         <h2 className="music-prompt__title">Enable Music?</h2>
-        <p className="music-prompt__text">Pokémon Roulette 2 has background music and sound effects.</p>
+        <p className="music-prompt__text">Pokéspin Nuzlocke has background music and sound effects.</p>
         <div className="music-prompt__actions">
           <button type="button" className="btn btn--primary btn--lg" onClick={onEnable}>
             Enable Music
