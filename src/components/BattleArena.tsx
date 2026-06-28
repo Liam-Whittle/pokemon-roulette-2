@@ -729,8 +729,10 @@ export function BattleArena({
             allowSwap={phase === 'prep' || phase === 'between'}
             allowItems={(phase === 'choose' || phase === 'between' || phase === 'forcedSwap') && !processing}
             highlightActive={phase !== 'prep'}
+            inBattle
             onPotionUsed={() => spendItemTurn('You used a Potion!')}
             onElixirUsed={() => spendItemTurn('You used a Max Elixir!')}
+            onFullHealUsed={() => spendItemTurn('You used a Full Heal!')}
           />
           {phase !== 'prep' && (
             <div className="battle-log">

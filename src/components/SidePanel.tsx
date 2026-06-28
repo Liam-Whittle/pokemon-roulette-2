@@ -31,6 +31,10 @@ interface SidePanelProps {
   onPotionUsed?: () => void;
   /** Called after a Max Elixir is successfully used (battle uses this to spend the turn). */
   onElixirUsed?: () => void;
+  /** When true, Full Heal is subject to the once-per-battle limit. */
+  inBattle?: boolean;
+  /** Called after a Full Heal is successfully used in battle (spends the turn). */
+  onFullHealUsed?: () => void;
 }
 
 function PartyHpBar({ current, max }: { current: number; max: number }) {
@@ -56,6 +60,8 @@ export function SidePanel({
   highlightActive = false,
   onPotionUsed,
   onElixirUsed,
+  inBattle = false,
+  onFullHealUsed,
 }: SidePanelProps) {
   const party = useGameStore((state) => state.party);
   const pokedex = useGameStore((state) => state.pokedex);
@@ -70,6 +76,8 @@ export function SidePanel({
   const swapPartyOrder = useGameStore((state) => state.swapPartyOrder);
   const usePotionOnMember = useGameStore((state) => state.usePotionOnMember);
   const useMaxElixirOnMember = useGameStore((state) => state.useMaxElixirOnMember);
+  const useFullHealAllParty = useGameStore((state) => state.useFullHealAllParty);
+  const fullHealUsedInBattle = useGameStore((state) => state.fullHealUsedInBattle);
   const pcExcluded = useGameStore((state) => state.pcExcluded);
 
   const [swappingFor, setSwappingFor] = useState<number | null>(null);
@@ -88,6 +96,12 @@ export function SidePanel({
   const potionCount = potionItem?.quantity ?? 0;
   const elixirItem = bag.find((item) => item.id === 'maxelixer');
   const elixirCount = elixirItem?.quantity ?? 0;
+  const fullHealItem = bag.find((item) => item.id === 'fullheal');
+  const fullHealCount = fullHealItem?.quantity ?? 0;
+  const partyNeedsHeal = party.some(
+    (member) => currentHp(member) < maxHpFor(member.powerLevel),
+  );
+  const fullHealBlocked = (inBattle && fullHealUsedInBattle) || !partyNeedsHeal;
 
   const partyIds = new Set(party.map((member) => member.id));
   const excludedIds = new Set(pcExcluded);
@@ -134,6 +148,13 @@ export function SidePanel({
     if (useMaxElixirOnMember(caughtAt)) {
       playSfx('item', muted);
       onElixirUsed?.();
+    }
+  }
+
+  function handleFullHeal() {
+    if (useFullHealAllParty(inBattle)) {
+      playSfx('item', muted);
+      onFullHealUsed?.();
     }
   }
 
@@ -363,6 +384,7 @@ export function SidePanel({
         <div className="side-panel__money">
           <PokeDollarAmount amount={money} />
         </div>
+        <div className="side-panel__quick-items">
         {activePanel === 'party' && allowItems && rareCandy && rareCandy.quantity > 0 && (
           <button
             type="button"
@@ -380,6 +402,30 @@ export function SidePanel({
             <span className="side-panel__quick-candy-qty">x{rareCandy.quantity}</span>
           </button>
         )}
+        {activePanel === 'party' && allowItems && fullHealCount > 0 && (
+          <button
+            type="button"
+            className="side-panel__quick-heal"
+            onClick={handleFullHeal}
+            disabled={fullHealBlocked}
+            title={
+              inBattle && fullHealUsedInBattle
+                ? 'Already used a Full Heal this battle'
+                : !partyNeedsHeal
+                  ? 'Your party is already at full HP'
+                  : 'Use Full Heal (restore all party HP)'
+            }
+          >
+            <ItemIcon
+              id="fullheal"
+              icon={fullHealItem?.icon ?? '💚'}
+              name="Full Heal"
+              className="side-panel__quick-heal-icon"
+            />
+            <span className="side-panel__quick-heal-qty">x{fullHealCount}</span>
+          </button>
+        )}
+        </div>
       </div>
 
       {evolution && <EvolutionModal evolution={evolution} onClose={() => setEvolution(null)} />}

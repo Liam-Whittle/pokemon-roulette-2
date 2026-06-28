@@ -143,21 +143,30 @@ export function buildMovesForPokemon(
   const learnset = new Set(pokemon.moves ?? []);
   const types = pokemon.types.length > 0 ? pokemon.types : ['normal'];
   const basePower = safePower(pokemon.powerLevel);
-  const perTypePower = types.length > 1 ? basePower / 2 : basePower;
 
-  return types.map((type) => {
+  // Resolve each type's move first so power can be distributed by PP.
+  const picks = types.map((type) => {
     const slug = pickMoveForType(type, learnset);
-    const maxPp = getMovePp(slug);
-    const currentPp = pp?.[slug] ?? maxPp;
+    return { type, slug, maxPp: getMovePp(slug) };
+  });
+
+  // Distribute basePower inversely to PP: a lower-PP move (fewer uses) hits
+  // harder. Weights sum to basePower, so the total is unchanged from the old
+  // even split. Single-type Pokemon keep the full basePower on their one move.
+  const weights = picks.map((p) => 1 / p.maxPp);
+  const weightSum = weights.reduce((a, b) => a + b, 0);
+
+  return picks.map((p, i) => {
+    const currentPp = pp?.[p.slug] ?? p.maxPp;
     return {
-      slug,
-      name: slugToDisplay(slug),
-      type: type.toLowerCase(),
-      power: perTypePower,
+      slug: p.slug,
+      name: slugToDisplay(p.slug),
+      type: p.type.toLowerCase(),
+      power: basePower * (weights[i] / weightSum),
       ownerCaughtAt,
       ownerDisplayName: pokemon.displayName,
       fromActive,
-      maxPp,
+      maxPp: p.maxPp,
       currentPp,
     };
   });

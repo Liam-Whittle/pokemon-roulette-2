@@ -77,7 +77,7 @@ export interface BattleMove {
   slug: string;
   name: string;
   type: string;
-  /** Fraction of the owner's power level (0–1). Dual-type splits power. */
+  /** Fraction of the owner's power level (0–1). Multi-type moves split by inverse PP. */
   power: number;
   /** Party member that owns this move (caughtAt timestamp). */
   ownerCaughtAt: number;

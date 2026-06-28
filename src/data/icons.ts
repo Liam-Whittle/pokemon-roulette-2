@@ -9,6 +9,7 @@ function itemSprite(filename: string): string {
 /** Official PokeAPI item sprites keyed by in-game item id. */
 export const ITEM_SPRITES: Record<string, string> = {
   potion: itemSprite('potion.png'),
+  fullheal: itemSprite('full-heal.png'),
   rarecandy: itemSprite('rare-candy.png'),
   xattack: itemSprite('x-attack.png'),
   maxelixer: itemSprite('max-elixir.png'),

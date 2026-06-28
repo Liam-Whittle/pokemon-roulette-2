@@ -2569,6 +2569,14 @@ body {
   font-size: 3.5rem;
 }
 
+.cave-item-found__icon.item-icon-img {
+  width: 3.5rem;
+  height: 3.5rem;
+  margin: 0 auto 0.5rem;
+  display: block;
+  image-rendering: pixelated;
+}
+
 .cave-item-found__msg {
   color: var(--text-muted);
 }
@@ -3370,6 +3378,53 @@ body {
 }
 
 .side-panel__quick-candy-qty {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: var(--text-muted);
+}
+
+.side-panel__quick-items {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.side-panel__quick-heal {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.3rem 0.55rem;
+  background: rgba(34, 197, 94, 0.12);
+  border: 1px solid rgba(34, 197, 94, 0.4);
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.15s ease;
+}
+
+.side-panel__quick-heal:hover {
+  background: rgba(34, 197, 94, 0.22);
+  transform: translateY(-1px);
+}
+
+.side-panel__quick-heal:disabled {
+  opacity: 0.5;
+  cursor: default;
+  transform: none;
+}
+
+.side-panel__quick-heal-icon {
+  font-size: 1.2rem;
+  line-height: 1;
+}
+
+.side-panel__quick-heal-icon.item-icon-img {
+  width: 1.4rem;
+  height: 1.4rem;
+}
+
+.side-panel__quick-heal-qty {
   font-size: 0.85rem;
   font-weight: 700;
   color: var(--text-muted);

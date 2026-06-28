@@ -71,6 +71,7 @@ export const SHINY_WHEEL_CHARM_SEGMENTS = [
 
 export const ITEMS = [
   { id: 'potion', name: 'Potion', icon: '💊' },
+  { id: 'fullheal', name: 'Full Heal', icon: '💚' },
   { id: 'rarecandy', name: 'Rare Candy', icon: '🍬' },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️' },
   { id: 'maxelixer', name: 'Max Elixir', icon: '🧪' },
@@ -86,6 +87,8 @@ export const ITEMS = [
 export const ITEM_DESCRIPTIONS: Record<string, string> = {
   potion:
     'Use in battle (bag or party icon): heal one non-fainted Pokémon by half its max HP. Cannot revive fainted Pokémon.',
+  fullheal:
+    'Fully restores HP for every Pokémon in your party. In battle you can only use one per fight (one for the entire Elite Four run).',
   rarecandy:
     'Evolves one random eligible Pokémon in your party. If none of your Pokémon can evolve right now, it turns into a Potion instead.',
   xattack:
@@ -121,11 +124,12 @@ export const BALL_SPRITES: Record<string, string> = {
 export const SHOP_CATALOG = [
   { id: 'potion', name: 'Potion', icon: '💊', price: 50 },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️', price: 50 },
-  { id: 'maxelixer', name: 'Max Elixir', icon: '🧪', price: 100 },
+  { id: 'maxelixer', name: 'Max Elixir', icon: '🧪', price: 50 },
   { id: 'rarecandy', name: 'Rare Candy', icon: '🍬', price: 100 },
+  { id: 'fullheal', name: 'Full Heal', icon: '💚', price: 200 },
   { id: 'pokeball', name: 'Poké Ball', icon: '🔴', price: 20 },
-  { id: 'greatball', name: 'Great Ball', icon: '🔵', price: 50 },
-  { id: 'ultraball', name: 'Ultra Ball', icon: '🟡', price: 100 },
+  { id: 'greatball', name: 'Great Ball', icon: '🔵', price: 30 },
+  { id: 'ultraball', name: 'Ultra Ball', icon: '🟡', price: 50 },
 ];
 
 interface WeightedLootEntry {
@@ -160,7 +164,7 @@ export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
 }
 
 export function pickFindItemId(): string {
-  // 15% chance to find a Max Elixir; otherwise the standard weighted loot.
+  if (Math.random() < 0.15) return 'fullheal';
   if (Math.random() < 0.15) return 'maxelixer';
   return pickWeightedItemId(FIND_ITEM_LOOT);
 }

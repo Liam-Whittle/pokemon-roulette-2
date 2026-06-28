@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
 import { ELITE_FOUR } from '../data/pools';
@@ -8,6 +8,11 @@ import { useGameStore } from '../store/useGameStore';
 export function EliteFourScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const setEliteCleared = useGameStore((s) => s.setEliteCleared);
+  const resetFullHealBattle = useGameStore((s) => s.resetFullHealBattle);
+
+  useEffect(() => {
+    resetFullHealBattle();
+  }, [resetFullHealBattle]);
 
   const [stage, setStage] = useState(() => {
     const { debugEliteStage, setDebugEliteStage } = useGameStore.getState();

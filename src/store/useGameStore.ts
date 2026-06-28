@@ -62,6 +62,9 @@ interface GameState {
   debugGymId: string | null;
   debugEliteStage: number | null;
   lastCaughtAt: number | null;
+  lastCaughtId: number | null;
+  /** Once per gym battle or Elite Four run — not persisted. */
+  fullHealUsedInBattle: boolean;
 
   setScreen: (screen: Screen) => void;
   setDebugGym: (id: string | null) => void;
@@ -109,6 +112,8 @@ interface GameState {
   usePotionOnMember: (caughtAt: number) => boolean;
   useMovePp: (caughtAt: number, slug: string, maxPp: number) => void;
   useMaxElixirOnMember: (caughtAt: number) => boolean;
+  useFullHealAllParty: (inBattle?: boolean) => boolean;
+  resetFullHealBattle: () => void;
   resetGame: () => void;
 }
 
@@ -280,6 +285,8 @@ export const useGameStore = create<GameState>()(
       debugGymId: null,
       debugEliteStage: null,
       lastCaughtAt: null,
+      lastCaughtId: null,
+      fullHealUsedInBattle: false,
 
       setScreen: (screen) => set({ screen }),
       setDebugGym: (debugGymId) => set({ debugGymId }),
@@ -376,6 +383,7 @@ export const useGameStore = create<GameState>()(
             party: nextParty,
             pcExcluded: state.pcExcluded.filter((id) => id !== pokemon.id),
             lastCaughtAt: caught.caughtAt,
+            lastCaughtId: caught.id,
             pokedex: {
               ...state.pokedex,
               [pokemon.id]: {
@@ -410,14 +418,22 @@ export const useGameStore = create<GameState>()(
           const party = state.party.map((member) =>
             member.caughtAt === caughtAt ? { ...member, shiny: true } : member,
           );
-          const existing = target ? state.pokedex[target.id] : undefined;
+          // When the party was full, the catch went to the PC and isn't in the
+          // party — fall back to the last-caught id so its Pokédex (PC) entry
+          // still records the shiny status.
+          const pokedexId = target?.id ?? state.lastCaughtId ?? undefined;
+          const existing = pokedexId !== undefined ? state.pokedex[pokedexId] : undefined;
           return {
             party,
             pokedex:
-              target && existing
+              pokedexId !== undefined && existing
                 ? {
                     ...state.pokedex,
-                    [target.id]: { ...existing, shiny: true, shinySprite: target.shinySprite },
+                    [pokedexId]: {
+                      ...existing,
+                      shiny: true,
+                      shinySprite: target?.shinySprite ?? existing.shinySprite,
+                    },
                   }
                 : state.pokedex,
           };
@@ -720,6 +736,25 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
+      useFullHealAllParty: (inBattle = false) => {
+        if (inBattle && get().fullHealUsedInBattle) return false;
+        const needsHeal = get().party.some(
+          (member) => currentHp(member) < maxHpFor(member.powerLevel),
+        );
+        if (!needsHeal) return false;
+        if (!get().consumeItem('fullheal', 1)) return false;
+        set((state) => ({
+          fullHealUsedInBattle: inBattle ? true : state.fullHealUsedInBattle,
+          party: state.party.map((member) => ({
+            ...member,
+            hp: maxHpFor(member.powerLevel),
+          })),
+        }));
+        return true;
+      },
+
+      resetFullHealBattle: () => set({ fullHealUsedInBattle: false }),
+
       resetGame: () =>
         set({
           screen: 'title',
@@ -742,6 +777,8 @@ export const useGameStore = create<GameState>()(
           activePanel: 'party',
           money: 100,
           lastCaughtAt: null,
+          lastCaughtId: null,
+          fullHealUsedInBattle: false,
         }),
     }),
     {

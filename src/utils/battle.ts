@@ -5,6 +5,10 @@ export const CRIT_MULT = 1.3;
 export const XATTACK_BONUS = 0.2;
 /** At full move power + neutral matchup, damage ≈ this fraction of defender max HP. */
 export const MOVE_DMG_RATIO = 0.42;
+/** Extra damage multiplier for an effective (neutral, 1×) matchup. */
+export const EFFECTIVE_BONUS = 1.15;
+/** Extra damage multiplier for a super-effective (2×) matchup. */
+export const SUPER_EFFECTIVE_BONUS = 1.3;
 
 export function safePower(power: number): number {
   return Number.isFinite(power) ? power : 0.3;
@@ -37,8 +41,13 @@ export function computeDamage(opts: {
 }): number {
   const adv = opts.attackerPower - opts.defenderPower;
   const advMult = 1 + Math.max(-0.25, Math.min(0.25, adv * 0.5));
+  // Reward favorable matchups a little extra so type advantage feels impactful:
+  // super-effective hits get the biggest bump, neutral hits a smaller one, and
+  // resisted (< 1×) hits are left untouched.
+  const effBonus =
+    opts.effectiveness >= 2 ? SUPER_EFFECTIVE_BONUS : opts.effectiveness >= 1 ? EFFECTIVE_BONUS : 1;
   let dmg =
-    opts.movePower * opts.defenderMaxHp * MOVE_DMG_RATIO * opts.effectiveness * advMult;
+    opts.movePower * opts.defenderMaxHp * MOVE_DMG_RATIO * opts.effectiveness * advMult * effBonus;
   if (opts.crit) dmg *= CRIT_MULT;
   return Math.max(1, Math.round(dmg));
 }

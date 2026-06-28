@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
 import { ITEMS, pickRandom } from '../data/pools';
 import { GameIcon } from '../components/GameIcon';
+import { ItemIcon } from '../components/ItemIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import type { BagItem } from '../types/game';
@@ -61,7 +62,12 @@ export function CaveScreen() {
           animate={{ scale: 1, rotate: 0 }}
           transition={{ type: 'spring', stiffness: 200 }}
         >
-          <span className="cave-item-found__icon">{foundItem.icon}</span>
+          <ItemIcon
+            id={foundItem.id}
+            icon={foundItem.icon}
+            name={foundItem.name}
+            className="cave-item-found__icon"
+          />
           <h3>You found a {foundItem.name}!</h3>
           <p className="cave-item-found__msg">Added to your bag.</p>
         </motion.div>
