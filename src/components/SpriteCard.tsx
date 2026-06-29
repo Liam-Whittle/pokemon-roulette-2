@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import type { PokemonData } from '../types/game';
 import { TypeBadge } from './TypeBadge';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import { imgFallback, remotePokemonArtwork, remotePokemonShinyArtwork, remotePokemonSprite, remotePokemonShinySprite } from '../utils/localAssets';
 
 interface SpriteCardProps {
   pokemon: PokemonData;
@@ -31,7 +32,14 @@ export function SpriteCard({ pokemon, size = 'md', animate = true, shiny = false
         height={px}
         className="sprite-card__img"
         onError={(e) => {
-          (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+          const remote = isShiny
+            ? pokemon.shinyArtwork
+              ? remotePokemonShinyArtwork(pokemon.id)
+              : remotePokemonShinySprite(pokemon.id)
+            : pokemon.artwork
+              ? remotePokemonArtwork(pokemon.id)
+              : remotePokemonSprite(pokemon.id);
+          imgFallback(e, remote, PLACEHOLDER_SPRITE);
         }}
         animate={animate ? { y: [0, -8, 0] } : undefined}
         transition={animate ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : undefined}

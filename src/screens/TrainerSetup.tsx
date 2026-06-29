@@ -3,18 +3,20 @@ import { motion } from 'framer-motion';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import { imgFallback, remoteTrainerSprite } from '../utils/localAssets';
+import { localTrainerSprite } from '../utils/localAssets';
 import type { TrainerPreset } from '../types/game';
 
 const TRAINERS: TrainerPreset[] = [
   {
     id: 'boy',
     label: 'Red',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/red-gen3.png',
+    sprite: localTrainerSprite('red-gen3.png'),
   },
   {
     id: 'girl',
     label: 'Leaf',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/leaf-gen3.png',
+    sprite: localTrainerSprite('leaf-gen3.png'),
   },
 ];
 
@@ -66,7 +68,12 @@ export function TrainerSetup() {
                   alt={t.label}
                   className="trainer-card__sprite"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                    const filename = t.sprite.split('/').pop();
+                    imgFallback(
+                      e,
+                      filename ? remoteTrainerSprite(filename) : undefined,
+                      PLACEHOLDER_SPRITE,
+                    );
                   }}
                 />
               </div>

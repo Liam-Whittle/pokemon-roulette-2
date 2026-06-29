@@ -22,9 +22,11 @@ import type {
   ActivityType,
   Badge,
   BagItem,
+  BattleSnapshot,
   CaughtPokemon,
   ChampionRecord,
   EvolveResult,
+  PcStat,
   PokedexEntry,
   PokemonData,
   Screen,
@@ -40,6 +42,8 @@ interface GameState {
   party: CaughtPokemon[];
   /** Species IDs that left the PC (e.g. evolved away) and shouldn't appear there. */
   pcExcluded: number[];
+  /** HP/PP retained for Pokémon sitting in the PC, keyed by species id. */
+  pcStats: Record<number, PcStat>;
   pokedex: Record<number, PokedexEntry>;
   bag: BagItem[];
   badges: Badge[];
@@ -63,8 +67,10 @@ interface GameState {
   debugEliteStage: number | null;
   lastCaughtAt: number | null;
   lastCaughtId: number | null;
-  /** Once per gym battle or Elite Four run — not persisted. */
+  /** Once per gym battle or Elite Four run — persisted with the battle snapshot. */
   fullHealUsedInBattle: boolean;
+  /** Mid-battle progress so a refresh/exit resumes the same fight. */
+  battleSnapshot: BattleSnapshot | null;
 
   setScreen: (screen: Screen) => void;
   setDebugGym: (id: string | null) => void;
@@ -114,14 +120,14 @@ interface GameState {
   useMaxElixirOnMember: (caughtAt: number) => boolean;
   useFullHealAllParty: (inBattle?: boolean) => boolean;
   resetFullHealBattle: () => void;
+  setFullHealUsedInBattle: (used: boolean) => void;
+  saveBattleSnapshot: (snapshot: BattleSnapshot) => void;
+  clearBattleSnapshot: () => void;
   resetGame: () => void;
 }
 
 function createDefaultBag(): BagItem[] {
-  return [
-    { id: 'potion', name: 'Potion', quantity: 1, icon: '💊' },
-    { id: 'pokeball', name: 'Poké Ball', quantity: 5, icon: '🔴' },
-  ];
+  return [{ id: 'pokeball', name: 'Poké Ball', quantity: 6, icon: '🔴' }];
 }
 
 function toCaughtPokemon(pokemon: PokemonData, nickname?: string): CaughtPokemon {
@@ -263,6 +269,7 @@ export const useGameStore = create<GameState>()(
       trainer: null,
       party: [],
       pcExcluded: [],
+      pcStats: {},
       pokedex: {},
       bag: createDefaultBag(),
       badges: [],
@@ -270,7 +277,7 @@ export const useGameStore = create<GameState>()(
       muted: false,
       musicVolume: 0.05,
       showTypeEffectiveness: true,
-      money: 100,
+      money: 300,
       currentActivity: null,
       currentSegment: null,
       currentPokemon: null,
@@ -287,6 +294,7 @@ export const useGameStore = create<GameState>()(
       lastCaughtAt: null,
       lastCaughtId: null,
       fullHealUsedInBattle: false,
+      battleSnapshot: null,
 
       setScreen: (screen) => set({ screen }),
       setDebugGym: (debugGymId) => set({ debugGymId }),
@@ -496,6 +504,11 @@ export const useGameStore = create<GameState>()(
           const entry = state.pokedex[pokemonId];
           if (!entry) return state;
           if (state.party.some((member) => member.id === pokemonId)) return state;
+          const outgoing = state.party.find((member) => member.caughtAt === caughtAt);
+          // Pull the incoming Pokémon's stored PC HP/PP so a Pokémon that left
+          // the party damaged/fainted comes back in the same state (no free heal).
+          const maxHp = maxHpFor(entry.powerLevel);
+          const saved = state.pcStats[pokemonId];
           const replacement: CaughtPokemon = {
             id: pokemonId,
             name: entry.name,
@@ -507,10 +520,19 @@ export const useGameStore = create<GameState>()(
             powerLevel: entry.powerLevel,
             evolvesToId: null,
             shiny: entry.shiny ?? false,
-            hp: maxHpFor(entry.powerLevel),
+            hp: saved ? Math.min(saved.hp, maxHp) : maxHp,
+            pp: saved?.pp,
           };
+          // Remember the outgoing member's HP/PP while it sits in the PC, and
+          // drop the incoming Pokémon's now-stale PC record.
+          const pcStats = { ...state.pcStats };
+          delete pcStats[pokemonId];
+          if (outgoing) {
+            pcStats[outgoing.id] = { hp: currentHp(outgoing), pp: outgoing.pp };
+          }
           return {
             party: state.party.map((member) => (member.caughtAt === caughtAt ? replacement : member)),
+            pcStats,
           };
         });
       },
@@ -534,9 +556,9 @@ export const useGameStore = create<GameState>()(
 
         const evolvable = await findEvolvableMembers(get().party);
         if (evolvable.length === 0) {
-          get().addItem('potion', 1);
+          get().addItem('potion', 2);
           return {
-            message: 'None of your Pokémon can evolve right now, so you received a Potion!',
+            message: 'None of your Pokémon can evolve right now, so you received 2 Potions!',
             evolution: null,
           };
         }
@@ -548,7 +570,11 @@ export const useGameStore = create<GameState>()(
       evolveRandomPartyMember: async () => {
         const evolvable = await findEvolvableMembers(get().party);
         if (evolvable.length === 0) {
-          return { message: 'None of your Pokémon can evolve right now.', evolution: null };
+          get().addItem('potion', 2);
+          return {
+            message: 'None of your Pokémon can evolve right now, so you received 2 Potions!',
+            evolution: null,
+          };
         }
 
         const chosen = pickRandom(evolvable);
@@ -755,12 +781,19 @@ export const useGameStore = create<GameState>()(
 
       resetFullHealBattle: () => set({ fullHealUsedInBattle: false }),
 
+      setFullHealUsedInBattle: (used) => set({ fullHealUsedInBattle: used }),
+
+      saveBattleSnapshot: (snapshot) => set({ battleSnapshot: snapshot }),
+
+      clearBattleSnapshot: () => set({ battleSnapshot: null }),
+
       resetGame: () =>
         set({
           screen: 'title',
           trainer: null,
           party: [],
           pcExcluded: [],
+          pcStats: {},
           pokedex: {},
           bag: createDefaultBag(),
           badges: [],
@@ -775,10 +808,11 @@ export const useGameStore = create<GameState>()(
           lives: 2,
           starterClaimed: false,
           activePanel: 'party',
-          money: 100,
+          money: 300,
           lastCaughtAt: null,
           lastCaughtId: null,
           fullHealUsedInBattle: false,
+          battleSnapshot: null,
         }),
     }),
     {
@@ -787,6 +821,7 @@ export const useGameStore = create<GameState>()(
         trainer: state.trainer,
         party: state.party,
         pcExcluded: state.pcExcluded,
+        pcStats: state.pcStats,
         pokedex: state.pokedex,
         bag: state.bag,
         badges: state.badges,
@@ -801,6 +836,8 @@ export const useGameStore = create<GameState>()(
         lives: state.lives,
         starterClaimed: state.starterClaimed,
         activePanel: state.activePanel,
+        fullHealUsedInBattle: state.fullHealUsedInBattle,
+        battleSnapshot: state.battleSnapshot,
       }),
     },
   ),

@@ -13,6 +13,7 @@ export function TitleScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const trainer = useGameStore((s) => s.trainer);
   const starterClaimed = useGameStore((s) => s.starterClaimed);
+  const battleSnapshot = useGameStore((s) => s.battleSnapshot);
   const resetGame = useGameStore((s) => s.resetGame);
   const muted = useGameStore((s) => s.muted);
   const hasChampions = useGameStore((s) => s.hallOfChampions.length > 0);
@@ -80,7 +81,12 @@ export function TitleScreen() {
             className="btn btn--primary btn--lg"
             onClick={() => {
               playSfx('click', muted);
-              setScreen(trainer && starterClaimed ? 'hub' : 'setup');
+              if (trainer && starterClaimed) {
+                // Resume an interrupted Gym/Elite battle if one was in progress.
+                setScreen(battleSnapshot ? battleSnapshot.context : 'hub');
+              } else {
+                setScreen('setup');
+              }
             }}
           >
             {trainer && starterClaimed ? 'Continue Game' : 'New Game'}

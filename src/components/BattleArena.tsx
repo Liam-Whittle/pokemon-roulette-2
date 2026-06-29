@@ -13,6 +13,13 @@ import { playClip, stopClips } from '../utils/music';
 import { PokeCenterVisits } from './PokeDollar';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import {
+  imgFallback,
+  localPokemonSprite,
+  remoteBattleGif,
+  remoteBadge,
+  remoteTrainerSprite,
+} from '../utils/localAssets';
+import {
   computeDamage,
   isFainted,
   maxHpFor,
@@ -30,6 +37,10 @@ interface BattleArenaProps {
   onLose: () => void;
   winBadge?: Badge;
   finalVictory?: boolean;
+  /** Which battle flow this is, for resume-after-refresh snapshots. */
+  battleContext: 'gym' | 'elite';
+  /** Elite Four stage index (0 for a Gym battle). */
+  eliteStage?: number;
 }
 
 type BattlePhase =
@@ -67,6 +78,8 @@ export function BattleArena({
   onLose,
   winBadge,
   finalVictory = false,
+  battleContext,
+  eliteStage = 0,
 }: BattleArenaProps) {
   const muted = useGameStore((s) => s.muted);
   const showTypeEffectiveness = useGameStore((s) => s.showTypeEffectiveness);
@@ -83,6 +96,11 @@ export function BattleArena({
   const reviveHealAllParty = useGameStore((s) => s.reviveHealAllParty);
   const useMovePp = useGameStore((s) => s.useMovePp);
   const setScreen = useGameStore((s) => s.setScreen);
+  const saveBattleSnapshot = useGameStore((s) => s.saveBattleSnapshot);
+  const clearBattleSnapshot = useGameStore((s) => s.clearBattleSnapshot);
+  const setFullHealUsedInBattle = useGameStore((s) => s.setFullHealUsedInBattle);
+  const resetFullHealBattle = useGameStore((s) => s.resetFullHealBattle);
+  const fullHealUsedInBattle = useGameStore((s) => s.fullHealUsedInBattle);
 
   const [enemyTeam, setEnemyTeam] = useState<PokemonData[]>([]);
   const [loading, setLoading] = useState(true);
@@ -149,14 +167,75 @@ export function BattleArena({
     fetchPokemonBatch(enemyIds).then((team) => {
       if (!active) return;
       setEnemyTeam(team);
-      setEnemyIndex(0);
-      setEnemyHp(maxHpFor(team[0]?.powerLevel ?? 0.3));
+
+      const snap = useGameStore.getState().battleSnapshot;
+      const canResume =
+        !!snap &&
+        snap.context === battleContext &&
+        snap.leaderId === leader.id &&
+        snap.eliteStage === eliteStage;
+
+      // The Full Heal allowance is per Gym battle, but spans the whole Elite Four
+      // run — so only reset it for a Gym or the first Elite member (stage 0).
+      const startFresh = () => {
+        setEnemyIndex(0);
+        setEnemyHp(maxHpFor(team[0]?.powerLevel ?? 0.3));
+        if (battleContext === 'gym' || eliteStage === 0) resetFullHealBattle();
+      };
+
+      if (canResume && snap) {
+        let idx = snap.enemyIndex;
+        let hp = snap.enemyHp;
+        // If the snapshot was taken the instant an enemy fainted, advance past it.
+        if (hp <= 0) {
+          idx += 1;
+          hp = maxHpFor(team[idx]?.powerLevel ?? 0.3);
+        }
+        if (idx >= team.length) {
+          // Nothing left to resume against — start a fresh battle.
+          startFresh();
+        } else {
+          setEnemyIndex(idx);
+          setEnemyHp(hp);
+          setLog(snap.log);
+          setFullHealUsedInBattle(snap.fullHealUsed);
+          setPhase('choose');
+        }
+      } else {
+        startFresh();
+      }
       setLoading(false);
     });
     return () => {
       active = false;
     };
-  }, [leader]);
+  }, [leader, battleContext, eliteStage, resetFullHealBattle, setFullHealUsedInBattle]);
+
+  // Persist progress (from the moment the battle screen is ready) so a refresh or
+  // exit resumes this same fight instead of dumping the player back at the hub.
+  useEffect(() => {
+    if (loading || phase === 'victory' || phase === 'result') return;
+    saveBattleSnapshot({
+      context: battleContext,
+      leaderId: leader.id,
+      eliteStage,
+      enemyIndex,
+      enemyHp,
+      fullHealUsed: fullHealUsedInBattle,
+      log,
+    });
+  }, [
+    loading,
+    phase,
+    enemyIndex,
+    enemyHp,
+    log,
+    fullHealUsedInBattle,
+    battleContext,
+    eliteStage,
+    leader.id,
+    saveBattleSnapshot,
+  ]);
 
   // Load learnsets for the current party (separately, so it never touches enemy state).
   useEffect(() => {
@@ -194,6 +273,7 @@ export function BattleArena({
   };
 
   const handlePartyWipe = useCallback(async () => {
+    clearBattleSnapshot();
     setPhase('result');
     say('Your whole party fainted!');
     playSfx('fail', muted);
@@ -209,9 +289,10 @@ export function BattleArena({
     });
     await delay(1400);
     onLose();
-  }, [leader.name, loseLife, muted, onLose, reviveHealAllParty, setLastResult]);
+  }, [clearBattleSnapshot, leader.name, loseLife, muted, onLose, reviveHealAllParty, setLastResult]);
 
   const handleOutOfPp = useCallback(async () => {
+    clearBattleSnapshot();
     setPhase('result');
     say('Your Pokémon are all out of PP and can no longer fight!');
     playSfx('fail', muted);
@@ -227,7 +308,7 @@ export function BattleArena({
     });
     await delay(1400);
     onLose();
-  }, [leader.name, loseLife, muted, onLose, reviveHealAllParty, setLastResult]);
+  }, [clearBattleSnapshot, leader.name, loseLife, muted, onLose, reviveHealAllParty, setLastResult]);
 
   // If it's the player's turn but no non-fainted Pokémon has any PP left, there's no
   // legal action — forfeit the battle and lose a life rather than soft-locking.
@@ -273,7 +354,7 @@ export function BattleArena({
     playSfx('hit', muted);
     const effLabel = getEffectivenessLabel(effectiveness);
     say(
-      `${leader.name}'s ${enemy.displayName} used ${move.name}!${crit ? ' Critical hit!' : ''} (${effLabel})`,
+      `${leader.name}'s ${enemy.displayName} used ${move.name}!${crit ? ' Critical hit!' : ''} Dealt ${dmg} damage. (${effLabel})`,
     );
     showDamage(`-${dmg}`, 'player');
 
@@ -295,6 +376,7 @@ export function BattleArena({
   }, [activeMember, damagePartyMember, enemy, handlePartyWipe, leader.name, muted]);
 
   const handleVictory = useCallback(async () => {
+    clearBattleSnapshot();
     if (winBadge) {
       earnBadge(winBadge);
       if (!finalVictory) addMoney(100);
@@ -322,6 +404,7 @@ export function BattleArena({
     onWin();
   }, [
     addMoney,
+    clearBattleSnapshot,
     earnBadge,
     finalVictory,
     leader.badgeName,
@@ -340,9 +423,12 @@ export function BattleArena({
       return;
     }
     setPhase('between');
-    say(`${enemy?.displayName ?? 'The Pokémon'} fainted! Swap if you need to, then continue.`);
+    const next = enemyTeam[nextIndex];
+    say(
+      `${enemy?.displayName ?? 'The Pokémon'} fainted! Up next: ${leader.name}'s ${next.displayName}. Swap if you need to, then continue.`,
+    );
     await delay(900);
-  }, [enemy?.displayName, enemyIndex, enemyTeam.length, handleVictory, muted]);
+  }, [enemy?.displayName, enemyIndex, enemyTeam, handleVictory, leader.name, muted, say]);
 
   const onMoveClick = async (move: BattleMove) => {
     if (processing || phase !== 'choose' || !enemy) return;
@@ -452,7 +538,7 @@ export function BattleArena({
             ? ' Critical hit!'
             : '';
     say(
-      `${attacker.nickname ?? attacker.displayName} used ${move.name}!${extra} (${effLabel})`,
+      `${attacker.nickname ?? attacker.displayName} used ${move.name}!${extra} Dealt ${dmg} damage. (${effLabel})`,
     );
     showDamage(`-${dmg}`, 'enemy');
     await delay(1200);
@@ -555,21 +641,22 @@ export function BattleArena({
                   alt={leader.name}
                   className="battle-trainer__sprite"
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                    const filename = leader.sprite?.split('/').pop();
+                    imgFallback(
+                      e,
+                      filename ? remoteTrainerSprite(filename) : undefined,
+                      PLACEHOLDER_SPRITE,
+                    );
                   }}
                 />
               )}
               <div className="gym-enemy">
                 <img
-                  src={`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/${enemy.id}.gif`}
+                  src={remoteBattleGif(enemy.id)}
                   alt={enemy.displayName}
                   className="gym-enemy__sprite"
                   onError={(e) => {
-                    const img = e.target as HTMLImageElement;
-                    if (!img.dataset.fallback) {
-                      img.dataset.fallback = '1';
-                      img.src = enemy.sprite || PLACEHOLDER_SPRITE;
-                    }
+                    imgFallback(e, localPokemonSprite(enemy.id), enemy.sprite || PLACEHOLDER_SPRITE);
                   }}
                 />
                 <p>{enemy.displayName}</p>
@@ -789,7 +876,16 @@ export function BattleArena({
             <p className="gym-victory__eyebrow">Gym defeated!</p>
             <h3 className="gym-victory__title">You won the {leader.badgeName}!</h3>
             {winBadge.image && (
-              <img src={winBadge.image} alt={winBadge.name} className="gym-victory__badge" />
+              <img
+                src={winBadge.image}
+                alt={winBadge.name}
+                className="gym-victory__badge"
+                onError={(e) => {
+                  const match = winBadge.image?.match(/badges\/(\d+)\.png/);
+                  const badgeNum = match ? Number(match[1]) : 0;
+                  imgFallback(e, badgeNum > 0 ? remoteBadge(badgeNum) : undefined, PLACEHOLDER_SPRITE);
+                }}
+              />
             )}
             <p className="gym-victory__subtitle">You defeated {leader.name} and earned a new badge.</p>
             <button

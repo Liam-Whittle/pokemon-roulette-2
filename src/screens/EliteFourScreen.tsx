@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
 import { ELITE_FOUR } from '../data/pools';
@@ -8,18 +8,15 @@ import { useGameStore } from '../store/useGameStore';
 export function EliteFourScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const setEliteCleared = useGameStore((s) => s.setEliteCleared);
-  const resetFullHealBattle = useGameStore((s) => s.resetFullHealBattle);
-
-  useEffect(() => {
-    resetFullHealBattle();
-  }, [resetFullHealBattle]);
 
   const [stage, setStage] = useState(() => {
-    const { debugEliteStage, setDebugEliteStage } = useGameStore.getState();
+    const { debugEliteStage, setDebugEliteStage, battleSnapshot } = useGameStore.getState();
     if (debugEliteStage !== null) {
       setDebugEliteStage(null);
       return debugEliteStage;
     }
+    // Resume mid-run after a refresh/exit.
+    if (battleSnapshot?.context === 'elite') return battleSnapshot.eliteStage;
     return 0;
   });
 
@@ -41,6 +38,8 @@ export function EliteFourScreen() {
       <BattleArena
         key={member.id}
         title={`Elite Four - ${member.name}`}
+        battleContext="elite"
+        eliteStage={stage}
         leader={member}
         finalVictory={stage === ELITE_FOUR.length - 1}
         onWin={() => {

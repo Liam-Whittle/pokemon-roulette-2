@@ -3,6 +3,7 @@ import { ELITE_FOUR, GYM_LEADERS, ITEMS, WHEEL_SEGMENTS } from '../data/pools';
 import { GameIcon } from './GameIcon';
 import { ItemIcon } from './ItemIcon';
 import { SegmentIcon } from './SegmentIcon';
+import { PokeCenterModal } from './PokeCenterModal';
 import { useGameStore } from '../store/useGameStore';
 import { fetchGen1List, fetchPokemon, type PokemonListEntry } from '../api/pokeapi';
 import type { WheelSegment } from '../types/game';
@@ -27,8 +28,11 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   const addMoney = useGameStore((s) => s.addMoney);
   const makeRandomPartyShiny = useGameStore((s) => s.makeRandomPartyShiny);
   const debugAddToParty = useGameStore((s) => s.debugAddToParty);
+  const reviveHealAllParty = useGameStore((s) => s.reviveHealAllParty);
 
   const [open, setOpen] = useState(false);
+  const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   const [pokemonList, setPokemonList] = useState<PokemonListEntry[]>([]);
   const [listOpen, setListOpen] = useState(false);
   const [loadingList, setLoadingList] = useState(false);
@@ -50,6 +54,18 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   function launchMiniGame(segment: WheelSegment) {
     startActivity(segment);
     setOpen(false);
+  }
+
+  function launchElixir() {
+    addItem('maxelixer', 1);
+    setOpen(false);
+    setNotice('You received a free Max Elixir!');
+  }
+
+  function launchHeal() {
+    reviveHealAllParty();
+    setOpen(false);
+    setPokeCenterOpen(true);
   }
 
   function launchLegendary() {
@@ -151,6 +167,12 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                   {segment.label}
                 </button>
               ))}
+              <button type="button" className="debug-panel__btn" onClick={launchElixir}>
+                <SegmentIcon id="elixir" className="game-icon-img game-icon-img--btn" /> Elixir
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={launchHeal}>
+                <SegmentIcon id="pokecenter" className="game-icon-img game-icon-img--btn" /> Heal
+              </button>
               <button type="button" className="debug-panel__btn" onClick={launchLegendary}>
                 <SegmentIcon id="legendary" className="game-icon-img game-icon-img--btn" /> Legendary Encounter
               </button>
@@ -277,6 +299,19 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                 <GameIcon ui="gameover" alt="" className="game-icon-img game-icon-img--btn" /> Game Over Screen
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {pokeCenterOpen && <PokeCenterModal onClose={() => setPokeCenterOpen(false)} />}
+
+      {notice && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal hub-notice-modal">
+            <p className="hub-notice-modal__text">{notice}</p>
+            <button type="button" className="btn btn--primary" onClick={() => setNotice(null)}>
+              Continue
+            </button>
           </div>
         </div>
       )}

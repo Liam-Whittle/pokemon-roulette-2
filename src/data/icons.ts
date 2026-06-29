@@ -1,9 +1,8 @@
 import { asset } from '../utils/asset';
-
-const SPRITE_BASE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items';
+import { localItemSprite } from '../utils/localAssets';
 
 function itemSprite(filename: string): string {
-  return `${SPRITE_BASE}/${filename}`;
+  return localItemSprite(filename);
 }
 
 /** Official PokeAPI item sprites keyed by in-game item id. */
@@ -35,6 +34,8 @@ export const SEGMENT_SPRITES: Record<string, string> = {
   battlegym: asset('img/gym.png'),
   evolve: itemSprite('rare-candy.png'),
   potion: itemSprite('potion.png'),
+  elixir: itemSprite('max-elixir.png'),
+  pokecenter: itemSprite('sacred-ash.png'),
   'bonus-item': itemSprite('nugget.png'),
 };
 

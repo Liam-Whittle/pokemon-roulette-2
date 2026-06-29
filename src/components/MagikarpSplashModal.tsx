@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
+import { imgFallback, localPokemonSprite, remoteBattleGif } from '../utils/localAssets';
 import { playClip, stopClip } from '../utils/music';
 
 interface SplashLine {
@@ -16,9 +17,8 @@ const LINES: SplashLine[] = [
   { text: 'It was… not very effective', typeMs: 45, holdMs: 1200 },
 ];
 
-/** PokeAPI Gen-5 animated (flopping) Magikarp sprite. */
-const MAGIKARP_ANIMATED =
-  'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/129.gif';
+/** PokeAPI Gen-5 animated (flopping) Magikarp sprite — remote only. */
+const MAGIKARP_ANIMATED = remoteBattleGif(129);
 
 interface MagikarpSplashModalProps {
   /** Fallback sprite (the caught Magikarp's stored sprite) if the gif fails to load. */
@@ -76,8 +76,7 @@ export function MagikarpSplashModal({ sprite, name, onDone }: MagikarpSplashModa
             alt={name}
             className="magikarp-splash-modal__sprite"
             onError={(e) => {
-              const img = e.target as HTMLImageElement;
-              img.src = img.src === sprite ? PLACEHOLDER_SPRITE : sprite;
+              imgFallback(e, localPokemonSprite(129), sprite || PLACEHOLDER_SPRITE);
             }}
           />
         </div>

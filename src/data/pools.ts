@@ -1,4 +1,5 @@
 import type { GymLeader, WheelSegment } from '../types/game';
+import { localBadge, localTrainerSprite } from '../utils/localAssets';
 
 /** Small slice weight for rare wheel outcomes (Legendary, Uber Spin). */
 export const RARE_WHEEL_WEIGHT = 0.35;
@@ -52,6 +53,33 @@ export const HUB_WHEEL_LAYOUT_B: WheelSegment[] = [
   },
 ];
 
+const HUB_WHEEL_LAYOUT_B_ELIXIR: WheelSegment[] = [
+  { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
+  { id: 'elixir', label: 'Elixir', activity: 'elixir', color: '#38bdf8', icon: '🧪', weight: 0.6 },
+  { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
+  { id: 'wild2', label: 'Tall Grass', activity: 'tallgrass', color: '#22c55e', icon: '🍃' },
+  { id: 'evolve', label: 'Evolve', activity: 'evolve', color: '#a78bfa', icon: '🧬' },
+  { id: 'potion', label: 'Potion', activity: 'potion', color: '#fb923c', icon: '💊', weight: 0.6 },
+  { id: 'shop', label: 'Visit Shop', activity: 'shop', color: '#f472b6', icon: '🏪' },
+  {
+    id: 'uber',
+    label: 'Uber Spin',
+    activity: 'uber',
+    color: '#c084fc',
+    icon: '🌀',
+    weight: RARE_WHEEL_WEIGHT,
+  },
+];
+
+const POKECENTER_WEDGE: WheelSegment = {
+  id: 'pokecenter',
+  label: 'Heal',
+  activity: 'pokecenter',
+  color: '#f472b6',
+  icon: '💗',
+  weight: RARE_WHEEL_WEIGHT,
+};
+
 export const UBER_SPIN_SEGMENTS = [
   { id: 'legendary', label: 'Legendary', color: '#fde047', icon: '✨', weight: 1 },
   { id: 'bonus-item', label: '+1 Item', color: '#fbbf24', icon: '🎁', weight: 1 },
@@ -90,7 +118,7 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   fullheal:
     'Fully restores HP for every Pokémon in your party. In battle you can only use one per fight (one for the entire Elite Four run).',
   rarecandy:
-    'Evolves one random eligible Pokémon in your party. If none of your Pokémon can evolve right now, it turns into a Potion instead.',
+    'Evolves one random eligible Pokémon in your party. If none of your Pokémon can evolve right now, it turns into 2 Potions instead.',
   xattack:
     'Use in battle on a move: boosts that move\u2019s power by +20 for the rest of the current enemy Pokémon fight only.',
   maxelixer:
@@ -112,13 +140,13 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
 export const BALL_ITEM_IDS = ['pokeball', 'greatball', 'ultraball', 'masterball'] as const;
 export type BallItemId = (typeof BALL_ITEM_IDS)[number];
 
-const BALL_SPRITE_BASE = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/items';
+import { localItemSprite } from '../utils/localAssets';
 
 export const BALL_SPRITES: Record<string, string> = {
-  pokeball: `${BALL_SPRITE_BASE}/poke-ball.png`,
-  greatball: `${BALL_SPRITE_BASE}/great-ball.png`,
-  ultraball: `${BALL_SPRITE_BASE}/ultra-ball.png`,
-  masterball: `${BALL_SPRITE_BASE}/master-ball.png`,
+  pokeball: localItemSprite('poke-ball.png'),
+  greatball: localItemSprite('great-ball.png'),
+  ultraball: localItemSprite('ultra-ball.png'),
+  masterball: localItemSprite('master-ball.png'),
 };
 
 export const SHOP_CATALOG = [
@@ -149,8 +177,25 @@ const FIND_ITEM_LOOT: WeightedLootEntry[] = [
 
 const UBER_BONUS_ITEMS = ['potion', 'xattack', 'rarecandy'];
 
-export function getHubWheelSegments(spinsSinceGym: number): WheelSegment[] {
-  return spinsSinceGym % 2 === 0 ? HUB_WHEEL_LAYOUT_A : HUB_WHEEL_LAYOUT_B;
+export function getHubWheelSegments(spinsSinceGym: number, spinsThreshold: number): WheelSegment[] {
+  const isLastSpin = spinsSinceGym === spinsThreshold - 1;
+  const isSecondToLast = spinsSinceGym === spinsThreshold - 2;
+
+  // The final spin before a Gym/Elite fight always presents the Battle Gym wedge.
+  if (isLastSpin) return [...HUB_WHEEL_LAYOUT_B];
+
+  // The second-to-last spin guarantees the Heal wedge, inserted between Tall
+  // Grass and Explore Cave so it isn't crowded next to the small Legendary wedge.
+  if (isSecondToLast) {
+    const layout = [...HUB_WHEEL_LAYOUT_A];
+    const caveIndex = layout.findIndex((seg) => seg.id === 'cave');
+    const insertAt = caveIndex === -1 ? layout.length - 1 : caveIndex;
+    layout.splice(insertAt, 0, POKECENTER_WEDGE);
+    return layout;
+  }
+
+  // Normal spins alternate between Layout A and Layout B (Elixir variant).
+  return spinsSinceGym % 2 === 0 ? [...HUB_WHEEL_LAYOUT_A] : [...HUB_WHEEL_LAYOUT_B_ELIXIR];
 }
 
 export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
@@ -222,8 +267,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Brock',
     type: 'rock',
     badgeName: 'Boulder Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/brock.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/1.png',
+    sprite: localTrainerSprite('brock.png'),
+    badgeImage: localBadge(1),
     pokemon: [
       { id: 74, name: 'geodude', level: 12 },
       { id: 95, name: 'onix', level: 14 },
@@ -234,8 +279,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Misty',
     type: 'water',
     badgeName: 'Cascade Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/misty.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/2.png',
+    sprite: localTrainerSprite('misty.png'),
+    badgeImage: localBadge(2),
     pokemon: [
       { id: 120, name: 'staryu', level: 18 },
       { id: 121, name: 'starmie', level: 21 },
@@ -246,8 +291,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Lt. Surge',
     type: 'electric',
     badgeName: 'Thunder Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/ltsurge.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/3.png',
+    sprite: localTrainerSprite('ltsurge.png'),
+    badgeImage: localBadge(3),
     pokemon: [
       { id: 100, name: 'voltorb', level: 21 },
       { id: 25, name: 'pikachu', level: 18 },
@@ -259,8 +304,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Erika',
     type: 'grass',
     badgeName: 'Rainbow Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/erika.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/4.png',
+    sprite: localTrainerSprite('erika.png'),
+    badgeImage: localBadge(4),
     pokemon: [
       { id: 114, name: 'tangela', level: 24 },
       { id: 70, name: 'weepinbell', level: 29 },
@@ -272,8 +317,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Koga',
     type: 'poison',
     badgeName: 'Soul Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/koga.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/5.png',
+    sprite: localTrainerSprite('koga.png'),
+    badgeImage: localBadge(5),
     pokemon: [
       { id: 109, name: 'koffing', level: 37 },
       { id: 109, name: 'koffing', level: 37 },
@@ -285,8 +330,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Sabrina',
     type: 'psychic',
     badgeName: 'Marsh Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/sabrina.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/6.png',
+    sprite: localTrainerSprite('sabrina.png'),
+    badgeImage: localBadge(6),
     pokemon: [
       { id: 64, name: 'kadabra', level: 38 },
       { id: 122, name: 'mr-mime', level: 37 },
@@ -298,8 +343,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Blaine',
     type: 'fire',
     badgeName: 'Volcano Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/blaine.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/7.png',
+    sprite: localTrainerSprite('blaine.png'),
+    badgeImage: localBadge(7),
     pokemon: [
       { id: 58, name: 'growlithe', level: 42 },
       { id: 77, name: 'ponyta', level: 47 },
@@ -311,8 +356,8 @@ export const GYM_LEADERS: GymLeader[] = [
     name: 'Giovanni',
     type: 'ground',
     badgeName: 'Earth Badge',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/giovanni.png',
-    badgeImage: 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/badges/8.png',
+    sprite: localTrainerSprite('giovanni.png'),
+    badgeImage: localBadge(8),
     pokemon: [
       { id: 111, name: 'rhyhorn', level: 45 },
       { id: 51, name: 'dugtrio', level: 42 },
@@ -327,7 +372,7 @@ export const ELITE_FOUR: GymLeader[] = [
     name: 'Lorelei',
     type: 'ice',
     badgeName: 'Elite Four: Lorelei',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/lorelei-gen1rb.png',
+    sprite: localTrainerSprite('lorelei-gen1rb.png'),
     pokemon: [
       { id: 87, name: 'dewgong', level: 54 },
       { id: 91, name: 'cloyster', level: 53 },
@@ -341,7 +386,7 @@ export const ELITE_FOUR: GymLeader[] = [
     name: 'Bruno',
     type: 'fighting',
     badgeName: 'Elite Four: Bruno',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/bruno.png',
+    sprite: localTrainerSprite('bruno.png'),
     pokemon: [
       { id: 95, name: 'onix', level: 53 },
       { id: 107, name: 'hitmonchan', level: 55 },
@@ -355,7 +400,7 @@ export const ELITE_FOUR: GymLeader[] = [
     name: 'Agatha',
     type: 'ghost',
     badgeName: 'Elite Four: Agatha',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/agatha-gen1rb.png',
+    sprite: localTrainerSprite('agatha-gen1rb.png'),
     pokemon: [
       { id: 94, name: 'gengar', level: 56 },
       { id: 42, name: 'golbat', level: 56 },
@@ -369,7 +414,7 @@ export const ELITE_FOUR: GymLeader[] = [
     name: 'Lance',
     type: 'dragon',
     badgeName: 'Elite Four: Lance',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/lance.png',
+    sprite: localTrainerSprite('lance.png'),
     pokemon: [
       { id: 130, name: 'gyarados', level: 58 },
       { id: 148, name: 'dragonair', level: 56 },
@@ -383,7 +428,7 @@ export const ELITE_FOUR: GymLeader[] = [
     name: 'Champion Blue',
     type: 'mixed',
     badgeName: 'Champion',
-    sprite: 'https://play.pokemonshowdown.com/sprites/trainers/blue.png',
+    sprite: localTrainerSprite('blue.png'),
     pokemon: [
       { id: 18, name: 'pidgeot', level: 61 },
       { id: 65, name: 'alakazam', level: 59 },
@@ -398,14 +443,14 @@ export const ELITE_FOUR: GymLeader[] = [
 export const TOTAL_GYMS = GYM_LEADERS.length;
 
 /** Hub spins required between each Gym battle. */
-export const SPINS_PER_GYM = 2;
+export const SPINS_PER_GYM = 3;
 
 /**
  * Extra prep spins granted after the 8th badge before the Elite Four gauntlet.
  * Gives the player a longer run-up to train/stock up since the Elite Four +
  * Champion is a tough, uninterrupted gauntlet.
  */
-export const ELITE_PREP_SPINS = 6;
+export const ELITE_PREP_SPINS = 8;
 
 export function pickRandom<T>(arr: T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];

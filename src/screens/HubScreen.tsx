@@ -14,6 +14,7 @@ import {
 } from '../data/pools';
 import { PokeCenterVisits } from '../components/PokeDollar';
 import { EvolutionModal } from '../components/EvolutionModal';
+import { PokeCenterModal } from '../components/PokeCenterModal';
 import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
@@ -35,11 +36,13 @@ export function HubScreen() {
   const addItem = useGameStore((s) => s.addItem);
   const evolveRandomPartyMember = useGameStore((s) => s.evolveRandomPartyMember);
   const restorePartyPp = useGameStore((s) => s.restorePartyPp);
+  const reviveHealAllParty = useGameStore((s) => s.reviveHealAllParty);
 
   const [wheelLocked, setWheelLocked] = useState(false);
   const [uberSpinOpen, setUberSpinOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
+  const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
 
   const gymBadges = badges.length;
   const allGymsDone = gymBadges >= TOTAL_GYMS;
@@ -51,7 +54,10 @@ export function HubScreen() {
   // swap between Layout A/B the instant a spin resolves. It updates only after an
   // outcome completes (notice dismissed) or when the Hub remounts after activity.
   const [displaySpinsSinceGym, setDisplaySpinsSinceGym] = useState(spinsSinceGym);
-  const wheelSegments = getHubWheelSegments(displaySpinsSinceGym);
+  const wheelSegments = getHubWheelSegments(
+    displaySpinsSinceGym,
+    allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM,
+  );
 
   const maybeTriggerGym = useCallback(() => {
     const state = useGameStore.getState();
@@ -99,6 +105,12 @@ export function HubScreen() {
         } else if (segment.activity === 'potion') {
           addItem('potion', 1);
           setNotice('You received a free Potion!');
+        } else if (segment.activity === 'elixir') {
+          addItem('maxelixer', 1);
+          setNotice('You received a free Max Elixir!');
+        } else if (segment.activity === 'pokecenter') {
+          reviveHealAllParty();
+          setPokeCenterOpen(true);
         } else if (segment.activity === 'evolve') {
           const result = await evolveRandomPartyMember();
           if (result.evolution) {
@@ -120,6 +132,7 @@ export function HubScreen() {
       setLastGymSpin,
       addItem,
       evolveRandomPartyMember,
+      reviveHealAllParty,
     ],
   );
 
@@ -134,6 +147,15 @@ export function HubScreen() {
 
   const dismissEvolution = useCallback(() => {
     setEvolution(null);
+    const navigated = maybeTriggerGym();
+    if (!navigated) {
+      const s = useGameStore.getState();
+      setDisplaySpinsSinceGym(s.spinsCount - s.lastGymSpin);
+    }
+  }, [maybeTriggerGym]);
+
+  const dismissPokeCenter = useCallback(() => {
+    setPokeCenterOpen(false);
     const navigated = maybeTriggerGym();
     if (!navigated) {
       const s = useGameStore.getState();
@@ -177,7 +199,7 @@ export function HubScreen() {
     >
       <header className="hub-header">
         <div className="hub-header__trainer">
-          {trainer?.avatar?.startsWith('http') ? (
+          {trainer?.avatar && /[/.]/.test(trainer.avatar) ? (
             <img
               src={trainer.avatar}
               alt={trainer.name}
@@ -260,6 +282,8 @@ export function HubScreen() {
       )}
 
       {evolution && <EvolutionModal evolution={evolution} onClose={dismissEvolution} />}
+
+      {pokeCenterOpen && <PokeCenterModal onClose={dismissPokeCenter} />}
 
       {trainer?.name.toLowerCase() === 'debug' && <DebugMenu onUberSpin={() => setUberSpinOpen(true)} />}
     </motion.div>

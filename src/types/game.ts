@@ -35,7 +35,9 @@ export type ActivityType =
   | 'uber'
   | 'evolve'
   | 'potion'
-  | 'battlegym';
+  | 'battlegym'
+  | 'elixir'
+  | 'pokecenter';
 
 export interface WheelSegment {
   id: string;
@@ -77,7 +79,7 @@ export interface BattleMove {
   slug: string;
   name: string;
   type: string;
-  /** Fraction of the owner's power level (0–1). Multi-type moves split by inverse PP. */
+  /** Fraction of the owner's power level (0–1). Dual-type moves use 65% each. */
   power: number;
   /** Party member that owns this move (caughtAt timestamp). */
   ownerCaughtAt: number;
@@ -192,6 +194,25 @@ export interface PokedexEntry {
   powerLevel: number;
   shiny?: boolean;
   shinySprite?: string;
+}
+
+/** HP (and PP) retained for Pokémon currently sitting in the PC (out of party). */
+export interface PcStat {
+  hp: number;
+  pp?: Record<string, number>;
+}
+
+/** Persisted mid-battle progress so a refresh/exit can resume the same fight. */
+export interface BattleSnapshot {
+  context: 'gym' | 'elite';
+  /** GymLeader/Elite member id of the current opponent (sanity check on resume). */
+  leaderId: string;
+  /** Elite Four stage index (0 for a Gym battle). */
+  eliteStage: number;
+  enemyIndex: number;
+  enemyHp: number;
+  fullHealUsed: boolean;
+  log: string[];
 }
 
 export interface BattleWheelSegment {

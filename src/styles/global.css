@@ -5199,3 +5199,20 @@ body {
 .battle-scene {
   position: relative;
 }
+
+.pokecenter-modal {
+  max-width: 420px;
+  text-align: center;
+}
+
+.pokecenter-modal__prompt {
+  min-height: 4.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.pokecenter-modal__line {
+  margin: 0.35rem 0;
+  font-size: 1.05rem;
+  line-height: 1.5;
+  color: var(--text);
+}

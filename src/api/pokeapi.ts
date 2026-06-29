@@ -1,12 +1,18 @@
 import type { PokemonData } from '../types/game';
 import { extractGen1MoveSlugs } from '../data/moves';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import {
+  localPokemonArtwork,
+  localPokemonShinyArtwork,
+  localPokemonShinySprite,
+  localPokemonSprite,
+} from '../utils/localAssets';
 import { REGION_MAX_DEX_ID } from '../data/pools';
 
 const BASE = 'https://pokeapi.co/api/v2';
 // Bump the version suffix whenever the cached shape changes so stale entries
 // (e.g. cached before powerLevel/baseStatTotal existed) are ignored.
-const CACHE_PREFIX = 'poke-cache-v6-';
+const CACHE_PREFIX = 'poke-cache-v7-';
 const memoryCache = new Map<string, unknown>();
 
 function capitalize(s: string): string {
@@ -47,6 +53,10 @@ interface PokeApiPokemon {
   id: number;
   name: string;
   types: { type: { name: string } }[];
+  past_types?: {
+    generation: { name: string };
+    types: { type: { name: string } }[];
+  }[];
   stats: { base_stat: number }[];
   sprites: {
     front_default: string | null;
@@ -93,6 +103,29 @@ function getBaseStatTotal(stats: { base_stat: number }[]): number {
 
 function normalizePowerLevel(baseStatTotal: number): number {
   return Math.max(0.1, Math.min(1, (baseStatTotal - 200) / 500));
+}
+
+const GEN_ORDER: Record<string, number> = {
+  'generation-i': 1,
+  'generation-ii': 2,
+  'generation-iii': 3,
+  'generation-iv': 4,
+  'generation-v': 5,
+  'generation-vi': 6,
+  'generation-vii': 7,
+  'generation-viii': 8,
+  'generation-ix': 9,
+};
+
+/** Resolve Gen 1 typings from past_types when PokeAPI has retroactive type changes. */
+function gen1Types(data: PokeApiPokemon): string[] {
+  const past = (data.past_types ?? [])
+    .map((p) => ({
+      gen: GEN_ORDER[p.generation.name] ?? 99,
+      types: p.types.map((t) => t.type.name),
+    }))
+    .sort((a, b) => a.gen - b.gen);
+  return past[0]?.types ?? data.types.map((t) => t.type.name);
 }
 
 /** Species IDs of every direct evolution branch available to `currentName`. */
@@ -148,17 +181,11 @@ export async function fetchPokemon(id: number): Promise<PokemonData> {
       id: data.id,
       name: data.name,
       displayName: capitalize(data.name),
-      types: data.types.map((t) => t.type.name),
-      sprite: data.sprites.front_default ?? PLACEHOLDER_SPRITE,
-      artwork:
-        data.sprites.other['official-artwork'].front_default ??
-        data.sprites.front_default ??
-        PLACEHOLDER_SPRITE,
-      shinySprite: data.sprites.front_shiny ?? undefined,
-      shinyArtwork:
-        data.sprites.other['official-artwork'].front_shiny ??
-        data.sprites.front_shiny ??
-        undefined,
+      types: gen1Types(data),
+      sprite: localPokemonSprite(data.id),
+      artwork: localPokemonArtwork(data.id),
+      shinySprite: localPokemonShinySprite(data.id),
+      shinyArtwork: localPokemonShinyArtwork(data.id),
       catchRate,
       isLegendary,
       powerLevel: normalizePowerLevel(baseStatTotal),
@@ -252,8 +279,8 @@ export function getPlaceholderPokemon(id: number): PokemonData {
     name: 'unknown',
     displayName: 'Unknown',
     types: ['normal'],
-    sprite: PLACEHOLDER_SPRITE,
-    artwork: PLACEHOLDER_SPRITE,
+    sprite: localPokemonSprite(id),
+    artwork: localPokemonArtwork(id),
     catchRate: 45,
     isLegendary: false,
     powerLevel: 0.3,
