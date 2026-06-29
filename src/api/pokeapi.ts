@@ -1,6 +1,5 @@
 import type { PokemonData } from '../types/game';
 import { extractGen1MoveSlugs } from '../data/moves';
-import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import {
   localPokemonArtwork,
   localPokemonShinyArtwork,
