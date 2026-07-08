@@ -9,10 +9,12 @@ export function GameOverScreen() {
   const restoreOneLife = useGameStore((s) => s.restoreOneLife);
   const setScreen = useGameStore((s) => s.setScreen);
 
+  const recordReviveUsed = useGameStore((s) => s.recordReviveUsed);
   const maxReviveCount = bag.find((item) => item.id === 'maxrevive')?.quantity ?? 0;
 
   function handleMaxRevive() {
     if (!consumeItem('maxrevive', 1)) return;
+    recordReviveUsed();
     restoreOneLife();
     setScreen('hub');
   }

@@ -19,7 +19,11 @@ export type Screen =
   | 'gameover'
   | 'hall'
   | 'coming-soon'
-  | 'shop';
+  | 'shop'
+  | 'teamrocket'
+  | 'mp-host-lobby'
+  | 'mp-join'
+  | 'mp-guest';
 
 export type ActivityType =
   | 'wild'
@@ -37,7 +41,16 @@ export type ActivityType =
   | 'potion'
   | 'battlegym'
   | 'elixir'
-  | 'pokecenter';
+  | 'pokecenter'
+  | 'teamrocket'
+  | 'fullheal'
+  | 'money100'
+  | 'rarecandy'
+  | 'healpowder'
+  | 'xattack'
+  | 'stone';
+
+export type PathwayId = 'catch' | 'items' | 'mystery';
 
 export interface WheelSegment {
   id: string;
@@ -47,6 +60,48 @@ export interface WheelSegment {
   icon: string;
   comingSoon?: boolean;
   weight?: number;
+}
+
+export type StatKey = 'hp' | 'attack' | 'defense' | 'specialAttack' | 'specialDefense' | 'speed';
+export type MoveCategory = 'physical' | 'special' | 'status';
+export type StatusAilment = 'burn' | 'freeze' | 'paralysis' | 'poison' | 'toxic' | 'sleep';
+
+export type NatureId =
+  | 'hardy' | 'lonely' | 'brave' | 'adamant' | 'naughty'
+  | 'bold' | 'docile' | 'relaxed' | 'impish' | 'lax'
+  | 'timid' | 'hasty' | 'serious' | 'jolly' | 'naive'
+  | 'modest' | 'mild' | 'quiet' | 'bashful' | 'rash'
+  | 'calm' | 'gentle' | 'sassy' | 'careful' | 'quirky';
+
+export interface BaseStats {
+  hp: number;
+  attack: number;
+  defense: number;
+  specialAttack: number;
+  specialDefense: number;
+  speed: number;
+}
+
+export interface IVs extends BaseStats {}
+export interface EVs extends BaseStats {}
+
+export interface StatusCondition {
+  kind: StatusAilment;
+  /** Sleep turns remaining */
+  turnsLeft?: number;
+  /** Toxic damage counter */
+  toxicCounter?: number;
+}
+
+export interface StoredMove {
+  slug: string;
+  name: string;
+  type: string;
+  power: number;
+  accuracy: number;
+  category: MoveCategory;
+  maxPp: number;
+  statusEffect?: StatusAilment | null;
 }
 
 export interface PokemonData {
@@ -60,39 +115,30 @@ export interface PokemonData {
   shinyArtwork?: string;
   catchRate: number;
   isLegendary: boolean;
-  powerLevel: number;
+  baseStats: BaseStats;
   baseStatTotal: number;
-  /** First in-region evolution target (kept for save/back-compat). */
   evolvesToId?: number | null;
-  /** All in-region evolution branches; a random one is chosen on evolve. */
   evolvesToIds?: number[];
-  /** Modern cry audio URL. */
   cryLatest?: string;
-  /** Retro Game Boy ("legacy") cry audio URL — used for Gen 1 / Kanto. */
   cryLegacy?: string;
-  /** Gen 1 learnable move slugs (from cached /pokemon response). */
   moves?: string[];
 }
 
-/** A battle move derived from a Pokemon's type(s) and movepool. */
+/** A battle move from a Pokemon's stored moveset. */
 export interface BattleMove {
   slug: string;
   name: string;
   type: string;
-  /** Fraction of the owner's power level (0–1). Dual-type moves use 65% each. */
   power: number;
-  /** Party member that owns this move (caughtAt timestamp). */
+  accuracy: number;
+  category: MoveCategory;
+  statusEffect?: StatusAilment | null;
   ownerCaughtAt: number;
   ownerDisplayName: string;
-  /** True when this move belongs to the active (slot-0) Pokemon. */
   fromActive: boolean;
-  /** Max PP (uses) for this move. */
   maxPp: number;
-  /** Remaining PP (uses) for this move. */
   currentPp: number;
-  /** Magikarp's Splash easter egg: does nothing, plays a gag, never costs a turn. */
   splashGag?: boolean;
-  /** Shiny Magikarp's "Hollow Purple": triggers the win cinematic, never costs a turn. */
   hollowPurple?: boolean;
 }
 
@@ -105,13 +151,20 @@ export interface CaughtPokemon {
   shinySprite?: string;
   caughtAt: number;
   nickname?: string;
-  powerLevel: number;
+  level: number;
+  xp: number;
+  ivs: IVs;
+  evs: EVs;
+  nature: NatureId;
+  moves: StoredMove[];
+  status?: StatusCondition;
   evolvesToId?: number | null;
   shiny?: boolean;
-  /** Current HP; <= 0 means fainted. Defaults to max when unset (legacy saves). */
+  caughtWithBall?: CatchBallId;
   hp?: number;
-  /** Remaining PP per move slug. Missing slug = full PP. */
   pp?: Record<string, number>;
+  guestOwned?: boolean;
+  guestLocked?: boolean;
 }
 
 export interface BagItem {
@@ -128,6 +181,10 @@ export interface Badge {
   earnedAt: number;
   image?: string;
 }
+
+export type CatchGamemode = 'skill' | 'chance';
+
+export type CatchBallId = 'pokeball' | 'greatball' | 'ultraball' | 'masterball';
 
 export interface Trainer {
   name: string;
@@ -181,8 +238,15 @@ export interface ChampionRecord {
   trainerAvatar: string;
   region: string;
   party: CaughtPokemon[];
-  avgPower: number;
   date: number;
+  /** Wall-clock clear time in ms (lower is better). */
+  timeMs: number;
+  itemsUsed: number;
+  livesUsed: number;
+  revivesUsed: number;
+  faints: number;
+  /** Display-only; does not affect rank. */
+  shiniesCaught: number;
 }
 
 export interface PokedexEntry {
@@ -191,27 +255,29 @@ export interface PokedexEntry {
   name: string;
   sprite: string;
   types: string[];
-  powerLevel: number;
+  level: number;
   shiny?: boolean;
   shinySprite?: string;
+  caughtWithBall?: CatchBallId;
 }
 
 /** HP (and PP) retained for Pokémon currently sitting in the PC (out of party). */
 export interface PcStat {
   hp: number;
   pp?: Record<string, number>;
+  status?: StatusCondition;
 }
 
 /** Persisted mid-battle progress so a refresh/exit can resume the same fight. */
 export interface BattleSnapshot {
-  context: 'gym' | 'elite';
-  /** GymLeader/Elite member id of the current opponent (sanity check on resume). */
+  context: 'gym' | 'elite' | 'teamrocket';
   leaderId: string;
-  /** Elite Four stage index (0 for a Gym battle). */
   eliteStage: number;
   enemyIndex: number;
   enemyHp: number;
   fullHealUsed: boolean;
+  xAttackPhysical?: boolean;
+  xAttackSpecial?: boolean;
   log: string[];
 }
 

@@ -1,57 +1,39 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { asset } from '../utils/asset';
+import { computeCatchA, comboDifficulty } from '../utils/catchChance';
+import type { CatchBallId } from '../types/game';
 
 interface CatchComboProps {
-  powerLevel: number;
+  catchRate: number;
+  ballId: CatchBallId;
+  level: number;
   isLegendary?: boolean;
-  zoneBonus?: number;
-  speedMult?: number;
   ballSprite?: string;
   onResult: (success: boolean) => void;
   disabled?: boolean;
 }
 
-const MAX_HITS = 5;
 const ZONE_SHRINK = 0.82;
 const SPEED_BOOST = 1.18;
-// Legendaries get a bigger starting zone and a gentler per-hit shrink so the
-// 5-combo is challenging but fair (speed is intentionally left untouched).
-const LEGENDARY_ZONE_MULT = 1.15;
 const LEGENDARY_ZONE_SHRINK = 0.92;
-const LEGENDARY_SPEED_MULT = 1.25;
-
-function safePower(power: number): number {
-  return Number.isFinite(power) ? power : 0.3;
-}
-
-function computeRequiredHits(power: number, isLegendary: boolean): number {
-  if (isLegendary) return MAX_HITS;
-  return Math.min(MAX_HITS, Math.max(2, 2 + Math.round(safePower(power) * 3)));
-}
-
-function computeBaseZone(power: number, isLegendary: boolean): number {
-  const zone = 0.3 - safePower(power) * 0.16;
-  return isLegendary ? zone * LEGENDARY_ZONE_MULT : zone;
-}
-
-function computeBaseSpeed(power: number, isLegendary: boolean): number {
-  const speed = 0.01 + safePower(power) * 0.018;
-  return isLegendary ? speed * LEGENDARY_SPEED_MULT : speed;
-}
 
 export function CatchCombo({
-  powerLevel,
+  catchRate,
+  ballId,
+  level,
   isLegendary = false,
-  zoneBonus = 0,
-  speedMult = 1,
   ballSprite,
   onResult,
   disabled,
 }: CatchComboProps) {
-  const power = safePower(powerLevel);
-  const requiredHits = useMemo(() => computeRequiredHits(power, isLegendary), [power, isLegendary]);
-  const baseZone = useMemo(() => computeBaseZone(power, isLegendary), [power, isLegendary]);
-  const baseSpeed = useMemo(() => computeBaseSpeed(power, isLegendary), [power, isLegendary]);
+  const catchA = useMemo(() => computeCatchA(catchRate, ballId), [catchRate, ballId]);
+  const difficulty = useMemo(
+    () => comboDifficulty(catchA, level, isLegendary),
+    [catchA, level, isLegendary],
+  );
+  const requiredHits = difficulty.requiredHits;
+  const baseZone = difficulty.zoneSize;
+  const baseSpeed = 0.01 * difficulty.speedMult;
 
   const [hits, setHits] = useState(0);
   const [position, setPosition] = useState(0.5);
@@ -60,9 +42,9 @@ export function CatchCombo({
   const [failed, setFailed] = useState(false);
 
   const shrink = isLegendary ? LEGENDARY_ZONE_SHRINK : ZONE_SHRINK;
-  const zoneSize = Math.min(0.9, baseZone * (1 + zoneBonus) * Math.pow(shrink, hits));
+  const zoneSize = Math.min(0.9, baseZone * Math.pow(shrink, hits));
   const zoneStart = 0.5 - zoneSize / 2;
-  const speed = baseSpeed * speedMult * Math.pow(SPEED_BOOST, hits);
+  const speed = baseSpeed * Math.pow(SPEED_BOOST, hits);
 
   useEffect(() => {
     if (locked || disabled || failed) return;
@@ -107,8 +89,6 @@ export function CatchCombo({
     }, 180);
   }
 
-  // Keep a ref to the latest handler so a single stable window listener can
-  // lock the ball from a click anywhere on the screen without re-binding.
   const handleLockRef = useRef(handleLock);
   handleLockRef.current = handleLock;
 
@@ -147,7 +127,7 @@ export function CatchCombo({
             style={{ left: `${position * 100}%` }}
           />
         </div>
-        <span className="catch-combo__power">Power {Math.round(power * 100)}</span>
+        <span className="catch-combo__power">Lv. {level} · Catch rate {catchRate}</span>
       </button>
     </div>
   );

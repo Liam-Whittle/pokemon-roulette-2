@@ -1,19 +1,24 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import { CatchChance } from '../components/CatchChance';
 import { CatchCombo } from '../components/CatchCombo';
 import { SpriteCard } from '../components/SpriteCard';
 import { Confetti } from '../components/Confetti';
 import { Wheel } from '../components/Wheel';
 import { ITEM_SPRITES } from '../data/icons';
 import { SHINY_WHEEL_CHARM_SEGMENTS, SHINY_WHEEL_SEGMENTS } from '../data/pools';
+import { publishHostActivity, publishHostWheelSpin } from '../multiplayer/publish';
+import { isHostConnected, useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
 import { useGameStore } from '../store/useGameStore';
 import { resolveEncounterPokemon, resetEncounterSession } from '../utils/encounterSession';
 import { playSfx } from '../utils/sound';
 import { playClip, stopClips } from '../utils/music';
 import { asset } from '../utils/asset';
+import { getSpeciesCatchRate, encounterLevelForBadges } from '../utils/xp';
+import { catchProbability, formatCatchPercent } from '../utils/catchChance';
 import type { ActivityType, PokemonData } from '../types/game';
 
-type CatchPhase = 'ball' | 'catch' | 'caught' | 'shiny' | 'done';
+type CatchPhase = 'ball' | 'catch' | 'chance' | 'caught' | 'shiny' | 'done';
 type BallId = 'pokeball' | 'greatball' | 'ultraball' | 'masterball';
 
 const BALL_OPTIONS: { id: BallId; label: string; sprite: string }[] = [
@@ -46,27 +51,20 @@ function encounterFlavor(activity: ActivityType | null, isLegendary: boolean): s
   return 'A wild Pokémon appeared!';
 }
 
-function ballModifiers(ballId: BallId): { zoneBonus: number; speedMult: number } {
-  switch (ballId) {
-    case 'greatball':
-      return { zoneBonus: 0.1, speedMult: 1 };
-    case 'ultraball':
-      return { zoneBonus: 0.1, speedMult: 0.9 };
-    default:
-      return { zoneBonus: 0, speedMult: 1 };
-  }
-}
-
 export function CatchScreen() {
   const currentActivity = useGameStore((s) => s.currentActivity);
   const bag = useGameStore((s) => s.bag);
   const lastCaughtAt = useGameStore((s) => s.lastCaughtAt);
+  const lastCaughtId = useGameStore((s) => s.lastCaughtId);
+  const catchGamemode = useGameStore((s) => s.catchGamemode) ?? 'skill';
   const catchPokemon = useGameStore((s) => s.catchPokemon);
   const consumeItem = useGameStore((s) => s.consumeItem);
   const setShinyOnCatch = useGameStore((s) => s.setShinyOnCatch);
   const setLastResult = useGameStore((s) => s.setLastResult);
   const setScreen = useGameStore((s) => s.setScreen);
+  const badges = useGameStore((s) => s.badges);
   const muted = useGameStore((s) => s.muted);
+  const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
 
   const [pokemon, setPokemon] = useState<PokemonData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -76,7 +74,11 @@ export function CatchScreen() {
   const [showConfetti, setShowConfetti] = useState(false);
   const [shinyResult, setShinyResult] = useState<'shiny' | 'normal' | null>(null);
   const [confirmMasterBall, setConfirmMasterBall] = useState(false);
+  const [pokemonAbsorbed, setPokemonAbsorbed] = useState(false);
+  const [throwKey, setThrowKey] = useState(0);
+  const [chanceStatus, setChanceStatus] = useState('Throwing...');
 
+  const isChanceMode = catchGamemode === 'chance';
   const hasShinyCharm = (bag.find((item) => item.id === 'shinycharm')?.quantity ?? 0) > 0;
   const ownedBalls = BALL_OPTIONS.filter(
     (ball) => (bag.find((item) => item.id === ball.id)?.quantity ?? 0) > 0,
@@ -102,6 +104,40 @@ export function CatchScreen() {
     }
   }, [loading, pokemon, muted]);
 
+  useEffect(() => {
+    if (!isHostConnected()) return;
+    const applyShiny = (shiny: boolean) => {
+      const game = useGameStore.getState();
+      if (shiny && (game.lastCaughtAt != null || game.lastCaughtId != null)) {
+        setShinyOnCatch(game.lastCaughtAt ?? 0);
+        setShinyResult('shiny');
+        if (!muted) playClip(asset('sounds/pokemon_caught.mp3'));
+        setShowConfetti(true);
+      }
+      useMultiplayerStore.getState().setOutcome(
+        shiny ? 'Your friend rolled a shiny!' : "Friend's shiny roll: not shiny.",
+      );
+      useMultiplayerStore.getState().setAwaitingGuest(null);
+      const mon = pokemon;
+      if (mon) {
+        publishHostActivity({
+          kind: 'catch',
+          title: shiny ? 'Shiny Caught!' : 'Caught!',
+          message: shiny
+            ? `✨ Friend rolled shiny — ${mon.displayName} is shiny!`
+            : `${mon.displayName} joined the party.`,
+          success: true,
+          pokemonName: mon.displayName,
+          pokemonSprite: shiny && mon.shinySprite ? mon.shinySprite : mon.sprite,
+          shiny,
+        });
+      }
+      setPhase('done');
+    };
+    useMultiplayerStore.getState().setShinyApplyHandler(applyShiny);
+    return () => useMultiplayerStore.getState().setShinyApplyHandler(null);
+  }, [muted, setShinyOnCatch, pokemon]);
+
   function resultActivityType(): ActivityType {
     if (currentActivity === 'fishing') return 'fishing';
     if (currentActivity === 'tallgrass') return 'tallgrass';
@@ -114,11 +150,24 @@ export function CatchScreen() {
     setScreen('hub');
   }
 
-  function beginCatchSuccess() {
+  function beginCatchSuccess(ballId: BallId) {
     if (!pokemon) return;
-    catchPokemon(pokemon);
+    setPokemonAbsorbed(false);
+    catchPokemon(pokemon, undefined, ballId);
     setResolved(true);
     setPhase('shiny');
+  }
+
+  function startThrow(ballId: BallId) {
+    setSelectedBall(ballId);
+    setPokemonAbsorbed(false);
+    setChanceStatus('Throwing...');
+    setThrowKey((k) => k + 1);
+    if (isChanceMode) {
+      setPhase('chance');
+    } else {
+      setPhase('catch');
+    }
   }
 
   function handleSelectBall(ballId: BallId) {
@@ -127,22 +176,25 @@ export function CatchScreen() {
       return;
     }
     if (!consumeItem(ballId, 1)) return;
-    setSelectedBall(ballId);
-    setPhase('catch');
+    startThrow(ballId);
   }
 
   function confirmMasterBallUse() {
     setConfirmMasterBall(false);
     if (!consumeItem('masterball', 1)) return;
+    if (isChanceMode) {
+      startThrow('masterball');
+      return;
+    }
     setSelectedBall('masterball');
-    beginCatchSuccess();
+    beginCatchSuccess('masterball');
   }
 
   function handleComboResult(success: boolean) {
-    if (!pokemon) return;
+    if (!pokemon || !selectedBall) return;
     setResolved(success);
     if (success) {
-      beginCatchSuccess();
+      beginCatchSuccess(selectedBall);
     } else {
       playSfx('fail', muted);
       setLastResult({
@@ -150,18 +202,80 @@ export function CatchScreen() {
         success: false,
         message: `${pokemon.displayName} ran away!`,
       });
+      publishHostActivity({
+        kind: 'catch',
+        title: 'Catch failed',
+        message: `${pokemon.displayName} ran away!`,
+        success: false,
+        pokemonName: pokemon.displayName,
+        pokemonSprite: pokemon.sprite,
+      });
       setPhase('done');
     }
   }
 
+  function handleChanceResult(success: boolean) {
+    if (!pokemon || !selectedBall) return;
+    if (success) {
+      beginCatchSuccess(selectedBall);
+      return;
+    }
+    // Pokémon escapes the ball — try another throw.
+    publishHostActivity({
+      kind: 'catch',
+      title: 'Ball broke free',
+      message: `${pokemon.displayName} broke free! Try another ball.`,
+      success: false,
+      pokemonName: pokemon.displayName,
+      pokemonSprite: pokemon.sprite,
+    });
+    setPokemonAbsorbed(false);
+    setSelectedBall(null);
+    setPhase('ball');
+  }
+
   function handleShinyLand(segment: { id: string }) {
     const isShiny = segment.id === 'shiny';
+    const shinySegments = hasShinyCharm ? SHINY_WHEEL_CHARM_SEGMENTS : SHINY_WHEEL_SEGMENTS;
+    publishHostWheelSpin({
+      kind: 'shiny',
+      title: 'Shiny Check',
+      segments: shinySegments,
+      result: { id: segment.id, label: segment.id === 'shiny' ? 'Shiny' : 'Normal' },
+    });
+
     setShinyResult(isShiny ? 'shiny' : 'normal');
-    if (isShiny && lastCaughtAt) {
-      setShinyOnCatch(lastCaughtAt);
+    // Party catches use lastCaughtAt; PC-only duplicate power-boosts use lastCaughtId.
+    if (isShiny && (lastCaughtAt != null || lastCaughtId != null)) {
+      setShinyOnCatch(lastCaughtAt ?? 0);
     }
     if (!muted) playClip(asset('sounds/pokemon_caught.mp3'));
     setShowConfetti(true);
+
+    // Guest gets an extra shiny roll only when the catch is not already shiny.
+    if (!isShiny && isHostConnected()) {
+      const game = useGameStore.getState();
+      useMultiplayerStore
+        .getState()
+        .requestShinyRoll(hasShinyCharm, game.lastCaughtAt, game.lastCaughtId);
+      return;
+    }
+
+    if (pokemon) {
+      publishHostActivity({
+        kind: 'catch',
+        title: isShiny ? 'Shiny Caught!' : 'Caught!',
+        message: isShiny
+          ? `✨ ${pokemon.displayName} joined the party as a shiny!`
+          : `${pokemon.displayName} joined the party.`,
+        success: true,
+        pokemonName: pokemon.displayName,
+        pokemonSprite:
+          isShiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite,
+        shiny: isShiny,
+      });
+    }
+
     setPhase('done');
   }
 
@@ -184,8 +298,8 @@ export function CatchScreen() {
     );
   }
 
-  const safePower = Number.isFinite(pokemon.powerLevel) ? pokemon.powerLevel : 0.3;
-  const modifiers = selectedBall ? ballModifiers(selectedBall) : { zoneBonus: 0, speedMult: 1 };
+  const catchRate = getSpeciesCatchRate(pokemon.id);
+  const encounterLevel = encounterLevelForBadges(badges.length);
   const shinyWheelSegments = hasShinyCharm ? SHINY_WHEEL_CHARM_SEGMENTS : SHINY_WHEEL_SEGMENTS;
   const sceneVariant =
     currentActivity === 'fishing'
@@ -209,9 +323,37 @@ export function CatchScreen() {
           <p className={`catch-flavor ${pokemon.isLegendary ? 'catch-flavor--legendary' : ''}`}>
             {encounterFlavor(currentActivity, pokemon.isLegendary)}
           </p>
-          <SpriteCard pokemon={pokemon} size="lg" shiny={shinyResult === 'shiny'} />
+          <div className="catch-scene__sprite-area">
+            <motion.div
+              className="catch-scene__sprite-wrap"
+              animate={{
+                opacity: pokemonAbsorbed ? 0 : 1,
+                scale: pokemonAbsorbed ? 0.2 : 1,
+              }}
+              transition={{ duration: 0.35 }}
+            >
+              <div className="catch-scene__sprite-card">
+                <span className="catch-scene__level">Lv. {encounterLevel}</span>
+                <SpriteCard pokemon={pokemon} size="lg" shiny={shinyResult === 'shiny'} />
+              </div>
+            </motion.div>
+            {phase === 'chance' && selectedBall && (
+              <CatchChance
+                key={throwKey}
+                ballId={selectedBall}
+                ballSprite={ITEM_SPRITES[selectedBall]}
+                catchRate={catchRate}
+                muted={muted}
+                onAbsorb={() => setPokemonAbsorbed(true)}
+                onResult={handleChanceResult}
+                onStatusChange={setChanceStatus}
+              />
+            )}
+          </div>
           <p className="catch-power">
-            Catch difficulty scales with Power {Math.round(safePower * 100)}
+            {isChanceMode
+              ? `Catch rate ${catchRate} at Lv. ${encounterLevel}`
+              : `Timing difficulty from catch rate ${catchRate} at Lv. ${encounterLevel}`}
             {pokemon.isLegendary ? ' — Legendary!' : ''}.
           </p>
 
@@ -224,16 +366,20 @@ export function CatchScreen() {
                 <div className="ball-picker__grid">
                   {ownedBalls.map((ball) => {
                     const qty = bag.find((item) => item.id === ball.id)?.quantity ?? 0;
+                    const estChance = isChanceMode
+                      ? formatCatchPercent(catchProbability(catchRate, ball.id))
+                      : null;
                     return (
                       <button
                         key={ball.id}
                         type="button"
                         className="ball-picker__btn"
-                        title={`${ball.label} (×${qty})`}
+                        title={`${ball.label} (×${qty})${estChance ? ` — ${estChance} catch` : ''}`}
                         onClick={() => handleSelectBall(ball.id)}
                       >
                         <BallIcon id={ball.id} sprite={ball.sprite} label={ball.label} className="ball-picker__icon" />
                         <span className="ball-picker__qty">×{qty}</span>
+                        {estChance && <span className="ball-picker__chance">{estChance}</span>}
                       </button>
                     );
                   })}
@@ -245,38 +391,49 @@ export function CatchScreen() {
             </div>
           )}
 
-          {phase === 'catch' && (
+          {phase === 'chance' && (
+            <div className="ball-picker catch-chance-slot" aria-live="polite">
+              <p className="catch-chance-slot__status">{chanceStatus}</p>
+            </div>
+          )}
+
+          {phase === 'catch' && selectedBall && (
             <CatchCombo
-              powerLevel={safePower}
+              catchRate={catchRate}
+              ballId={selectedBall}
+              level={encounterLevel}
               isLegendary={pokemon.isLegendary}
-              zoneBonus={modifiers.zoneBonus}
-              speedMult={modifiers.speedMult}
-              ballSprite={selectedBall ? ITEM_SPRITES[selectedBall] : undefined}
+              ballSprite={ITEM_SPRITES[selectedBall]}
               onResult={handleComboResult}
             />
           )}
 
-          {phase === 'done' && (
-            <div className="catch-result-panel">
-              <h2 className="catch-result__title">
-                {resolved ? (shinyResult === 'shiny' ? 'Shiny Caught!' : 'Caught!') : 'Escaped!'}
-              </h2>
-              <p className="catch-result__msg">
-                {resolved
-                  ? shinyResult === 'shiny'
-                    ? `✨ ${pokemon.displayName} joined your party as a shiny!`
-                    : `${pokemon.displayName} joined your party.`
-                  : `${pokemon.displayName} got away.`}
-              </p>
-              <button type="button" className="btn btn--primary" onClick={goHub}>
-                Back to Hub
-              </button>
-            </div>
-          )}
+          {phase === 'done' && (() => {
+            const name = pokemon.displayName;
+            let resultMsg = `${name} got away.`;
+            if (resolved) {
+              if (shinyResult === 'shiny') {
+                resultMsg = `✨ ${name} joined your party as a shiny!`;
+              } else {
+                resultMsg = `${name} joined your party.`;
+              }
+            }
+            return (
+              <div className="catch-result-panel">
+                <h2 className="catch-result__title">
+                  {resolved ? (shinyResult === 'shiny' ? 'Shiny Caught!' : 'Caught!') : 'Escaped!'}
+                </h2>
+                <p className="catch-result__msg">{resultMsg}</p>
+                <button type="button" className="btn btn--primary" onClick={goHub}>
+                  Back to Hub
+                </button>
+              </div>
+            );
+          })()}
         </motion.div>
       </div>
 
-      {phase === 'shiny' && (
+      {phase === 'shiny' && awaitingGuest !== 'shinyRoll' && (
         <div className="battle-modal__backdrop">
           <div className="battle-modal shiny-wheel-modal">
             <h2 className="battle-modal__title">Shiny Check!</h2>

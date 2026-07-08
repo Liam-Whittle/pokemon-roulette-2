@@ -1,34 +1,78 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchPokemon, fetchPokemonBatch } from '../api/pokeapi';
-import { buildMovesForPokemon, buildPartyMoves } from '../data/moves';
-import { getTypeEffectiveness, getEffectivenessLabel, TYPE_COLORS } from '../data/typeChart';
+import { fetchPokemonBatch } from '../api/pokeapi';
+import {
+  buildActiveMoves,
+  computeDamage,
+  formatMovePowerDisplay,
+  isFixedDamageMove,
+  moveKey,
+  rollHit,
+} from '../data/moves';
+import { calculateMoveDamage } from '../data/battleArenaEffects';
+import {
+  applyVolatilesPatch,
+  effectiveAccuracy,
+  getMultiHitCount,
+  mergeStageDelta,
+  resolvePostDamage,
+  resolveStatusMove,
+  type StatStages,
+} from '../data/battleMoveResolver';
+import {
+  CHARGE_MOVE_SLUGS,
+  confusionSelfDamagePower,
+  getMovePriority,
+  isConfused,
+  revertTransform,
+  rollConfusionSelfHit,
+  storedMoveFromSlug,
+  type TransformSnapshot,
+} from '../data/moveEffects';
+import {
+  clearVolatiles,
+  EMPTY_VOLATILES,
+  isThrashLocked,
+  isTrapped,
+  tickVolatileTurns,
+  type BattleVolatiles,
+} from '../data/battleVolatiles';
+import { getTypeEffectiveness, getEffectivenessChipLabel, buildHitBattleMessage, TYPE_COLORS } from '../data/typeChart';
 import { SidePanel } from './SidePanel';
+import { BattleEffectBadges, hasVisibleBattleEffects } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { ItemIcon } from './ItemIcon';
 import { MagikarpSplashModal } from './MagikarpSplashModal';
 import { HollowPurpleCinematic } from './HollowPurpleCinematic';
+import { PokemonDetailModal } from './PokemonDetailModal';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { playClip, stopClips } from '../utils/music';
 import { PokeCenterVisits } from './PokeDollar';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import {
+  battleGifOnError,
   imgFallback,
-  localPokemonSprite,
-  remoteBattleGif,
+  localBattleGif,
   remoteBadge,
   remoteTrainerSprite,
 } from '../utils/localAssets';
+import { buildEnemyTeam } from '../utils/enemyMon';
+import { currentHp, effectiveSpeed, isFainted, maxHpForMon } from '../utils/stats';
 import {
-  computeDamage,
-  isFainted,
-  maxHpFor,
-  moveKey,
-  rollCrit,
-  safePower,
-  XATTACK_BONUS,
-} from '../utils/battle';
-import type { Badge, BattleMove, GymLeader, PokemonData } from '../types/game';
+  isAsleep,
+  isFrozen,
+  isFullyParalyzed,
+  thawFromFireMove,
+  tickSleep,
+  tickStatusDamage,
+  tryThaw,
+  clearAllStatuses,
+} from '../utils/status';
+import { chaosOutcomeLabel } from '../multiplayer/chaosWheel';
+import type { ChaosEffectId, SpectateBattleMove } from '../multiplayer/protocol';
+import { useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
+import { pickRandom } from '../data/pools';
+import type { Badge, BattleMove, CaughtPokemon, GymLeader, PokemonData, StoredMove } from '../types/game';
 
 interface BattleArenaProps {
   title: string;
@@ -38,9 +82,15 @@ interface BattleArenaProps {
   winBadge?: Badge;
   finalVictory?: boolean;
   /** Which battle flow this is, for resume-after-refresh snapshots. */
-  battleContext: 'gym' | 'elite';
+  battleContext: 'gym' | 'elite' | 'teamrocket';
   /** Elite Four stage index (0 for a Gym battle). */
   eliteStage?: number;
+  /** When false, defeat does not cost a life (Team Rocket). Default true. */
+  loseLifeOnDefeat?: boolean;
+  /** When false, defeat does not full-heal the party (Team Rocket). Default true. */
+  healAllOnDefeat?: boolean;
+  /** Called on defeat before returning to hub (e.g. restore HP snapshot, steal Pokémon). */
+  onBeforeDefeatExit?: () => void;
 }
 
 type BattlePhase =
@@ -50,6 +100,16 @@ type BattlePhase =
   | 'forcedSwap'
   | 'victory'
   | 'result';
+
+type PlayerAttackResult = 'enemy_fainted' | 'continue' | 'abort';
+type PendingTurn = { kind: 'solar-charge' | 'hyper-recharge' | 'charge'; move: BattleMove };
+type EnemyPendingTurn = { kind: 'solar-charge' | 'hyper-recharge' | 'charge'; move: StoredMove };
+
+const ZERO_STAGES: StatStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
+
+function stageMult(stage: number): number {
+  return stage >= 0 ? (2 + stage) / 2 : 2 / (2 - stage);
+}
 
 function delay(ms: number): Promise<void> {
   return new Promise((resolve) => window.setTimeout(resolve, ms));
@@ -71,6 +131,13 @@ function HpBar({ current, max, label }: { current: number; max: number; label?: 
   );
 }
 
+function pickEnemyMove(enemyMon: CaughtPokemon): StoredMove | null {
+  const damaging = enemyMon.moves.filter((m) => m.category !== 'status' && m.power > 0);
+  const pool = damaging.length > 0 ? damaging : enemyMon.moves;
+  if (pool.length === 0) return null;
+  return pool[Math.floor(Math.random() * pool.length)];
+}
+
 export function BattleArena({
   title,
   leader,
@@ -80,6 +147,9 @@ export function BattleArena({
   finalVictory = false,
   battleContext,
   eliteStage = 0,
+  loseLifeOnDefeat = true,
+  healAllOnDefeat = true,
+  onBeforeDefeatExit,
 }: BattleArenaProps) {
   const muted = useGameStore((s) => s.muted);
   const showTypeEffectiveness = useGameStore((s) => s.showTypeEffectiveness);
@@ -101,8 +171,11 @@ export function BattleArena({
   const setFullHealUsedInBattle = useGameStore((s) => s.setFullHealUsedInBattle);
   const resetFullHealBattle = useGameStore((s) => s.resetFullHealBattle);
   const fullHealUsedInBattle = useGameStore((s) => s.fullHealUsedInBattle);
+  const grantXpAllPartyAndPc = useGameStore((s) => s.grantXpAllPartyAndPc);
+  const markSeen = useGameStore((s) => s.markSeen);
 
-  const [enemyTeam, setEnemyTeam] = useState<PokemonData[]>([]);
+  const [enemyTeam, setEnemyTeam] = useState<CaughtPokemon[]>([]);
+  const [enemySpeciesById, setEnemySpeciesById] = useState<Record<number, PokemonData>>({});
   const [loading, setLoading] = useState(true);
   const [enemyIndex, setEnemyIndex] = useState(0);
   const [enemyHp, setEnemyHp] = useState(0);
@@ -110,17 +183,38 @@ export function BattleArena({
   const [message, setMessage] = useState('');
   const [log, setLog] = useState<string[]>([]);
   const [processing, setProcessing] = useState(false);
-  const [xAttackBuff, setXAttackBuff] = useState<string | null>(null);
+  const [selectedEnemyDetail, setSelectedEnemyDetail] = useState<CaughtPokemon | null>(null);
+  const [xAttackPhysical, setXAttackPhysical] = useState(false);
+  const [xAttackSpecial, setXAttackSpecial] = useState(false);
   const [shake, setShake] = useState(false);
   const [critFlash, setCritFlash] = useState(false);
   const [damagePopup, setDamagePopup] = useState<{ text: string; side: 'player' | 'enemy' } | null>(
     null,
   );
-  const [learnsets, setLearnsets] = useState<Map<number, string[]>>(new Map());
   const [splashGag, setSplashGag] = useState<{ sprite: string; name: string } | null>(null);
   const [hollowPurple, setHollowPurple] = useState(false);
+  const [playerPendingTurn, setPlayerPendingTurn] = useState<PendingTurn | null>(null);
+  const [enemyPendingTurn, setEnemyPendingTurn] = useState<EnemyPendingTurn | null>(null);
+  const [playerStages, setPlayerStages] = useState<StatStages>(ZERO_STAGES);
+  const [enemyStages, setEnemyStages] = useState<StatStages>(ZERO_STAGES);
+  const [playerVolatiles, setPlayerVolatiles] = useState<BattleVolatiles>(EMPTY_VOLATILES);
+  const [enemyVolatiles, setEnemyVolatiles] = useState<BattleVolatiles>(EMPTY_VOLATILES);
+  const [transformSnapshot, setTransformSnapshot] = useState<TransformSnapshot | null>(null);
+  const [playerLastMoveSlug, setPlayerLastMoveSlug] = useState<string | null>(null);
+  const [enemyLastMoveSlug, setEnemyLastMoveSlug] = useState<string | null>(null);
 
   const logRef = useRef<HTMLDivElement | null>(null);
+  const onMoveClickRef = useRef<(move: BattleMove) => Promise<void>>(async () => {});
+  const enemyAttackRef = useRef<() => Promise<boolean>>(async () => false);
+  const executePlayerSwitchRef = useRef<(caughtAt: number) => Promise<void>>(async () => {});
+  const resolveTurnRef = useRef<(move: BattleMove, hostUsedAttack: boolean) => Promise<void>>(async () => {});
+  const pendingAutoRunRef = useRef(false);
+  const thrashAutoRunRef = useRef<string | null>(null);
+
+  const mpConnected = useMultiplayerStore((s) => s.role === 'host' && s.connectionStatus === 'connected');
+  const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
+  const outcome = useMultiplayerStore((s) => s.outcome);
+  const xAttackAllActive = useMultiplayerStore((s) => s.xAttackAllActive);
 
   const say = useCallback((msg: string) => {
     setMessage(msg);
@@ -128,34 +222,50 @@ export function BattleArena({
   }, []);
 
   const enemy = enemyTeam[enemyIndex] ?? null;
-  const enemyMaxHp = enemy ? maxHpFor(enemy.powerLevel) : 0;
+  const enemyMaxHp = enemy ? maxHpForMon(enemy) : 0;
   const activeMember = party[0];
+  const guestControlsActive = !!(
+    mpConnected &&
+    activeMember?.guestOwned &&
+    !activeMember.guestLocked &&
+    activeMember &&
+    !isFainted(activeMember)
+  );
+  const hostInputLocked =
+    guestControlsActive || awaitingGuest != null || !!outcome;
 
   const xAttackItem = bag.find((item) => item.id === 'xattack');
   const xAttackCount = xAttackItem?.quantity ?? 0;
 
-  const partyMoves = useMemo(
-    () => buildPartyMoves(party, learnsets),
-    [party, learnsets],
+  const activeMoves = useMemo(
+    () => (activeMember ? buildActiveMoves(activeMember) : []),
+    [activeMember],
   );
 
   const hasUsablePokemon = party.some((m) => !isFainted(m));
+  const hasBenchSwitch = party.some((m, i) => i !== 0 && !isFainted(m) && !m.guestLocked);
 
-  // True if any non-fainted party member still has a move with PP to spend. When
-  // this is false the player can't act at all and forfeits the battle (loses a life).
-  const hasAnyPpMove = partyMoves.some((m) => {
-    const owner = party.find((p) => p.caughtAt === m.ownerCaughtAt);
-    return !!owner && !isFainted(owner) && m.currentPp > 0;
-  });
+  const hasAnyPpMove = activeMoves.some((m) => m.currentPp > 0);
 
-  const loadLearnsets = useCallback(async () => {
-    const ids = [...new Set(useGameStore.getState().party.map((m) => m.id))];
-    const datas = await Promise.all(ids.map((id) => fetchPokemon(id).catch(() => null)));
-    const map = new Map<number, string[]>();
-    datas.forEach((d) => {
-      if (d) map.set(d.id, d.moves ?? []);
-    });
-    setLearnsets(map);
+  const patchEnemy = useCallback(
+    (patch: Partial<CaughtPokemon>) => {
+      setEnemyTeam((prev) =>
+        prev.map((m, i) => (i === enemyIndex ? { ...m, ...patch } : m)),
+      );
+    },
+    [enemyIndex],
+  );
+
+  const setPartyMemberStatus = useCallback((caughtAt: number, status: CaughtPokemon['status']) => {
+    useGameStore.setState((s) => ({
+      party: s.party.map((m) => (m.caughtAt === caughtAt ? { ...m, status } : m)),
+    }));
+  }, []);
+
+  const patchPartyMember = useCallback((caughtAt: number, patch: Partial<CaughtPokemon>) => {
+    useGameStore.setState((s) => ({
+      party: s.party.map((m) => (m.caughtAt === caughtAt ? { ...m, ...patch } : m)),
+    }));
   }, []);
 
   // Load the enemy team once per leader. This must NOT depend on party state,
@@ -164,8 +274,30 @@ export function BattleArena({
     let active = true;
     setLoading(true);
     const enemyIds = leader.pokemon.map((p) => p.id);
-    fetchPokemonBatch(enemyIds).then((team) => {
+    const partyAtBattleStart = useGameStore.getState().party;
+    const avgPartyLevel =
+      partyAtBattleStart.length > 0
+        ? Math.round(
+            partyAtBattleStart.reduce((sum, member) => sum + member.level, 0) / partyAtBattleStart.length,
+          )
+        : null;
+    const eliteBonus = leader.id === 'champion' ? 5 : 2;
+    const scaledLevel =
+      avgPartyLevel == null
+        ? null
+        : Math.max(1, Math.min(100, avgPartyLevel + (battleContext === 'elite' ? eliteBonus : 0)));
+    const levels =
+      scaledLevel == null || battleContext === 'teamrocket'
+        ? leader.pokemon.map((p) => p.level)
+        : leader.pokemon.map(() => scaledLevel);
+    fetchPokemonBatch(enemyIds).then((speciesData) => {
       if (!active) return;
+      const speciesMap: Record<number, PokemonData> = {};
+      for (const species of speciesData) {
+        speciesMap[species.id] = species;
+      }
+      setEnemySpeciesById(speciesMap);
+      const team = buildEnemyTeam(speciesData, levels);
       setEnemyTeam(team);
 
       const snap = useGameStore.getState().battleSnapshot;
@@ -175,31 +307,47 @@ export function BattleArena({
         snap.leaderId === leader.id &&
         snap.eliteStage === eliteStage;
 
-      // The Full Heal allowance is per Gym battle, but spans the whole Elite Four
-      // run — so only reset it for a Gym or the first Elite member (stage 0).
       const startFresh = () => {
         setEnemyIndex(0);
-        setEnemyHp(maxHpFor(team[0]?.powerLevel ?? 0.3));
+        setEnemyHp(team[0] ? maxHpForMon(team[0]) : 0);
+        setXAttackPhysical(false);
+        setXAttackSpecial(false);
+        setPlayerPendingTurn(null);
+        setEnemyPendingTurn(null);
+        setPlayerStages(ZERO_STAGES);
+        setEnemyStages(ZERO_STAGES);
+        setPlayerVolatiles(clearVolatiles());
+        setEnemyVolatiles(clearVolatiles());
+        setTransformSnapshot(null);
+        setPlayerLastMoveSlug(null);
+        setEnemyLastMoveSlug(null);
+        setPhase('prep');
+        setMessage('');
+        setLog([]);
+        setProcessing(false);
         if (battleContext === 'gym' || eliteStage === 0) resetFullHealBattle();
       };
 
       if (canResume && snap) {
         let idx = snap.enemyIndex;
         let hp = snap.enemyHp;
-        // If the snapshot was taken the instant an enemy fainted, advance past it.
         if (hp <= 0) {
           idx += 1;
-          hp = maxHpFor(team[idx]?.powerLevel ?? 0.3);
+          hp = maxHpForMon(team[idx] ?? team[0]);
         }
         if (idx >= team.length) {
-          // Nothing left to resume against — start a fresh battle.
           startFresh();
         } else {
           setEnemyIndex(idx);
           setEnemyHp(hp);
           setLog(snap.log);
           setFullHealUsedInBattle(snap.fullHealUsed);
+          setXAttackPhysical(!!snap.xAttackPhysical);
+          setXAttackSpecial(!!snap.xAttackSpecial);
           setPhase('choose');
+          const resumed = team[idx];
+          const resumedSpecies = resumed ? speciesMap[resumed.id] : null;
+          if (resumedSpecies) markSeen(resumedSpecies);
         }
       } else {
         startFresh();
@@ -209,10 +357,8 @@ export function BattleArena({
     return () => {
       active = false;
     };
-  }, [leader, battleContext, eliteStage, resetFullHealBattle, setFullHealUsedInBattle]);
+  }, [leader, battleContext, eliteStage, resetFullHealBattle, setFullHealUsedInBattle, markSeen]);
 
-  // Persist progress (from the moment the battle screen is ready) so a refresh or
-  // exit resumes this same fight instead of dumping the player back at the hub.
   useEffect(() => {
     if (loading || phase === 'victory' || phase === 'result') return;
     saveBattleSnapshot({
@@ -222,6 +368,8 @@ export function BattleArena({
       enemyIndex,
       enemyHp,
       fullHealUsed: fullHealUsedInBattle,
+      xAttackPhysical,
+      xAttackSpecial,
       log,
     });
   }, [
@@ -231,16 +379,13 @@ export function BattleArena({
     enemyHp,
     log,
     fullHealUsedInBattle,
+    xAttackPhysical,
+    xAttackSpecial,
     battleContext,
     eliteStage,
     leader.id,
     saveBattleSnapshot,
   ]);
-
-  // Load learnsets for the current party (separately, so it never touches enemy state).
-  useEffect(() => {
-    loadLearnsets();
-  }, [loadLearnsets]);
 
   useEffect(() => () => stopClips(), []);
 
@@ -250,16 +395,27 @@ export function BattleArena({
   }, [log]);
 
   const sendOutNextEnemy = useCallback(
-    (index: number, team: PokemonData[]) => {
+    (index: number, team: CaughtPokemon[]) => {
       const mon = team[index];
       if (!mon) return;
+      const max = maxHpForMon(mon);
       setEnemyIndex(index);
-      setEnemyHp(maxHpFor(mon.powerLevel));
-      setXAttackBuff(null);
+      setEnemyHp(max);
+      setXAttackPhysical(false);
+      setXAttackSpecial(false);
+      setEnemyPendingTurn(null);
+      setEnemyStages(ZERO_STAGES);
+      setEnemyVolatiles(clearVolatiles());
+      setEnemyLastMoveSlug(null);
+      setEnemyTeam((prev) =>
+        prev.map((m, i) => (i === index ? { ...m, status: undefined, hp: max } : m)),
+      );
+      const species = enemySpeciesById[mon.id];
+      if (species) markSeen(species);
       say(`${leader.name} sent out ${mon.displayName}!`);
       playSfx('battle', muted);
     },
-    [leader.name, muted],
+    [enemySpeciesById, leader.name, markSeen, muted, say],
   );
 
   const triggerShake = () => {
@@ -277,106 +433,98 @@ export function BattleArena({
     setPhase('result');
     say('Your whole party fainted!');
     playSfx('fail', muted);
-    const nextLives = loseLife();
-    reviveHealAllParty();
+    onBeforeDefeatExit?.();
+    let nextLives = lives;
+    if (loseLifeOnDefeat) {
+      nextLives = loseLife();
+      if (healAllOnDefeat) reviveHealAllParty();
+    }
     setLastResult({
       type: 'gym',
       success: false,
       message:
-        nextLives <= 0
-          ? `You ran out of lives against ${leader.name}.`
-          : `Your party was wiped. ${nextLives} ${nextLives === 1 ? 'life' : 'lives'} remain.`,
+        !loseLifeOnDefeat
+          ? `Team Rocket got away with one of your Pokémon!`
+          : nextLives <= 0
+            ? `You ran out of lives against ${leader.name}.`
+            : `Your party was wiped. ${nextLives} ${nextLives === 1 ? 'life' : 'lives'} remain.`,
     });
     await delay(1400);
     onLose();
-  }, [clearBattleSnapshot, leader.name, loseLife, muted, onLose, reviveHealAllParty, setLastResult]);
+  }, [
+    clearBattleSnapshot,
+    healAllOnDefeat,
+    leader.name,
+    lives,
+    loseLife,
+    loseLifeOnDefeat,
+    muted,
+    onBeforeDefeatExit,
+    onLose,
+    reviveHealAllParty,
+    setLastResult,
+    say,
+  ]);
 
   const handleOutOfPp = useCallback(async () => {
     clearBattleSnapshot();
     setPhase('result');
     say('Your Pokémon are all out of PP and can no longer fight!');
     playSfx('fail', muted);
-    const nextLives = loseLife();
-    reviveHealAllParty();
+    onBeforeDefeatExit?.();
+    let nextLives = lives;
+    if (loseLifeOnDefeat) {
+      nextLives = loseLife();
+      if (healAllOnDefeat) reviveHealAllParty();
+    }
     setLastResult({
       type: 'gym',
       success: false,
       message:
-        nextLives <= 0
-          ? `You ran out of lives against ${leader.name}.`
-          : `Out of PP against ${leader.name}! ${nextLives} ${nextLives === 1 ? 'life' : 'lives'} remain.`,
+        !loseLifeOnDefeat
+          ? `Team Rocket got away with one of your Pokémon!`
+          : nextLives <= 0
+            ? `You ran out of lives against ${leader.name}.`
+            : `Out of PP against ${leader.name}! ${nextLives} ${nextLives === 1 ? 'life' : 'lives'} remain.`,
     });
     await delay(1400);
     onLose();
-  }, [clearBattleSnapshot, leader.name, loseLife, muted, onLose, reviveHealAllParty, setLastResult]);
+  }, [
+    clearBattleSnapshot,
+    healAllOnDefeat,
+    leader.name,
+    lives,
+    loseLife,
+    loseLifeOnDefeat,
+    muted,
+    onBeforeDefeatExit,
+    onLose,
+    reviveHealAllParty,
+    setLastResult,
+    say,
+  ]);
 
-  // If it's the player's turn but no non-fainted Pokémon has any PP left, there's no
-  // legal action — forfeit the battle and lose a life rather than soft-locking.
   useEffect(() => {
     if (phase !== 'choose' || processing) return;
-    if (!hasUsablePokemon || hasAnyPpMove) return;
+    if (!hasUsablePokemon || hasAnyPpMove || hasBenchSwitch) return;
     handleOutOfPp();
-  }, [phase, processing, hasUsablePokemon, hasAnyPpMove, handleOutOfPp]);
-
-  const enemyAttack = useCallback(async (): Promise<boolean> => {
-    if (!enemy || !activeMember) return false;
-    const target = useGameStore.getState().party[0];
-    if (!target || isFainted(target)) return false;
-
-    const enemyMoves = buildMovesForPokemon(
-      {
-        id: enemy.id,
-        types: enemy.types,
-        moves: enemy.moves,
-        powerLevel: enemy.powerLevel,
-        displayName: enemy.displayName,
-      },
-      -1,
-      true,
-    );
-    const move = enemyMoves[Math.floor(Math.random() * enemyMoves.length)];
-    if (!move) return false;
-
-    let movePower = move.power;
-    const effectiveness = getTypeEffectiveness(move.type, target.types);
-    const crit = rollCrit();
-    const dmg = computeDamage({
-      movePower,
-      defenderMaxHp: maxHpFor(target.powerLevel),
-      effectiveness,
-      attackerPower: safePower(enemy.powerLevel),
-      defenderPower: safePower(target.powerLevel),
-      crit,
-    });
-
-    damagePartyMember(target.caughtAt, dmg);
-    triggerShake();
-    playSfx('hit', muted);
-    const effLabel = getEffectivenessLabel(effectiveness);
-    say(
-      `${leader.name}'s ${enemy.displayName} used ${move.name}!${crit ? ' Critical hit!' : ''} Dealt ${dmg} damage. (${effLabel})`,
-    );
-    showDamage(`-${dmg}`, 'player');
-
-    await delay(1200);
-
-    const updated = useGameStore.getState().party[0];
-    if (!updated || isFainted(updated)) {
-      const alive = useGameStore.getState().party.some((m) => !isFainted(m));
-      if (!alive) {
-        await handlePartyWipe();
-        return true;
-      }
-      setPhase('forcedSwap');
-      say(`${target.nickname ?? target.displayName} fainted! Choose a replacement.`);
-      playSfx('fail', muted);
-      return true;
-    }
-    return false;
-  }, [activeMember, damagePartyMember, enemy, handlePartyWipe, leader.name, muted]);
+  }, [phase, processing, hasUsablePokemon, hasAnyPpMove, hasBenchSwitch, handleOutOfPp]);
 
   const handleVictory = useCallback(async () => {
+    if (transformSnapshot) {
+      const active = useGameStore.getState().party[0];
+      if (active) patchPartyMember(active.caughtAt, revertTransform(active, transformSnapshot));
+      setTransformSnapshot(null);
+    }
     clearBattleSnapshot();
+    if (battleContext === 'gym') {
+      grantXpAllPartyAndPc(50);
+    } else if (battleContext === 'elite') {
+      grantXpAllPartyAndPc(350);
+    }
+    if (battleContext === 'gym' && winBadge) {
+      useGameStore.setState((s) => ({ party: clearAllStatuses(s.party) }));
+    }
     if (winBadge) {
       earnBadge(winBadge);
       if (!finalVictory) addMoney(100);
@@ -404,15 +552,20 @@ export function BattleArena({
     onWin();
   }, [
     addMoney,
+    battleContext,
     clearBattleSnapshot,
     earnBadge,
     finalVictory,
+    grantXpAllPartyAndPc,
     leader.badgeName,
     leader.name,
     muted,
     onWin,
     setLastResult,
     winBadge,
+    patchPartyMember,
+    transformSnapshot,
+    say,
   ]);
 
   const advanceAfterEnemyFaint = useCallback(async () => {
@@ -430,15 +583,757 @@ export function BattleArena({
     await delay(900);
   }, [enemy?.displayName, enemyIndex, enemyTeam, handleVictory, leader.name, muted, say]);
 
+  const tickEndOfTurnStatus = useCallback(async () => {
+    const player = useGameStore.getState().party[0];
+    if (player && player.status) {
+      const ticked = tickStatusDamage(player);
+      if (ticked.damage > 0) {
+        useGameStore.setState((s) => ({
+          party: s.party.map((m) => (m.caughtAt === player.caughtAt ? ticked.mon : m)),
+        }));
+        say(ticked.message);
+        showDamage(`-${ticked.damage}`, 'player');
+        await delay(900);
+        const updated = useGameStore.getState().party[0];
+        if (!updated || isFainted(updated)) {
+          useGameStore.getState().recordFaint();
+          const alive = useGameStore.getState().party.some((m) => !isFainted(m));
+          if (!alive) {
+            await handlePartyWipe();
+            return;
+          }
+          setPhase('forcedSwap');
+          say(`${updated?.nickname ?? updated?.displayName ?? 'Your Pokémon'} fainted! Choose a replacement.`);
+          playSfx('fail', muted);
+        }
+      }
+    }
+
+    if (enemy?.status) {
+      const ticked = tickStatusDamage({ ...enemy, hp: enemyHp });
+      if (ticked.damage > 0) {
+        const newHp = Math.max(0, enemyHp - ticked.damage);
+        setEnemyHp(newHp);
+        patchEnemy({ hp: newHp, status: ticked.mon.status });
+        say(ticked.message);
+        showDamage(`-${ticked.damage}`, 'enemy');
+        await delay(900);
+        if (newHp <= 0) {
+          await advanceAfterEnemyFaint();
+        }
+      }
+    }
+
+    setPlayerVolatiles((v) => tickVolatileTurns(v));
+    setEnemyVolatiles((v) => tickVolatileTurns(v));
+
+    const playerAfter = useGameStore.getState().party[0];
+    if (playerAfter && playerVolatiles.leechSeeded && enemy && enemyHp > 0) {
+      const drain = Math.max(1, Math.floor(maxHpForMon(playerAfter) / 8));
+      damagePartyMember(playerAfter.caughtAt, drain);
+      const healed = Math.min(maxHpForMon(enemy), enemyHp + drain);
+      setEnemyHp(healed);
+      patchEnemy({ hp: healed });
+      say(`${playerAfter.displayName}'s health is sapped by Leech Seed!`);
+      showDamage(`-${drain}`, 'player');
+      await delay(700);
+    }
+    if (enemy && enemyVolatiles.leechSeeded && playerAfter && !isFainted(playerAfter)) {
+      const drain = Math.max(1, Math.floor(maxHpForMon(enemy) / 8));
+      const newEnemyHp = Math.max(0, enemyHp - drain);
+      setEnemyHp(newEnemyHp);
+      patchEnemy({ hp: newEnemyHp });
+      useGameStore.getState().healPartyMember(playerAfter.caughtAt, drain);
+      say(`Leech Seed sapped ${enemy.displayName}!`);
+      showDamage(`-${drain}`, 'enemy');
+      await delay(700);
+    }
+  }, [advanceAfterEnemyFaint, enemy, enemyHp, enemyVolatiles, handlePartyWipe, muted, patchEnemy, playerVolatiles.leechSeeded, say, damagePartyMember]);
+
+  const canAct = useCallback(
+    (
+      mon: CaughtPokemon,
+      side: 'player' | 'enemy',
+      volatiles: BattleVolatiles,
+    ): { canAct: boolean; message?: string; statusAfter?: CaughtPokemon['status'] } => {
+      if (isFainted(mon)) return { canAct: false };
+      if (isAsleep(mon.status)) {
+        const after = tickSleep(mon.status!);
+        if (side === 'player') setPartyMemberStatus(mon.caughtAt, after);
+        else patchEnemy({ status: after });
+        return after
+          ? { canAct: false, message: `${mon.displayName} is fast asleep!`, statusAfter: after }
+          : { canAct: true, message: `${mon.displayName} woke up!`, statusAfter: undefined };
+      }
+      if (isFrozen(mon.status)) {
+        const thawed = tryThaw(mon.status);
+        if (thawed) {
+          if (side === 'player') setPartyMemberStatus(mon.caughtAt, thawed);
+          else patchEnemy({ status: thawed });
+          return { canAct: false, message: `${mon.displayName} is frozen solid!`, statusAfter: thawed };
+        }
+        if (side === 'player') setPartyMemberStatus(mon.caughtAt, undefined);
+        else patchEnemy({ status: undefined });
+        return { canAct: true, message: `${mon.displayName} thawed out!`, statusAfter: undefined };
+      }
+      if (isFullyParalyzed(mon.status)) {
+        return { canAct: false, message: `${mon.displayName} is fully paralyzed!` };
+      }
+      if (isConfused(volatiles)) {
+        const setVol = side === 'player' ? setPlayerVolatiles : setEnemyVolatiles;
+        const nextTurns = Math.max(0, volatiles.confusionTurns - 1);
+        setVol((v) => ({ ...v, confusionTurns: nextTurns }));
+        if (rollConfusionSelfHit()) {
+          const selfDmg = computeDamage({
+            movePower: confusionSelfDamagePower(),
+            moveType: 'normal',
+            category: 'physical',
+            effectiveness: 1,
+            attacker: mon,
+            defender: mon,
+            crit: false,
+            attackMultiplier: 1,
+            defenseMultiplier: 1,
+          });
+          if (side === 'player') {
+            damagePartyMember(mon.caughtAt, selfDmg);
+            showDamage(`-${selfDmg}`, 'player');
+          } else {
+            const newHp = Math.max(0, enemyHp - selfDmg);
+            setEnemyHp(newHp);
+            patchEnemy({ hp: newHp });
+            showDamage(`-${selfDmg}`, 'enemy');
+          }
+          return { canAct: false, message: `${mon.displayName} hurt itself in its confusion!` };
+        }
+        return { canAct: true, message: `${mon.displayName} is confused!` };
+      }
+      return { canAct: true };
+    },
+    [damagePartyMember, enemyHp, patchEnemy, setPartyMemberStatus],
+  );
+
+  const executeEnemyAttack = useCallback(async (): Promise<boolean> => {
+    if (!enemy) return false;
+    const target = useGameStore.getState().party[0];
+    if (!target || isFainted(target)) return false;
+
+    const actCheck = canAct(enemy, 'enemy', enemyVolatiles);
+    if (actCheck.message) say(actCheck.message);
+    if (!actCheck.canAct) return false;
+
+    if (enemyPendingTurn?.kind === 'hyper-recharge') {
+      setEnemyPendingTurn(null);
+      say(`${leader.name}'s ${enemy.displayName} must recharge!`);
+      await delay(900);
+      return false;
+    }
+
+    const stored =
+      enemyPendingTurn?.kind === 'solar-charge' || enemyPendingTurn?.kind === 'charge'
+        ? enemyPendingTurn.move
+        : pickEnemyMove(enemy);
+    if (!stored) return false;
+
+    if (enemyPendingTurn?.kind === 'solar-charge' || enemyPendingTurn?.kind === 'charge') {
+      setEnemyPendingTurn(null);
+      say(`${leader.name}'s ${enemy.displayName} unleashed ${stored.name}!`);
+    } else if (stored.slug === 'solar-beam') {
+      setEnemyPendingTurn({ kind: 'solar-charge', move: stored });
+      say(`${leader.name}'s ${enemy.displayName} is taking in sunlight!`);
+      await delay(900);
+      return false;
+    } else if (CHARGE_MOVE_SLUGS.has(stored.slug)) {
+      setEnemyPendingTurn({ kind: 'charge', move: stored });
+      say(`${leader.name}'s ${enemy.displayName} is charging ${stored.name}!`);
+      await delay(900);
+      return false;
+    }
+
+    setEnemyLastMoveSlug(stored.slug);
+
+    const hitAccuracy = Math.max(
+      1,
+      Math.min(
+        100,
+        effectiveAccuracy(stored.slug, stored.accuracy) *
+          (stageMult(enemyStages.acc) / stageMult(playerStages.eva)),
+      ),
+    );
+    if (!rollHit(hitAccuracy)) {
+      say(`${leader.name}'s ${enemy.displayName} used ${stored.name}! But it missed!`);
+      await delay(900);
+      return false;
+    }
+
+    if (stored.category === 'status') {
+      say(`${leader.name}'s ${enemy.displayName} used ${stored.name}!`);
+      const statusResult = resolveStatusMove({
+        slug: stored.slug,
+        move: stored,
+        attacker: enemy,
+        defender: target,
+        attackerVolatiles: enemyVolatiles,
+        defenderVolatiles: playerVolatiles,
+        defenderLastMoveSlug: playerLastMoveSlug,
+      });
+      for (const msg of statusResult.messages) say(msg);
+      if (statusResult.attackerStageDelta) {
+        setEnemyStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
+      }
+      if (statusResult.defenderStageDelta) {
+        setPlayerStages((s) => mergeStageDelta(s, statusResult.defenderStageDelta));
+      }
+      if (statusResult.attackerVolatilesPatch) {
+        setEnemyVolatiles((v) => applyVolatilesPatch(v, statusResult.attackerVolatilesPatch));
+      }
+      if (statusResult.defenderVolatilesPatch) {
+        setPlayerVolatiles((v) => applyVolatilesPatch(v, statusResult.defenderVolatilesPatch));
+      }
+      if (statusResult.defenderStatus) {
+        setPartyMemberStatus(target.caughtAt, statusResult.defenderStatus);
+      }
+      if (statusResult.attackerStatus) {
+        patchEnemy({ status: statusResult.attackerStatus, hp: maxHpForMon(enemy) });
+        setEnemyHp(maxHpForMon(enemy));
+      }
+      if (stored.slug === 'recover' || stored.slug === 'soft-boiled') {
+        const healed = Math.min(maxHpForMon(enemy), enemyHp + Math.max(1, Math.floor(maxHpForMon(enemy) / 2)));
+        setEnemyHp(healed);
+        patchEnemy({ hp: healed });
+      }
+      await delay(900);
+      return false;
+    }
+
+    let totalDamage = 0;
+    let lastCrit = false;
+    let lastEffectiveness = 1;
+    const hits = getMultiHitCount(stored.slug);
+    for (let h = 0; h < hits; h++) {
+      const { damage, crit, effectiveness } = calculateMoveDamage({
+        move: stored,
+        attacker: enemy,
+        defender: target,
+        defenderHp: currentHp(target),
+        attackerVolatiles: enemyVolatiles,
+        defenderVolatiles: playerVolatiles,
+        attackerStages: enemyStages,
+        defenderStages: playerStages,
+      });
+      totalDamage += damage;
+      lastCrit = crit;
+      lastEffectiveness = effectiveness;
+    }
+
+    if (totalDamage > 0) {
+      damagePartyMember(target.caughtAt, totalDamage);
+      triggerShake();
+      playSfx('hit', muted);
+      showDamage(`-${totalDamage}`, 'player');
+    } else {
+      playSfx('fail', muted);
+    }
+    say(
+      buildHitBattleMessage(
+        `${leader.name}'s ${enemy.displayName} used ${stored.name}!`,
+        lastEffectiveness,
+        totalDamage,
+        lastCrit,
+      ),
+    );
+    await delay(1200);
+
+    const post = resolvePostDamage({
+      slug: stored.slug,
+      move: stored,
+      attacker: enemy,
+      defender: target,
+      damageDealt: totalDamage,
+      attackerVolatiles: enemyVolatiles,
+      defenderVolatiles: playerVolatiles,
+    });
+    for (const msg of post.messages) say(msg);
+    if (post.defenderStatus) setPartyMemberStatus(target.caughtAt, post.defenderStatus);
+    if (post.defenderVolatilesPatch) {
+      setPlayerVolatiles((v) => applyVolatilesPatch(v, post.defenderVolatilesPatch));
+    }
+    if (post.attackerVolatilesPatch) {
+      setEnemyVolatiles((v) => applyVolatilesPatch(v, post.attackerVolatilesPatch));
+    }
+    if (post.recoilDamage) {
+      const newHp = Math.max(0, enemyHp - post.recoilDamage);
+      setEnemyHp(newHp);
+      patchEnemy({ hp: newHp });
+      showDamage(`-${post.recoilDamage}`, 'enemy');
+    }
+    if (post.drainHeal) {
+      const healed = Math.min(maxHpForMon(enemy), enemyHp + post.drainHeal);
+      setEnemyHp(healed);
+      patchEnemy({ hp: healed });
+    }
+
+    const updated = useGameStore.getState().party[0];
+    if (stored.slug === 'hyper-beam' && totalDamage > 0 && updated && !isFainted(updated)) {
+      setEnemyPendingTurn({ kind: 'hyper-recharge', move: stored });
+    }
+    if (post.selfFaint && totalDamage > 0) {
+      patchEnemy({ hp: 0 });
+      setEnemyHp(0);
+      await advanceAfterEnemyFaint();
+      return false;
+    }
+    if (!updated || isFainted(updated)) {
+      const alive = useGameStore.getState().party.some((m) => !isFainted(m));
+      if (!alive) {
+        await handlePartyWipe();
+        return true;
+      }
+      setPhase('forcedSwap');
+      say(`${target.nickname ?? target.displayName} fainted! Choose a replacement.`);
+      playSfx('fail', muted);
+      return true;
+    }
+    return false;
+  }, [advanceAfterEnemyFaint, canAct, damagePartyMember, enemy, enemyHp, enemyPendingTurn, enemyStages.atk, enemyStages.spa, handlePartyWipe, leader.name, muted, patchEnemy, playerStages.def, playerStages.spd, say, setPartyMemberStatus]);
+
+  enemyAttackRef.current = executeEnemyAttack;
+
+  const waitForOutcomeClear = useCallback((): Promise<void> => {
+    if (!useMultiplayerStore.getState().outcome) return Promise.resolve();
+    return new Promise((resolve) => {
+      const unsub = useMultiplayerStore.subscribe((state, prev) => {
+        if (prev.outcome && !state.outcome) {
+          unsub();
+          resolve();
+        }
+      });
+    });
+  }, []);
+
+  const runChaosIfNeeded = useCallback(
+    async (hostUsedAttack: boolean) => {
+      if (!hostUsedAttack || !mpConnected) return;
+      const active = useGameStore.getState().party[0];
+      if (active?.guestOwned) return;
+      if (Math.random() >= 0.25) return;
+
+      const effect = await new Promise<ChaosEffectId>((resolve) => {
+        useMultiplayerStore.getState().setChaosApplyHandler((result) => {
+          useMultiplayerStore.getState().setChaosApplyHandler(null);
+          resolve(result);
+        });
+        useMultiplayerStore.getState().requestChaosWheel();
+      });
+
+      const game = useGameStore.getState();
+      const mp = useMultiplayerStore.getState();
+      let label = chaosOutcomeLabel(effect);
+
+      switch (effect) {
+        case 'rarecandy':
+          game.addItem('rarecandy', 1);
+          break;
+        case 'lose_potion':
+          if (!game.consumeItem('potion', 1)) {
+            label = 'Chaos: No potions to lose!';
+          }
+          break;
+        case 'xattack_both':
+          mp.setXAttackAllActive(true);
+          break;
+        case 'skip_turn':
+          mp.setSkipNextPlayerTurn(true);
+          break;
+        case 'random_swap': {
+          const activeCaughtAt = game.party[0]?.caughtAt;
+          const candidates = game.party.filter(
+            (m) => m.caughtAt !== activeCaughtAt && !isFainted(m) && !m.guestLocked,
+          );
+          if (candidates.length === 0) {
+            label = 'Chaos: No Pokémon to swap to!';
+          } else {
+            const pick = pickRandom(candidates);
+            game.setActivePartyMember(pick.caughtAt);
+          }
+          break;
+        }
+        case 'elixir': {
+          const activeCaughtAt = game.party[0]?.caughtAt;
+          if (activeCaughtAt != null) {
+            game.restoreMemberPp(activeCaughtAt);
+          }
+          break;
+        }
+        default:
+          break;
+      }
+
+      mp.setOutcome(label);
+      mp.setAwaitingGuest(null);
+      await waitForOutcomeClear();
+    },
+    [mpConnected, waitForOutcomeClear],
+  );
+
+  const executePlayerAttack = useCallback(
+    async (move: BattleMove): Promise<PlayerAttackResult> => {
+      if (!enemy) return 'abort';
+      const attacker = useGameStore.getState().party[0];
+      if (!attacker || isFainted(attacker)) return 'abort';
+
+      const actCheck = canAct(attacker, 'player', playerVolatiles);
+      if (actCheck.message) say(actCheck.message);
+      if (!actCheck.canAct) return 'continue';
+
+      if (playerPendingTurn?.kind === 'hyper-recharge') {
+        setPlayerPendingTurn(null);
+        say(`${attacker.nickname ?? attacker.displayName} must recharge!`);
+        await delay(900);
+        return 'continue';
+      }
+
+      const pending = playerPendingTurn;
+      const isChargeRelease = pending?.kind === 'solar-charge' || pending?.kind === 'charge';
+
+      const thrashSlug = playerVolatiles.thrashLock?.slug;
+      const thrashStored = thrashSlug ? attacker.moves.find((m) => m.slug === thrashSlug) : null;
+
+      let releaseMove: BattleMove;
+      if (isChargeRelease && pending) {
+        releaseMove = {
+          ...pending.move,
+          ...move,
+          ownerCaughtAt: attacker.caughtAt,
+          ownerDisplayName: attacker.nickname ?? attacker.displayName,
+          fromActive: true,
+          currentPp: move.currentPp ?? pending.move.currentPp,
+        };
+        setPlayerPendingTurn(null);
+        say(`${attacker.nickname ?? attacker.displayName} unleashed ${releaseMove.name}!`);
+      } else if (thrashStored) {
+        releaseMove = {
+          ...move,
+          ...thrashStored,
+          name: thrashStored.name,
+          slug: thrashStored.slug,
+          ownerCaughtAt: attacker.caughtAt,
+          ownerDisplayName: attacker.nickname ?? attacker.displayName,
+          fromActive: true,
+          currentPp: attacker.pp?.[thrashStored.slug] ?? thrashStored.maxPp,
+          maxPp: thrashStored.maxPp,
+        };
+      } else {
+        releaseMove = move;
+      }
+
+      if (!isChargeRelease && !playerPendingTurn) {
+        if (releaseMove.slug === 'solar-beam') {
+          setPlayerPendingTurn({ kind: 'solar-charge', move: releaseMove });
+          say(`${attacker.nickname ?? attacker.displayName} is taking in sunlight!`);
+          await delay(900);
+          return 'continue';
+        }
+        if (CHARGE_MOVE_SLUGS.has(releaseMove.slug) && releaseMove.slug !== 'solar-beam') {
+          setPlayerPendingTurn({ kind: 'charge', move: releaseMove });
+          say(`${attacker.nickname ?? attacker.displayName} is charging ${releaseMove.name}!`);
+          await delay(900);
+          return 'continue';
+        }
+      }
+
+      if (playerVolatiles.disabledMoveSlug === releaseMove.slug) {
+        say(`${releaseMove.name} is disabled!`);
+        await delay(900);
+        return 'continue';
+      }
+
+      if (releaseMove.currentPp > 0 && !thrashSlug) {
+        useMovePp(releaseMove.ownerCaughtAt, releaseMove.slug, releaseMove.maxPp);
+      } else if (releaseMove.currentPp > 0 && thrashSlug && releaseMove.slug !== thrashSlug) {
+        useMovePp(releaseMove.ownerCaughtAt, releaseMove.slug, releaseMove.maxPp);
+      } else if (thrashSlug && releaseMove.slug === thrashSlug && releaseMove.currentPp > 0) {
+        useMovePp(releaseMove.ownerCaughtAt, releaseMove.slug, releaseMove.maxPp);
+      }
+
+      setPlayerLastMoveSlug(releaseMove.slug);
+
+        const hitAccuracy = Math.max(
+          1,
+          Math.min(
+            100,
+            effectiveAccuracy(releaseMove.slug, releaseMove.accuracy) *
+              (stageMult(playerStages.acc) / stageMult(enemyStages.eva)),
+          ),
+        );
+        if (!rollHit(hitAccuracy)) {
+          say(`${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}! But it missed!`);
+          await delay(900);
+          return 'continue';
+        }
+
+        if (releaseMove.category === 'status') {
+        say(`${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}!`);
+        const statusResult = resolveStatusMove({
+          slug: releaseMove.slug,
+          move: releaseMove,
+          attacker,
+          defender: enemy,
+          attackerVolatiles: playerVolatiles,
+          defenderVolatiles: enemyVolatiles,
+          transformTarget: enemy,
+          defenderLastMoveSlug: enemyLastMoveSlug,
+        });
+        for (const msg of statusResult.messages) say(msg);
+        if (statusResult.attackerStageDelta) {
+          setPlayerStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
+        }
+        if (statusResult.defenderStageDelta) {
+          setEnemyStages((s) => mergeStageDelta(s, statusResult.defenderStageDelta));
+        }
+        if (statusResult.attackerVolatilesPatch) {
+          setPlayerVolatiles((v) => applyVolatilesPatch(v, statusResult.attackerVolatilesPatch));
+        }
+        if (statusResult.defenderVolatilesPatch) {
+          setEnemyVolatiles((v) => applyVolatilesPatch(v, statusResult.defenderVolatilesPatch));
+        }
+        if (statusResult.defenderStatus) patchEnemy({ status: statusResult.defenderStatus });
+        if (statusResult.attackerStatus) {
+          setPartyMemberStatus(attacker.caughtAt, statusResult.attackerStatus);
+          const max = maxHpForMon(attacker);
+          useGameStore.getState().healPartyMember(attacker.caughtAt, max);
+        }
+        if (releaseMove.slug === 'recover' || releaseMove.slug === 'soft-boiled') {
+          const max = maxHpForMon(attacker);
+          useGameStore.getState().healPartyMember(attacker.caughtAt, Math.max(1, Math.floor(max / 2)));
+        }
+        if (statusResult.transform) {
+          patchPartyMember(attacker.caughtAt, statusResult.transform.patch);
+          setTransformSnapshot(statusResult.transform.snapshot);
+        }
+        if (statusResult.metronomeSlug) {
+            const mimicked = storedMoveFromSlug(statusResult.metronomeSlug);
+            if (mimicked) {
+              say(`Metronome called ${mimicked.name}!`);
+              await delay(600);
+              if (mimicked.category === 'status') {
+              const metro = resolveStatusMove({
+                slug: mimicked.slug,
+                move: mimicked,
+                attacker: useGameStore.getState().party[0] ?? attacker,
+                defender: enemy,
+                attackerVolatiles: playerVolatiles,
+                defenderVolatiles: enemyVolatiles,
+                transformTarget: enemy,
+                defenderLastMoveSlug: enemyLastMoveSlug,
+              });
+              for (const msg of metro.messages) say(msg);
+              if (metro.defenderStatus) patchEnemy({ status: metro.defenderStatus });
+            } else {
+              const metroDmg = calculateMoveDamage({
+                move: mimicked,
+                attacker: useGameStore.getState().party[0] ?? attacker,
+                defender: enemy,
+                defenderHp: enemyHp,
+                attackerVolatiles: playerVolatiles,
+                defenderVolatiles: enemyVolatiles,
+                attackerStages: playerStages,
+                defenderStages: enemyStages,
+                xAttackPhysical: xAttackPhysical || useMultiplayerStore.getState().xAttackAllActive,
+                xAttackSpecial: xAttackSpecial || useMultiplayerStore.getState().xAttackAllActive,
+              });
+              const newHp = Math.max(0, enemyHp - metroDmg.damage);
+              setEnemyHp(newHp);
+              patchEnemy({ hp: newHp });
+              if (metroDmg.damage > 0) {
+                triggerShake();
+                playSfx('hit', muted);
+                showDamage(`-${metroDmg.damage}`, 'enemy');
+              }
+              say(
+                buildHitBattleMessage(
+                  `${attacker.displayName} used ${mimicked.name}!`,
+                  metroDmg.effectiveness,
+                  metroDmg.damage,
+                  metroDmg.crit,
+                ),
+              );
+              if (newHp <= 0) {
+                await delay(900);
+                await advanceAfterEnemyFaint();
+                return 'enemy_fainted';
+              }
+            }
+          }
+        }
+        await delay(900);
+        return 'continue';
+      }
+
+      const xPhys = xAttackPhysical || useMultiplayerStore.getState().xAttackAllActive;
+      const xSpec = xAttackSpecial || useMultiplayerStore.getState().xAttackAllActive;
+
+      let defenderStatus = enemy.status;
+      if (releaseMove.type === 'fire') {
+        defenderStatus = thawFromFireMove(defenderStatus);
+        if (defenderStatus !== enemy.status) patchEnemy({ status: defenderStatus });
+      }
+
+      let totalDamage = 0;
+      let lastCrit = false;
+      let lastEffectiveness = 1;
+      const hits = getMultiHitCount(releaseMove.slug);
+      for (let h = 0; h < hits; h++) {
+        const { damage, crit, effectiveness } = calculateMoveDamage({
+          move: releaseMove,
+          attacker,
+          defender: { ...enemy, status: defenderStatus },
+          defenderHp: enemyHp,
+          attackerVolatiles: playerVolatiles,
+          defenderVolatiles: enemyVolatiles,
+          attackerStages: playerStages,
+          defenderStages: enemyStages,
+          xAttackPhysical: xPhys,
+          xAttackSpecial: xSpec,
+        });
+        totalDamage += damage;
+        lastCrit = crit;
+        lastEffectiveness = effectiveness;
+      }
+
+      const newEnemyHp = Math.max(0, enemyHp - totalDamage);
+      setEnemyHp(newEnemyHp);
+      patchEnemy({ hp: newEnemyHp });
+      if (totalDamage > 0) {
+        triggerShake();
+        playSfx('hit', muted);
+        showDamage(`-${totalDamage}`, 'enemy');
+      } else {
+        playSfx('fail', muted);
+      }
+      if (lastCrit && totalDamage > 0) {
+        setCritFlash(true);
+        window.setTimeout(() => setCritFlash(false), 500);
+      }
+
+      say(
+        buildHitBattleMessage(
+          `${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}!`,
+          lastEffectiveness,
+          totalDamage,
+          lastCrit,
+        ),
+      );
+      await delay(1200);
+
+      const post = resolvePostDamage({
+        slug: releaseMove.slug,
+        move: releaseMove,
+        attacker,
+        defender: enemy,
+        damageDealt: totalDamage,
+        attackerVolatiles: playerVolatiles,
+        defenderVolatiles: enemyVolatiles,
+      });
+      for (const msg of post.messages) say(msg);
+      if (post.defenderStatus) patchEnemy({ status: post.defenderStatus });
+      if (post.defenderVolatilesPatch) {
+        setEnemyVolatiles((v) => applyVolatilesPatch(v, post.defenderVolatilesPatch));
+      }
+      if (post.attackerVolatilesPatch) {
+        setPlayerVolatiles((v) => applyVolatilesPatch(v, post.attackerVolatilesPatch));
+      }
+      if (post.recoilDamage) {
+        damagePartyMember(attacker.caughtAt, post.recoilDamage);
+        showDamage(`-${post.recoilDamage}`, 'player');
+      }
+      if (post.drainHeal) {
+        useGameStore.getState().healPartyMember(attacker.caughtAt, post.drainHeal);
+      }
+
+      if (releaseMove.slug === 'hyper-beam' && totalDamage > 0 && newEnemyHp > 0) {
+        setPlayerPendingTurn({ kind: 'hyper-recharge', move: releaseMove });
+      }
+      if (post.selfFaint && totalDamage > 0) {
+        useGameStore.getState().damagePartyMember(attacker.caughtAt, maxHpForMon(attacker));
+        setPhase('forcedSwap');
+      }
+
+      if (newEnemyHp <= 0) {
+        await advanceAfterEnemyFaint();
+        return 'enemy_fainted';
+      }
+      return 'continue';
+    },
+    [
+      advanceAfterEnemyFaint,
+      canAct,
+      enemy,
+      enemyHp,
+      enemyStages.acc,
+      enemyStages.def,
+      enemyStages.eva,
+      enemyStages.spd,
+      muted,
+      patchEnemy,
+      playerStages.acc,
+      playerStages.atk,
+      playerPendingTurn,
+      playerStages.spa,
+      say,
+      useMovePp,
+      xAttackPhysical,
+      xAttackSpecial,
+    ],
+  );
+
+  const resolveTurn = useCallback(
+    async (move: BattleMove, hostUsedAttack: boolean) => {
+      const playerMon = useGameStore.getState().party[0];
+      if (!playerMon || !enemy) return;
+
+      const playerPriority = getMovePriority(move.slug);
+      const playerSpeed = effectiveSpeed(playerMon) * stageMult(playerStages.spe);
+      const enemySpeed = effectiveSpeed(enemy) * stageMult(enemyStages.spe);
+      const playerFirst = playerPriority > 0 || (playerPriority === 0 && playerSpeed >= enemySpeed);
+
+      const runPlayer = async () => {
+        const result = await executePlayerAttack(move);
+        return result;
+      };
+      const runEnemy = async () => executeEnemyAttack();
+
+      if (playerFirst) {
+        const result = await runPlayer();
+        if (result === 'enemy_fainted' || result === 'abort') return;
+        const wiped = await runEnemy();
+        if (wiped) return;
+      } else {
+        const wiped = await runEnemy();
+        if (wiped) return;
+        const result = await runPlayer();
+        if (result === 'enemy_fainted' || result === 'abort') return;
+      }
+
+      await tickEndOfTurnStatus();
+      await runChaosIfNeeded(hostUsedAttack);
+    },
+    [enemy, enemyStages.spe, executeEnemyAttack, executePlayerAttack, playerStages.spe, runChaosIfNeeded, tickEndOfTurnStatus],
+  );
+
+  resolveTurnRef.current = resolveTurn;
+
   const onMoveClick = async (move: BattleMove) => {
     if (processing || phase !== 'choose' || !enemy) return;
+    if (awaitingGuest != null || outcome) return;
+
     const owner = party.find((m) => m.caughtAt === move.ownerCaughtAt);
     if (!owner || isFainted(owner)) return;
-    if (move.fromActive && move.currentPp <= 0) return;
+    if (move.currentPp <= 0) return;
+    if (owner.guestLocked) return;
 
-    // Magikarp's Splash easter egg: play the gag, deal no damage, and crucially do NOT
-    // consume the turn (the enemy doesn't get a free hit). Only when used by the active
-    // Magikarp — the switch-move variant should still switch normally.
+    const activeNow = useGameStore.getState().party[0];
+
     if (move.splashGag && move.fromActive) {
       const sprite = owner.shiny && owner.shinySprite ? owner.shinySprite : owner.sprite;
       setProcessing(true);
@@ -446,7 +1341,6 @@ export function BattleArena({
       return;
     }
 
-    // Shiny Magikarp's "Hollow Purple": play the win cinematic, never costs a turn.
     if (move.hollowPurple && move.fromActive) {
       setProcessing(true);
       setHollowPurple(true);
@@ -454,124 +1348,307 @@ export function BattleArena({
     }
 
     setProcessing(true);
+    useMultiplayerStore.getState().setGuestBattlePending(false);
 
-    if (!move.fromActive) {
-      const swapped = setActivePartyMember(move.ownerCaughtAt);
-      if (!swapped) {
-        setProcessing(false);
-        return;
-      }
-      say(`Go, ${move.ownerDisplayName}!`);
-      playSfx('click', muted);
-      await delay(950);
-      await loadLearnsets();
-      const wiped = await enemyAttack();
-      if (!wiped) setPhase('choose');
-      setProcessing(false);
-      return;
-    }
+    const hostControlledAttack =
+      move.fromActive && !(activeNow?.guestOwned && !activeNow.guestLocked);
 
-    const attacker = useGameStore.getState().party[0];
-    if (!attacker || isFainted(attacker)) {
-      setProcessing(false);
-      return;
-    }
-
-    let movePower = move.power;
-    const key = moveKey(move.ownerCaughtAt, move.slug);
-    if (xAttackBuff === key) movePower += XATTACK_BONUS;
-
-    if (move.currentPp > 0) useMovePp(move.ownerCaughtAt, move.slug, move.maxPp);
-
-    const effectiveness = getTypeEffectiveness(move.type, enemy.types);
-    const attackerPower = safePower(attacker.powerLevel);
-    const defenderPower = safePower(enemy.powerLevel);
-    const quadEffective = effectiveness >= 4;
-    // A 4x super-effective hit is devastating: it one-shots a weaker/equal-power
-    // foe, or chunks half its max HP if the foe out-powers the attacker.
-    const quadOneShot = quadEffective && attackerPower > defenderPower;
-    const crit = !quadEffective && rollCrit();
-
-    let dmg: number;
-    let powerEdge = false;
-    if (quadEffective) {
-      dmg = quadOneShot ? enemyHp : Math.ceil(enemyMaxHp / 2);
-    } else {
-      dmg = computeDamage({
-        movePower,
-        defenderMaxHp: enemyMaxHp,
-        effectiveness,
-        attackerPower,
-        defenderPower,
-        crit,
-      });
-      // A stronger move that's at least neutral hits harder, scaling with how many
-      // power points it has over the foe: +50% at 8+, +70% at 20+, +100% at 25+.
-      const powerDiff = (movePower - defenderPower) * 100;
-      let edgeMult = 1;
-      if (effectiveness >= 1) {
-        if (powerDiff >= 25) edgeMult = 2;
-        else if (powerDiff >= 20) edgeMult = 1.7;
-        else if (powerDiff >= 8) edgeMult = 1.5;
-      }
-      powerEdge = edgeMult > 1;
-      if (powerEdge) dmg = Math.round(dmg * edgeMult);
-    }
-
-    const newEnemyHp = Math.max(0, enemyHp - dmg);
-    setEnemyHp(newEnemyHp);
-    triggerShake();
-    playSfx('hit', muted);
-    if (crit || quadEffective) {
-      setCritFlash(true);
-      window.setTimeout(() => setCritFlash(false), 500);
-    }
-
-    const effLabel = getEffectivenessLabel(effectiveness);
-    const extra = quadOneShot
-      ? ' One-shot KO!'
-      : quadEffective
-        ? ' A devastating blow!'
-        : powerEdge
-          ? ' Powered-up hit!'
-          : crit
-            ? ' Critical hit!'
-            : '';
-    say(
-      `${attacker.nickname ?? attacker.displayName} used ${move.name}!${extra} Dealt ${dmg} damage. (${effLabel})`,
-    );
-    showDamage(`-${dmg}`, 'enemy');
-    await delay(1200);
-
-    if (newEnemyHp <= 0) {
-      await advanceAfterEnemyFaint();
-      setProcessing(false);
-      return;
-    }
-
-    const wiped = await enemyAttack();
-    if (!wiped) setPhase('choose');
+    await resolveTurn(move, hostControlledAttack);
+    setPhase((p) => (p === 'forcedSwap' || p === 'between' || p === 'result' || p === 'victory' ? p : 'choose'));
     setProcessing(false);
   };
 
-  // Using a Potion or Max Elixir mid-battle costs your turn — the enemy gets a free hit.
+  onMoveClickRef.current = onMoveClick;
+
+  useEffect(() => {
+    const lock = playerVolatiles.thrashLock;
+    if (!lock || phase !== 'choose' || processing || loading || awaitingGuest || outcome) return;
+    const active = useGameStore.getState().party[0];
+    if (!active || isFainted(active)) return;
+    const thrashMove = active.moves.find((m) => m.slug === lock.slug);
+    if (!thrashMove) return;
+
+    const runKey = `${lock.slug}:${lock.turnsLeft}`;
+    if (thrashAutoRunRef.current === runKey) return;
+    thrashAutoRunRef.current = runKey;
+
+    const pendingMove: BattleMove = {
+      ...thrashMove,
+      ownerCaughtAt: active.caughtAt,
+      ownerDisplayName: active.nickname ?? active.displayName,
+      fromActive: true,
+      currentPp: active.pp?.[thrashMove.slug] ?? thrashMove.maxPp,
+      maxPp: thrashMove.maxPp,
+    };
+
+    void (async () => {
+      setProcessing(true);
+      try {
+        await resolveTurnRef.current(pendingMove, !(active.guestOwned && !active.guestLocked));
+        setPhase((p) => (p === 'forcedSwap' || p === 'between' || p === 'result' || p === 'victory' ? p : 'choose'));
+      } finally {
+        setProcessing(false);
+        thrashAutoRunRef.current = null;
+      }
+    })();
+  }, [
+    awaitingGuest,
+    loading,
+    outcome,
+    phase,
+    processing,
+    playerVolatiles.thrashLock?.slug,
+    playerVolatiles.thrashLock?.turnsLeft,
+  ]);
+
+  useEffect(() => {
+    const pending = playerPendingTurn;
+    if (!pending || phase !== 'choose' || processing || loading || awaitingGuest || outcome) return;
+    if (
+      pending.kind !== 'solar-charge' &&
+      pending.kind !== 'charge' &&
+      pending.kind !== 'hyper-recharge'
+    ) {
+      return;
+    }
+    if (pendingAutoRunRef.current) return;
+
+    const active = useGameStore.getState().party[0];
+    if (!active || isFainted(active)) return;
+
+    pendingAutoRunRef.current = true;
+
+    const pendingMove: BattleMove = {
+      ...pending.move,
+      ownerCaughtAt: active.caughtAt,
+      ownerDisplayName: active.nickname ?? active.displayName,
+      fromActive: true,
+      currentPp: active.pp?.[pending.move.slug] ?? pending.move.currentPp,
+    };
+
+    void (async () => {
+      setProcessing(true);
+      try {
+        const hostControlledAttack = !(active.guestOwned && !active.guestLocked);
+        await resolveTurnRef.current(pendingMove, hostControlledAttack);
+        setPhase((p) => (p === 'forcedSwap' || p === 'between' || p === 'result' || p === 'victory' ? p : 'choose'));
+      } finally {
+        setProcessing(false);
+        pendingAutoRunRef.current = false;
+      }
+    })();
+  }, [
+    awaitingGuest,
+    loading,
+    outcome,
+    phase,
+    processing,
+    playerPendingTurn?.kind,
+    playerPendingTurn?.move.slug,
+  ]);
+
+  useEffect(() => {
+    if (!mpConnected) {
+      useMultiplayerStore.getState().setBattleHandlers(null, null);
+      return;
+    }
+    useMultiplayerStore.getState().setBattleHandlers(
+      (move) => {
+        void onMoveClickRef.current(move);
+      },
+      (caughtAt) => {
+        void executePlayerSwitchRef.current(caughtAt);
+      },
+    );
+    return () => useMultiplayerStore.getState().setBattleHandlers(null, null);
+  }, [mpConnected]);
+
+  useEffect(() => {
+    if (!mpConnected) return;
+    const pending =
+      guestControlsActive && phase === 'choose' && !processing && !awaitingGuest && !outcome;
+    useMultiplayerStore.getState().setGuestBattlePending(pending);
+  }, [mpConnected, guestControlsActive, phase, processing, awaitingGuest, outcome]);
+
+  useEffect(() => {
+    if (!mpConnected) {
+      useMultiplayerStore.getState().setHostBattleSnapshot(null);
+      return;
+    }
+    if (loading || phase === 'prep' || phase === 'victory' || phase === 'result') {
+      useMultiplayerStore.getState().setHostBattleSnapshot(null);
+      return;
+    }
+    if (!enemy) return;
+
+    const moves: SpectateBattleMove[] = activeMoves
+      .filter((m) => {
+        const owner = party.find((p) => p.caughtAt === m.ownerCaughtAt);
+        return owner && !owner.guestLocked && !isFainted(owner);
+      })
+      .map((m) => ({
+        slug: m.slug,
+        name: m.name,
+        type: m.type,
+        power: m.power,
+        ownerCaughtAt: m.ownerCaughtAt,
+        ownerDisplayName: m.ownerDisplayName,
+        fromActive: m.fromActive,
+        maxPp: m.maxPp,
+        currentPp: m.currentPp,
+        splashGag: m.splashGag,
+        hollowPurple: m.hollowPurple,
+      }));
+
+    useMultiplayerStore.getState().setHostBattleSnapshot({
+      title,
+      phase,
+      message,
+      enemyName: enemy.displayName,
+      enemyId: enemy.id,
+      enemyHp,
+      enemyMaxHp,
+      enemyPower: enemy.level,
+      enemyTypes: enemy.types,
+      guestControlsActive:
+        guestControlsActive && phase === 'choose' && !processing && !awaitingGuest && !outcome,
+      moves,
+      processing,
+    });
+  }, [
+    mpConnected,
+    loading,
+    phase,
+    enemy,
+    enemyHp,
+    enemyMaxHp,
+    message,
+    title,
+    activeMoves,
+    party,
+    guestControlsActive,
+    processing,
+    awaitingGuest,
+    outcome,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      useMultiplayerStore.getState().setHostBattleSnapshot(null);
+      useMultiplayerStore.getState().setXAttackAllActive(false);
+      useMultiplayerStore.getState().setSkipNextPlayerTurn(false);
+      useMultiplayerStore.getState().setGuestBattlePending(false);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (phase !== 'choose' || processing || loading || awaitingGuest || outcome) return;
+    if (guestControlsActive) return;
+    if (!useMultiplayerStore.getState().skipNextPlayerTurn) return;
+
+    let cancelled = false;
+    void (async () => {
+      useMultiplayerStore.getState().setSkipNextPlayerTurn(false);
+      setProcessing(true);
+      say('Chaos forces you to skip your turn!');
+      await delay(700);
+      if (cancelled) return;
+      const wiped = await enemyAttackRef.current();
+      if (!cancelled && !wiped) setPhase('choose');
+      if (!cancelled) setProcessing(false);
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [phase, processing, loading, awaitingGuest, outcome, guestControlsActive, say]);
+
   const spendItemTurn = useCallback(
     async (msg: string) => {
       if (phase !== 'choose' || processing) return;
       setProcessing(true);
       say(msg);
       await delay(900);
-      const wiped = await enemyAttack();
+      const wiped = await executeEnemyAttack();
       if (!wiped) setPhase('choose');
       setProcessing(false);
     },
-    [enemyAttack, phase, processing, say],
+    [executeEnemyAttack, phase, processing, say],
   );
 
+  const executePlayerSwitch = useCallback(
+    async (caughtAt: number) => {
+      const member = useGameStore.getState().party.find((m) => m.caughtAt === caughtAt);
+      if (!member || isFainted(member) || member.guestLocked) return;
+      if (useGameStore.getState().party[0]?.caughtAt === caughtAt) return;
+      const outgoing = useGameStore.getState().party[0];
+      if (outgoing && transformSnapshot) {
+        patchPartyMember(outgoing.caughtAt, revertTransform(outgoing, transformSnapshot));
+        setTransformSnapshot(null);
+      }
+      if (!setActivePartyMember(caughtAt)) return;
+
+      setPlayerStages(ZERO_STAGES);
+      setPlayerVolatiles(clearVolatiles());
+      setPlayerPendingTurn(null);
+      say(`Go, ${member.nickname ?? member.displayName}!`);
+      playSfx('click', muted);
+      await delay(900);
+
+      const wiped = await executeEnemyAttack();
+      if (!wiped) {
+        await tickEndOfTurnStatus();
+        await runChaosIfNeeded(false);
+        setPhase((p) =>
+          p === 'forcedSwap' || p === 'between' || p === 'result' || p === 'victory' ? p : 'choose',
+        );
+      }
+    },
+    [
+      executeEnemyAttack,
+      muted,
+      patchPartyMember,
+      runChaosIfNeeded,
+      say,
+      setActivePartyMember,
+      tickEndOfTurnStatus,
+      transformSnapshot,
+    ],
+  );
+
+  const handleBattleSendOut = useCallback(
+    async (caughtAt: number) => {
+      if (processing || phase !== 'choose' || awaitingGuest != null || outcome) return;
+      if (playerPendingTurn) {
+        say('You cannot switch while preparing or recharging a move!');
+        return;
+      }
+      if (isThrashLocked(playerVolatiles)) {
+        say('You cannot switch while thrashing!');
+        return;
+      }
+      if (isTrapped(playerVolatiles)) {
+        say('You cannot switch while trapped!');
+        return;
+      }
+      setProcessing(true);
+      await executePlayerSwitch(caughtAt);
+      setProcessing(false);
+    },
+    [awaitingGuest, executePlayerSwitch, outcome, phase, playerPendingTurn, playerVolatiles, processing, say],
+  );
+
+  executePlayerSwitchRef.current = handleBattleSendOut;
+
   const applyXAttack = (move: BattleMove) => {
-    if (xAttackBuff || xAttackCount === 0 || !consumeItem('xattack', 1)) return;
-    setXAttackBuff(moveKey(move.ownerCaughtAt, move.slug));
-    say(`X-Attack boosted ${move.name}!`);
+    const alreadyBoosted =
+      (move.category === 'physical' && xAttackPhysical) ||
+      (move.category === 'special' && xAttackSpecial) ||
+      xAttackAllActive;
+    if (alreadyBoosted || xAttackCount === 0 || !consumeItem('xattack', 1)) return;
+    if (move.category === 'physical') setXAttackPhysical(true);
+    else if (move.category === 'special') setXAttackSpecial(true);
+    say(`X-Attack boosted ${move.category} moves for this battle!`);
     playSfx('item', muted);
   };
 
@@ -585,7 +1662,6 @@ export function BattleArena({
     if (setActivePartyMember(caughtAt)) {
       setPhase('choose');
       say('Ready to battle!');
-      loadLearnsets();
     }
   };
 
@@ -607,6 +1683,12 @@ export function BattleArena({
         : mult < 1
           ? 'gym-effectiveness--weak'
           : 'gym-effectiveness--normal';
+
+  const displayPower = (move: BattleMove, level: number, boosted: boolean) =>
+    formatMovePowerDisplay(move, level, boosted, {
+      defenderSpeciesId: enemy.id,
+      defenderHp: enemyHp,
+    });
 
   return (
     <>
@@ -651,19 +1733,39 @@ export function BattleArena({
                 />
               )}
               <div className="gym-enemy">
-                <img
-                  src={remoteBattleGif(enemy.id)}
-                  alt={enemy.displayName}
-                  className="gym-enemy__sprite"
-                  onError={(e) => {
-                    imgFallback(e, localPokemonSprite(enemy.id), enemy.sprite || PLACEHOLDER_SPRITE);
-                  }}
-                />
-                <p>{enemy.displayName}</p>
+                <div className="gym-enemy__sprite-wrap">
+                  <img
+                    src={localBattleGif(enemy.id)}
+                    alt={enemy.displayName}
+                    className="gym-enemy__sprite gym-enemy__sprite--clickable"
+                    title={`View ${enemy.displayName} details`}
+                    aria-label={`View ${enemy.displayName} details`}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setSelectedEnemyDetail(enemy)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setSelectedEnemyDetail(enemy);
+                      }
+                    }}
+                    onError={(e) => {
+                      battleGifOnError(e, enemy.id, enemy.sprite || PLACEHOLDER_SPRITE);
+                    }}
+                  />
+                </div>
+                <p className="gym-enemy__name">{enemy.displayName}</p>
+                {hasVisibleBattleEffects(enemy.status, enemyVolatiles) && (
+                  <div className="gym-enemy__status-row">
+                    <BattleEffectBadges
+                      status={enemy.status}
+                      volatiles={enemyVolatiles}
+                      placement="battle-row"
+                    />
+                  </div>
+                )}
                 <HpBar current={enemyHp} max={enemyMaxHp} />
-                <span className="gym-enemy__power">
-                  Power {Math.round((Number.isFinite(enemy.powerLevel) ? enemy.powerLevel : 0.3) * 100)}
-                </span>
+                <span className="gym-enemy__power">Lv. {enemy.level}</span>
                 <div className="gym-enemy__types">
                   {enemy.types.map((type) => (
                     <TypeBadge key={type} type={type} size="sm" />
@@ -682,37 +1784,37 @@ export function BattleArena({
             <p className="battle-message battle-message--turn">{message}</p>
           )}
 
-          {phase === 'choose' && enemy && hasUsablePokemon && (
+          {phase === 'choose' && enemy && hasUsablePokemon && guestControlsActive && (
+            <p className="battle-message">Friend is choosing a move…</p>
+          )}
+
+          {phase === 'choose' && enemy && hasUsablePokemon && !guestControlsActive && (
             <div className="battle-move-select">
               <p className="battle-move-select__title">Choose a move</p>
               <div className="battle-move-grid">
-                {partyMoves.map((move) => {
+                {activeMoves.map((move) => {
                   const owner = party.find((m) => m.caughtAt === move.ownerCaughtAt);
                   const fainted = owner ? isFainted(owner) : true;
+                  const locked = !!owner?.guestLocked;
                   const mult = getTypeEffectiveness(move.type, enemy.types);
-                  const eff =
-                    mult >= 4
-                      ? '4x Super'
-                      : mult >= 2
-                        ? 'Super'
-                        : mult <= 0
-                          ? 'No Effect'
-                          : mult < 1
-                            ? 'Not Very'
-                            : 'Effective';
+                  const effChip =
+                    move.category !== 'status' && !isFixedDamageMove(move.slug)
+                      ? getEffectivenessChipLabel(mult)
+                      : null;
                   const key = moveKey(move.ownerCaughtAt, move.slug);
-                  const boosted = xAttackBuff === key;
-                  // A move with no PP left is always disabled. If the whole party is
-                  // out of PP the battle is forfeited (see the out-of-PP effect).
-                  const ppDepleted = move.fromActive && move.currentPp <= 0;
+                  const boosted =
+                    (move.category === 'physical' && (xAttackPhysical || xAttackAllActive)) ||
+                    (move.category === 'special' && (xAttackSpecial || xAttackAllActive));
+                  const ppDepleted = move.currentPp <= 0;
                   const ppLow = move.currentPp <= Math.max(1, Math.floor(move.maxPp * 0.25));
+                  const inputBlocked = hostInputLocked || processing;
                   if (move.hollowPurple) {
                     return (
                       <div key={key} className="battle-move-cell">
                         <button
                           type="button"
                           className="battle-move-btn battle-move-btn--hollow"
-                          disabled={fainted || processing}
+                          disabled={fainted || locked || inputBlocked}
                           onClick={() => onMoveClick(move)}
                         >
                           <span className="battle-move-btn__cosmic" aria-hidden />
@@ -733,34 +1835,41 @@ export function BattleArena({
                     <div key={key} className="battle-move-cell">
                       <button
                         type="button"
-                        className={`battle-move-btn${fainted || ppDepleted ? ' battle-move-btn--disabled' : ''}${!move.fromActive ? ' battle-move-btn--switch' : ''}`}
+                        className={`battle-move-btn${fainted || ppDepleted || locked ? ' battle-move-btn--disabled' : ''}`}
                         style={{ backgroundColor: TYPE_COLORS[move.type] ?? '#888' }}
-                        disabled={fainted || ppDepleted || processing}
+                        disabled={fainted || ppDepleted || locked || inputBlocked}
                         onClick={() => onMoveClick(move)}
                       >
                         <span className="battle-move-btn__name">{move.name}</span>
-                        {showTypeEffectiveness && (
-                          <span className={`gym-effectiveness ${effectivenessClass(mult)}`}>{eff}</span>
+                        {showTypeEffectiveness && effChip && (
+                          <span className={`gym-effectiveness ${effectivenessClass(mult)}`}>{effChip}</span>
                         )}
                         <span className="battle-move-btn__meta">
                           {move.ownerDisplayName}
-                          {!move.fromActive && ' · switch (1 turn)'}
+                          {owner?.guestOwned ? ' · friend' : ''}
+                          {locked ? ' · locked' : ''}
                         </span>
                         <span className="battle-move-btn__footer">
                           <span className="battle-move-btn__power">
-                            Pwr {Math.round((move.power + (boosted ? XATTACK_BONUS : 0)) * 100)}
+                            Pwr {move.category === 'status' ? '—' : displayPower(move, owner?.level ?? 5, boosted)}
                           </span>
                           <span className={`battle-move-btn__pp${ppLow ? ' battle-move-btn__pp--low' : ''}`}>
                             PP {move.currentPp}/{move.maxPp}
                           </span>
                         </span>
                       </button>
-                      {move.fromActive && !fainted && (
+                      {move.category !== 'status' && !fainted && (
                         <button
                           type="button"
                           className="battle-move-xattack"
                           title="Use X-Attack on this move"
-                          disabled={!!xAttackBuff || xAttackCount === 0 || processing}
+                          disabled={
+                            (move.category === 'physical' && xAttackPhysical) ||
+                            (move.category === 'special' && xAttackSpecial) ||
+                            xAttackAllActive ||
+                            xAttackCount === 0 ||
+                            inputBlocked
+                          }
                           onClick={() => applyXAttack(move)}
                         >
                           <ItemIcon
@@ -791,7 +1900,7 @@ export function BattleArena({
               <p>Choose a Pokémon to send out:</p>
               <div className="battle-forced-swap__grid">
                 {party
-                  .filter((m, i) => i !== 0 && !isFainted(m))
+                  .filter((m, i) => i !== 0 && !isFainted(m) && !m.guestLocked)
                   .map((m) => (
                     <button
                       key={m.caughtAt}
@@ -801,6 +1910,7 @@ export function BattleArena({
                     >
                       <img src={m.sprite} alt={m.displayName} />
                       {m.nickname ?? m.displayName}
+                      {m.guestOwned ? ' ★' : ''}
                     </button>
                   ))}
               </div>
@@ -813,9 +1923,22 @@ export function BattleArena({
         <div className="battle-side">
           <SidePanel
             compact
-            allowSwap={phase === 'prep' || phase === 'between'}
-            allowItems={(phase === 'choose' || phase === 'between' || phase === 'forcedSwap') && !processing}
+            allowSwap={
+              ((phase === 'prep' || phase === 'between') ||
+                (phase === 'choose' && !processing && !playerPendingTurn && !hostInputLocked)) &&
+              !guestControlsActive
+            }
+            battleSendOutOnly={phase === 'choose'}
+            onBattleSendOut={handleBattleSendOut}
+            allowItems={
+              (phase === 'choose' || phase === 'between' || phase === 'forcedSwap') &&
+              !processing &&
+              !playerPendingTurn &&
+              !hostInputLocked &&
+              !guestControlsActive
+            }
             highlightActive={phase !== 'prep'}
+            activeBattlerVolatiles={playerVolatiles}
             inBattle
             onPotionUsed={() => spendItemTurn('You used a Potion!')}
             onElixirUsed={() => spendItemTurn('You used a Max Elixir!')}
@@ -907,7 +2030,6 @@ export function BattleArena({
           sprite={splashGag.sprite}
           name={splashGag.name}
           onDone={() => {
-            // Turn is intentionally not consumed — return to the move menu.
             setSplashGag(null);
             setProcessing(false);
           }}
@@ -921,6 +2043,22 @@ export function BattleArena({
             useGameStore.getState().recordChampion();
             setScreen('chadpion');
           }}
+        />
+      )}
+
+      {selectedEnemyDetail && (
+        <PokemonDetailModal
+          id={selectedEnemyDetail.id}
+          name={selectedEnemyDetail.displayName}
+          types={selectedEnemyDetail.types}
+          shiny={selectedEnemyDetail.shiny ?? false}
+          level={selectedEnemyDetail.level}
+          ivs={selectedEnemyDetail.ivs}
+          evs={selectedEnemyDetail.evs}
+          nature={selectedEnemyDetail.nature}
+          moves={selectedEnemyDetail.moves}
+          pp={selectedEnemyDetail.pp}
+          onClose={() => setSelectedEnemyDetail(null)}
         />
       )}
     </>

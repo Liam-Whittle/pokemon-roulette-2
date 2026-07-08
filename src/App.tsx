@@ -15,6 +15,7 @@ import { FossilScreen } from './screens/FossilScreen';
 import { CaveScreen } from './screens/CaveScreen';
 import { ItemScreen } from './screens/ItemScreen';
 import { GymBattleScreen } from './screens/GymBattleScreen';
+import { TeamRocketScreen } from './screens/TeamRocketScreen';
 import { EliteFourScreen } from './screens/EliteFourScreen';
 import { PokedexScreen } from './screens/PokedexScreen';
 import { PartyScreen } from './screens/PartyScreen';
@@ -25,6 +26,11 @@ import { GameOverScreen } from './screens/GameOverScreen';
 import { HallOfChampionsScreen } from './screens/HallOfChampionsScreen';
 import { ShopScreen } from './screens/ShopScreen';
 import { ComingSoonScreen } from './screens/ComingSoonScreen';
+import { MpHostLobbyScreen } from './screens/MpHostLobbyScreen';
+import { MpJoinScreen } from './screens/MpJoinScreen';
+import { MpGuestScreen } from './screens/MpGuestScreen';
+import { HostSync } from './multiplayer/HostSync';
+import { MpOverlay } from './components/MpOverlay';
 import { primeMusic, unlockMusic, setMusicMuted, setMusicTrack, setMusicVolume } from './utils/music';
 import { asset } from './utils/asset';
 import './styles/global.css';
@@ -35,6 +41,12 @@ function ScreenRouter() {
   switch (screen) {
     case 'title':
       return <TitleScreen key="title" />;
+    case 'mp-host-lobby':
+      return <MpHostLobbyScreen key="mp-host-lobby" />;
+    case 'mp-join':
+      return <MpJoinScreen key="mp-join" />;
+    case 'mp-guest':
+      return <MpGuestScreen key="mp-guest" />;
     case 'setup':
       return <TrainerSetup key="setup" />;
     case 'starter':
@@ -53,6 +65,8 @@ function ScreenRouter() {
       return <ItemScreen key="item" />;
     case 'gym':
       return <GymBattleScreen key="gym" />;
+    case 'teamrocket':
+      return <TeamRocketScreen key="teamrocket" />;
     case 'elite':
       return <EliteFourScreen key="elite" />;
     case 'pokedex':
@@ -94,7 +108,7 @@ export default function App() {
     if (screen !== 'title') {
       target.current = { x: 0, y: 0 };
       current.current = { x: 0, y: 0 };
-      if (bgRef.current) bgRef.current.style.transform = 'scale(1.12) translate3d(0, 0, 0)';
+      if (bgRef.current) bgRef.current.style.transform = 'scale(1) translate3d(0, 0, 0)';
       return;
     }
 
@@ -111,7 +125,7 @@ export default function App() {
       c.x += (t.x - c.x) * 0.08;
       c.y += (t.y - c.y) * 0.08;
       if (bgRef.current) {
-        bgRef.current.style.transform = `scale(1.12) translate3d(${c.x}px, ${c.y}px, 0)`;
+        bgRef.current.style.transform = `scale(1) translate3d(${c.x}px, ${c.y}px, 0)`;
       }
       raf = requestAnimationFrame(tick);
     };
@@ -147,7 +161,9 @@ export default function App() {
   }, [musicVolume]);
 
   useEffect(() => {
-    if (screen === 'gym') {
+    if (screen === 'teamrocket') {
+      setMusicTrack('teamrocket');
+    } else if (screen === 'gym') {
       setMusicTrack('gym');
     } else if (screen === 'elite') {
       setMusicTrack('elite4');
@@ -155,7 +171,9 @@ export default function App() {
       setMusicTrack('gamewin');
     } else if (screen === 'gameover') {
       setMusicTrack('gamelose');
-    } else if (screen === 'title' || screen === 'hall' || screen === 'shop') {
+    } else if (screen === 'shop') {
+      setMusicTrack('pokemart');
+    } else if (screen === 'title' || screen === 'hall') {
       setMusicTrack('title');
     } else if (screen === 'catch' || screen === 'fishing' || screen === 'fossil' || screen === 'cave') {
       setMusicTrack('pokemon');
@@ -168,23 +186,41 @@ export default function App() {
   // encounter (fishing/fossil/cave) instead of always showing the main hub art.
   const catchBg =
     currentActivity === 'fishing'
-      ? asset('img/fishing.jpg')
-      : currentActivity === 'cave' || currentActivity === 'fossil'
-        ? asset('img/cave.jpg')
-        : asset('img/main.jpg');
+      ? asset('img/fishing.png')
+      : currentActivity === 'cave'
+        ? asset('img/cave.png')
+        : currentActivity === 'fossil'
+          ? asset('img/fossil.png')
+          : asset('img/main.png');
 
   const bgImage =
-    screen === 'gym' || screen === 'elite' || screen === 'champion' || screen === 'chadpion' || screen === 'gameover'
-      ? asset('img/battle.jpg')
-      : screen === 'title' || screen === 'hall'
-        ? asset('img/title.jpg')
-        : screen === 'fishing'
-          ? asset('img/fishing.jpg')
-          : screen === 'cave' || screen === 'fossil'
-            ? asset('img/cave.jpg')
-            : screen === 'catch'
-              ? catchBg
-              : asset('img/main.jpg');
+    screen === 'teamrocket'
+      ? asset('img/team_rocket.png')
+      : screen === 'gym' || screen === 'champion' || screen === 'chadpion'
+        ? asset('img/battle_day.png')
+        : screen === 'elite'
+          ? asset('img/battle_night.png')
+          : screen === 'gameover'
+            ? asset('img/defeat.png')
+            : screen === 'title' || screen === 'hall'
+              ? asset('img/title.jpg')
+              : screen === 'shop'
+                ? asset('img/pokemart.png')
+                : screen === 'fishing'
+                  ? asset('img/fishing.png')
+                  : screen === 'cave'
+                    ? asset('img/cave.png')
+                    : screen === 'fossil'
+                      ? asset('img/fossil.png')
+                      : screen === 'catch'
+                        ? catchBg
+                        : asset('img/main.png');
+
+  const isFossilBg = screen === 'fossil' || (screen === 'catch' && currentActivity === 'fossil');
+  const overlayTop =
+    screen === 'cave' ? 0.25 : screen === 'shop' || screen === 'elite' ? 0.4 : isFossilBg ? 0.35 : 0.55;
+  const overlayBottom =
+    screen === 'shop' || screen === 'elite' || screen === 'cave' ? 0.25 : isFossilBg ? 0.35 : 0.55;
 
   return (
     <div className="app">
@@ -192,7 +228,7 @@ export default function App() {
         ref={bgRef}
         className="app-bg"
         style={{
-          backgroundImage: `linear-gradient(rgba(0, 0, 0, 0.55), rgba(0, 0, 0, 0.55)), url('${bgImage}')`,
+          backgroundImage: `linear-gradient(rgba(0, 0, 0, ${overlayTop}), rgba(0, 0, 0, ${overlayBottom})), url('${bgImage}')`,
         }}
       />
       <div className="app-controls">
@@ -203,6 +239,8 @@ export default function App() {
       <AnimatePresence mode="wait">
         <ScreenRouter />
       </AnimatePresence>
+      <HostSync />
+      <MpOverlay />
       <AnimatePresence>
         {showMusicPrompt && (
           <MusicPrompt

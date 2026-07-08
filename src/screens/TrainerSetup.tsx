@@ -22,6 +22,7 @@ const TRAINERS: TrainerPreset[] = [
 
 export function TrainerSetup() {
   const setTrainer = useGameStore((s) => s.setTrainer);
+  const setCatchGamemode = useGameStore((s) => s.setCatchGamemode);
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
 
@@ -37,6 +38,7 @@ export function TrainerSetup() {
       gender: selected.id,
       region: 'Kanto',
     });
+    setCatchGamemode('chance');
     setScreen('starter');
   };
 

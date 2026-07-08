@@ -6,18 +6,34 @@ import { ItemIcon } from './ItemIcon';
 import { EvolutionModal } from './EvolutionModal';
 import { PokemonDetailModal } from './PokemonDetailModal';
 import { ItemDetailModal } from './ItemDetailModal';
+import { BattleEffectBadges } from './StatusBadge';
+import type { BattleVolatiles } from '../data/battleVolatiles';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
-import { currentHp, maxHpFor, isFainted } from '../utils/battle';
+import { currentHp, maxHpForMon, isFainted, MAX_LEVEL } from '../utils/stats';
+import { canEvolveNow } from '../utils/evolution';
 import { hasReducedPp } from '../data/moves';
 import { playSfx } from '../utils/sound';
-import type { BagItem, EvolutionInfo } from '../types/game';
+import type { BagItem, CatchBallId, EvolutionInfo, IVs, NatureId, StoredMove } from '../types/game';
+
+const BALL_LABELS: Record<CatchBallId, string> = {
+  pokeball: 'Poké Ball',
+  greatball: 'Great Ball',
+  ultraball: 'Ultra Ball',
+  masterball: 'Master Ball',
+};
 
 interface SelectedMon {
   id: number;
   name: string;
   types: string[];
-  powerLevel: number;
   shiny: boolean;
+  caughtWithBall?: CatchBallId;
+  level?: number;
+  ivs?: IVs;
+  evs?: IVs;
+  nature?: NatureId;
+  moves?: StoredMove[];
+  pp?: Record<string, number>;
 }
 
 interface SidePanelProps {
@@ -35,6 +51,12 @@ interface SidePanelProps {
   inBattle?: boolean;
   /** Called after a Full Heal is successfully used in battle (spends the turn). */
   onFullHealUsed?: () => void;
+  /** During battle: Swap only sends a bench Pokémon to the active slot (no PC). */
+  battleSendOutOnly?: boolean;
+  /** Called when the player confirms sending out a bench Pokémon during battle. */
+  onBattleSendOut?: (caughtAt: number) => void;
+  /** Battle-only volatiles on the active battler (confusion, trap, etc.). */
+  activeBattlerVolatiles?: BattleVolatiles;
 }
 
 function PartyHpBar({ current, max }: { current: number; max: number }) {
@@ -62,6 +84,9 @@ export function SidePanel({
   onElixirUsed,
   inBattle = false,
   onFullHealUsed,
+  battleSendOutOnly = false,
+  onBattleSendOut,
+  activeBattlerVolatiles,
 }: SidePanelProps) {
   const party = useGameStore((state) => state.party);
   const pokedex = useGameStore((state) => state.pokedex);
@@ -71,19 +96,21 @@ export function SidePanel({
   const muted = useGameStore((state) => state.muted);
   const activePanel = useGameStore((state) => state.activePanel);
   const setActivePanel = useGameStore((state) => state.setActivePanel);
-  const triggerRareCandy = useGameStore((state) => state.useRareCandy);
+  const useRareCandyOnMember = useGameStore((state) => state.useRareCandyOnMember);
+  const evolvePartyMember = useGameStore((state) => state.evolvePartyMember);
   const swapPartyMember = useGameStore((state) => state.swapPartyMember);
   const swapPartyOrder = useGameStore((state) => state.swapPartyOrder);
   const usePotionOnMember = useGameStore((state) => state.usePotionOnMember);
   const useMaxElixirOnMember = useGameStore((state) => state.useMaxElixirOnMember);
   const useFullHealAllParty = useGameStore((state) => state.useFullHealAllParty);
+  const useHealPowderAllParty = useGameStore((state) => state.useHealPowderAllParty);
   const fullHealUsedInBattle = useGameStore((state) => state.fullHealUsedInBattle);
   const pcExcluded = useGameStore((state) => state.pcExcluded);
 
   const [swappingFor, setSwappingFor] = useState<number | null>(null);
   const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
-  const [usingCandy, setUsingCandy] = useState(false);
+  const [evolving, setEvolving] = useState(false);
   const [selectedMon, setSelectedMon] = useState<SelectedMon | null>(null);
   const [selectedItem, setSelectedItem] = useState<BagItem | null>(null);
 
@@ -92,15 +119,19 @@ export function SidePanel({
     .sort((a, b) => a.name.localeCompare(b.name));
 
   const rareCandy = bag.find((item) => item.id === 'rarecandy');
+  const rareCandyCount = rareCandy?.quantity ?? 0;
   const potionItem = bag.find((item) => item.id === 'potion');
   const potionCount = potionItem?.quantity ?? 0;
   const elixirItem = bag.find((item) => item.id === 'maxelixer');
   const elixirCount = elixirItem?.quantity ?? 0;
   const fullHealItem = bag.find((item) => item.id === 'fullheal');
   const fullHealCount = fullHealItem?.quantity ?? 0;
+  const healPowderItem = bag.find((item) => item.id === 'healpowder');
+  const healPowderCount = healPowderItem?.quantity ?? 0;
   const partyNeedsHeal = party.some(
-    (member) => currentHp(member) < maxHpFor(member.powerLevel),
+    (member) => currentHp(member) < maxHpForMon(member),
   );
+  const partyHasStatus = party.some((member) => !!member.status);
   const fullHealBlocked = (inBattle && fullHealUsedInBattle) || !partyNeedsHeal;
 
   const partyIds = new Set(party.map((member) => member.id));
@@ -110,18 +141,24 @@ export function SidePanel({
     .map(([id, entry]) => ({ id: Number(id), ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
-  async function handleUseRareCandy() {
-    if (usingCandy) return;
-    setUsingCandy(true);
+  function handleRareCandyOnMember(caughtAt: number) {
+    if (useRareCandyOnMember(caughtAt)) {
+      playSfx('item', muted);
+    }
+  }
+
+  async function handleEvolve(caughtAt: number) {
+    if (evolving) return;
+    setEvolving(true);
     try {
-      const result = await triggerRareCandy();
+      const result = await evolvePartyMember(caughtAt);
       if (result.evolution) {
         setEvolution(result.evolution);
       } else {
         setNotice(result.message);
       }
     } finally {
-      setUsingCandy(false);
+      setEvolving(false);
     }
   }
 
@@ -158,6 +195,18 @@ export function SidePanel({
     }
   }
 
+  function handleHealPowder() {
+    if (useHealPowderAllParty()) {
+      playSfx('item', muted);
+    }
+  }
+
+  function handleBattleSendOutConfirm() {
+    if (swappingFor === null) return;
+    onBattleSendOut?.(swappingFor);
+    setSwappingFor(null);
+  }
+
   return (
     <aside className={`side-panel ${compact ? 'side-panel--compact' : ''}`}>
       <div className="side-panel__tabs">
@@ -180,93 +229,158 @@ export function SidePanel({
               <p className="side-panel__empty">No party Pokemon yet.</p>
             ) : (
               party.map((pokemon, index) => {
-                const max = maxHpFor(pokemon.powerLevel);
+                const max = maxHpForMon(pokemon);
                 const hp = currentHp(pokemon);
                 const fainted = isFainted(pokemon);
                 const fullHp = hp >= max;
-                const ppDrained = hasReducedPp(pokemon.pp);
+                const ppDrained = hasReducedPp(pokemon.pp, pokemon.moves);
                 const isActive = highlightActive && index === 0;
+                const canEvolve = !inBattle && canEvolveNow(pokemon.id, pokemon.level, bag);
+                const canUseCandy =
+                  allowItems && rareCandyCount > 0 && !fainted && pokemon.level < MAX_LEVEL;
+                const showPotion = allowItems && potionCount > 0 && !fainted && !fullHp;
+                const showElixir = allowItems && elixirCount > 0 && !fainted && ppDrained;
+                const showSwap =
+                  allowSwap &&
+                  !pokemon.guestOwned &&
+                  (!battleSendOutOnly || (index !== 0 && !fainted && !pokemon.guestLocked));
+                const swapLabel = swappingFor === pokemon.caughtAt ? 'Cancel swap' : 'Swap Pokémon';
                 return (
                 <div
                   key={`${pokemon.id}-${pokemon.caughtAt}`}
-                  className={`side-panel__card${fainted ? ' side-panel__card--fainted' : ''}${isActive ? ' side-panel__card--active' : ''}`}
+                  className={`side-panel__card side-panel__card--party${fainted ? ' side-panel__card--fainted' : ''}${isActive ? ' side-panel__card--active' : ''}`}
                 >
-                  <img
-                    src={
-                      pokemon.shiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite
-                    }
-                    alt={pokemon.displayName}
-                    className="side-panel__sprite side-panel__sprite--clickable"
-                    onClick={() =>
-                      setSelectedMon({
-                        id: pokemon.id,
-                        name: pokemon.nickname ?? pokemon.displayName,
-                        types: pokemon.types,
-                        powerLevel: pokemon.powerLevel,
-                        shiny: pokemon.shiny ?? false,
-                      })
-                    }
-                    onError={(event) => {
-                      (event.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
-                    }}
-                  />
+                  <div className="side-panel__sprite-wrap">
+                    <BattleEffectBadges
+                      status={pokemon.status}
+                      volatiles={inBattle && isActive ? activeBattlerVolatiles : undefined}
+                      placement="party"
+                    />
+                    <img
+                      src={
+                        pokemon.shiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite
+                      }
+                      alt={pokemon.displayName}
+                      className="side-panel__sprite side-panel__sprite--clickable"
+                      onClick={() =>
+                        setSelectedMon({
+                          id: pokemon.id,
+                          name: pokemon.nickname ?? pokemon.displayName,
+                          types: pokemon.types,
+                          shiny: pokemon.shiny ?? false,
+                          caughtWithBall: pokemon.caughtWithBall,
+                          level: pokemon.level,
+                          ivs: pokemon.ivs,
+                          evs: pokemon.evs,
+                          nature: pokemon.nature,
+                          moves: pokemon.moves,
+                        })
+                      }
+                      onError={(event) => {
+                        (event.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                      }}
+                    />
+                  </div>
                   <div className="side-panel__card-body">
+                    <span className="side-panel__level">Lv. {pokemon.level}</span>
                     <strong>
                       {pokemon.shiny ? '✨ ' : ''}
+                      {pokemon.guestOwned ? '★ ' : ''}
                       {pokemon.nickname ?? pokemon.displayName}
+                      {pokemon.guestLocked && <span className="side-panel__guest-tag">Locked</span>}
+                      {pokemon.guestOwned && !pokemon.guestLocked && (
+                        <span className="side-panel__guest-tag">Friend</span>
+                      )}
                       {isActive && <span className="side-panel__active-tag">Active</span>}
                       {fainted && <span className="side-panel__faint-tag">Fainted</span>}
                     </strong>
                     <PartyHpBar current={hp} max={max} />
-                    <span>Power {Math.round((Number.isFinite(pokemon.powerLevel) ? pokemon.powerLevel : 0.3) * 100)}</span>
-                    <div className="side-panel__types">
-                      {pokemon.types.map((type) => (
-                        <TypeBadge key={type} type={type} size="sm" />
-                      ))}
+                    <div className="side-panel__types-row">
+                      <div className="side-panel__types">
+                        {pokemon.types.map((type) => (
+                          <TypeBadge key={type} type={type} size="sm" />
+                        ))}
+                      </div>
+                      <div className="side-panel__swap-slot">
+                        {showSwap ? (
+                          <button
+                            type="button"
+                            className="btn btn--ghost btn--sm side-panel__swap-btn"
+                            title={swapLabel}
+                            aria-label={swapLabel}
+                            onClick={() =>
+                              setSwappingFor((current) =>
+                                current === pokemon.caughtAt ? null : pokemon.caughtAt,
+                              )
+                            }
+                          >
+                            {swappingFor === pokemon.caughtAt ? 'Cancel' : 'Swap'}
+                          </button>
+                        ) : null}
+                      </div>
                     </div>
-                  </div>
-                  <div className="side-panel__card-actions">
-                    <div className="side-panel__item-actions">
-                      {allowItems && potionCount > 0 && !fainted && !fullHp && (
-                        <button
-                          type="button"
-                          className="side-panel__potion-btn"
-                          title="Use Potion (heal 50% max HP)"
-                          onClick={() => handlePotionHeal(pokemon.caughtAt)}
-                        >
-                          <ItemIcon
-                            id="potion"
-                            icon={potionItem?.icon ?? '💊'}
-                            name="Potion"
-                            className="side-panel__potion-icon"
-                          />
-                        </button>
-                      )}
-                      {allowItems && elixirCount > 0 && !fainted && ppDrained && (
-                        <button
-                          type="button"
-                          className="side-panel__potion-btn"
-                          title="Use Max Elixir (restore all move PP)"
-                          onClick={() => handleMaxElixir(pokemon.caughtAt)}
-                        >
-                          <ItemIcon
-                            id="maxelixer"
-                            icon={elixirItem?.icon ?? '🧪'}
-                            name="Max Elixir"
-                            className="side-panel__potion-icon"
-                          />
-                        </button>
-                      )}
+                    <div className="side-panel__action-chips">
+                      {canEvolve ? (
+                          <button
+                            type="button"
+                            className="side-panel__action-chip side-panel__action-chip--evolve side-panel__action-chip--label"
+                            title="Evolve this Pokémon"
+                            aria-label="Evolve this Pokémon"
+                            disabled={evolving}
+                            onClick={() => handleEvolve(pokemon.caughtAt)}
+                          >
+                            Evolve
+                          </button>
+                        ) : null}
+                        {showPotion ? (
+                          <button
+                            type="button"
+                            className="side-panel__action-chip side-panel__action-chip--item"
+                            title="Use Potion (heal 50% max HP)"
+                            aria-label="Use Potion"
+                            onClick={() => handlePotionHeal(pokemon.caughtAt)}
+                          >
+                            <ItemIcon
+                              id="potion"
+                              icon={potionItem?.icon ?? '💊'}
+                              name="Potion"
+                              className="side-panel__action-chip-icon"
+                            />
+                          </button>
+                        ) : null}
+                        {showElixir ? (
+                          <button
+                            type="button"
+                            className="side-panel__action-chip side-panel__action-chip--item"
+                            title="Use Max Elixir (restore all move PP)"
+                            aria-label="Use Max Elixir"
+                            onClick={() => handleMaxElixir(pokemon.caughtAt)}
+                          >
+                            <ItemIcon
+                              id="maxelixer"
+                              icon={elixirItem?.icon ?? '🧪'}
+                              name="Max Elixir"
+                              className="side-panel__action-chip-icon"
+                            />
+                          </button>
+                        ) : null}
+                        {canUseCandy ? (
+                          <button
+                            type="button"
+                            className="side-panel__action-chip side-panel__action-chip--item"
+                            title="Use Rare Candy (+1 level)"
+                            aria-label="Use Rare Candy"
+                            onClick={() => handleRareCandyOnMember(pokemon.caughtAt)}
+                          >
+                            <ItemIcon
+                              id="rarecandy"
+                              icon={rareCandy?.icon ?? '🍬'}
+                              name="Rare Candy"
+                              className="side-panel__action-chip-icon"
+                            />
+                          </button>
+                        ) : null}
                     </div>
-                    {allowSwap ? (
-                      <button
-                        type="button"
-                        className="btn btn--ghost btn--sm side-panel__swap-btn"
-                        onClick={() => setSwappingFor((current) => (current === pokemon.caughtAt ? null : pokemon.caughtAt))}
-                      >
-                        {swappingFor === pokemon.caughtAt ? 'Cancel' : 'Swap'}
-                      </button>
-                    ) : null}
                   </div>
                 </div>
               );
@@ -294,8 +408,9 @@ export function SidePanel({
                               id: entry.id,
                               name: entry.name,
                               types: entry.types,
-                              powerLevel: entry.powerLevel,
                               shiny: entry.shiny ?? false,
+                              caughtWithBall: entry.caughtWithBall,
+                              level: entry.level,
                             })
                         : undefined
                     }
@@ -304,9 +419,17 @@ export function SidePanel({
                     <strong className="side-panel__dex-name" title={entry.name}>
                       {entry.shiny ? '✨ ' : ''}
                       {entry.name}
+                      {entry.caught && entry.caughtWithBall && (
+                        <ItemIcon
+                          id={entry.caughtWithBall}
+                          icon="🔴"
+                          name={BALL_LABELS[entry.caughtWithBall]}
+                          className="side-panel__dex-ball"
+                        />
+                      )}
                     </strong>
                     <span className="side-panel__dex-power">
-                      Pwr {Math.round((Number.isFinite(entry.powerLevel) ? entry.powerLevel : 0.3) * 100)}
+                      Lv. {entry.level}
                     </span>
                   </div>
                   <span className={`side-panel__dex-status ${entry.caught ? 'side-panel__dex-status--caught' : ''}`}>
@@ -320,33 +443,26 @@ export function SidePanel({
 
         {activePanel === 'bag' && (
           <div className="side-panel__list side-panel__list--bag">
-            {bag.map((item) => (
-              <div key={item.id} className="side-panel__card">
-                <button
-                  type="button"
-                  className="side-panel__icon-btn"
-                  onClick={() => setSelectedItem(item)}
-                  title={`What does ${item.name} do?`}
-                >
-                  <ItemIcon id={item.id} icon={item.icon} name={item.name} className="side-panel__icon" />
-                </button>
-                <div className="side-panel__card-body">
-                  <strong>{item.name}</strong>
-                  <span>x{item.quantity}</span>
-                </div>
-                {item.id === 'rarecandy' && (
+            <div
+              className={`side-panel__bag-items${bag.length > 6 ? ' side-panel__bag-items--scroll' : ''}`}
+            >
+              {bag.map((item) => (
+                <div key={item.id} className="side-panel__card">
                   <button
                     type="button"
-                    className="btn btn--ghost btn--sm"
-                    onClick={handleUseRareCandy}
-                    disabled={!allowItems || usingCandy}
-                    title={allowItems ? undefined : "You can't use Rare Candy during battle."}
+                    className="side-panel__icon-btn"
+                    onClick={() => setSelectedItem(item)}
+                    title={`What does ${item.name} do?`}
                   >
-                    Use
+                    <ItemIcon id={item.id} icon={item.icon} name={item.name} className="side-panel__icon" />
                   </button>
-                )}
-              </div>
-            ))}
+                  <div className="side-panel__card-body">
+                    <strong>{item.name}</strong>
+                    <span>x{item.quantity}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
             <div className="side-panel__badges">
               <div className="side-panel__badges-head">
                 <strong>Badges</strong>
@@ -385,21 +501,25 @@ export function SidePanel({
           <PokeDollarAmount amount={money} />
         </div>
         <div className="side-panel__quick-items">
-        {activePanel === 'party' && allowItems && rareCandy && rareCandy.quantity > 0 && (
+        {activePanel === 'party' && allowItems && healPowderCount > 0 && (
           <button
             type="button"
-            className="side-panel__quick-candy"
-            onClick={handleUseRareCandy}
-            disabled={usingCandy}
-            title="Use Rare Candy"
+            className="side-panel__quick-heal"
+            onClick={handleHealPowder}
+            disabled={!partyHasStatus}
+            title={
+              !partyHasStatus
+                ? 'No party Pokémon have a status condition'
+                : 'Use Heal Powder (cure all party status)'
+            }
           >
             <ItemIcon
-              id={rareCandy.id}
-              icon={rareCandy.icon}
-              name={rareCandy.name}
-              className="side-panel__quick-candy-icon"
+              id="healpowder"
+              icon={healPowderItem?.icon ?? '🌿'}
+              name="Heal Powder"
+              className="side-panel__quick-heal-icon"
             />
-            <span className="side-panel__quick-candy-qty">x{rareCandy.quantity}</span>
+            <span className="side-panel__quick-heal-qty">x{healPowderCount}</span>
           </button>
         )}
         {activePanel === 'party' && allowItems && fullHealCount > 0 && (
@@ -435,8 +555,14 @@ export function SidePanel({
           id={selectedMon.id}
           name={selectedMon.name}
           types={selectedMon.types}
-          powerLevel={selectedMon.powerLevel}
           shiny={selectedMon.shiny}
+          caughtWithBall={selectedMon.caughtWithBall}
+          level={selectedMon.level}
+          ivs={selectedMon.ivs}
+          evs={selectedMon.evs}
+          nature={selectedMon.nature}
+          moves={selectedMon.moves}
+          pp={selectedMon.pp}
           onClose={() => setSelectedMon(null)}
         />
       )}
@@ -461,7 +587,41 @@ export function SidePanel({
         </div>
       )}
 
-      {allowSwap && swappingFor !== null && (() => {
+      {allowSwap && swappingFor !== null && battleSendOutOnly && (() => {
+        const target = party.find((m) => m.caughtAt === swappingFor);
+        if (!target || isFainted(target) || target.guestLocked) return null;
+        return (
+          <div className="battle-modal__backdrop" onClick={() => setSwappingFor(null)}>
+            <div
+              className="battle-modal side-panel__swap-modal"
+              onClick={(event) => event.stopPropagation()}
+            >
+              <h3 className="battle-modal__title">
+                Send out {target.nickname ?? target.displayName}?
+              </h3>
+              <p className="battle-modal__subtitle">You will use your turn to switch Pokémon.</p>
+              <div className="side-panel__swap side-panel__swap--modal">
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={handleBattleSendOutConfirm}
+                >
+                  Send out
+                </button>
+                <button
+                  type="button"
+                  className="btn btn--ghost side-panel__swap-cancel"
+                  onClick={() => setSwappingFor(null)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {allowSwap && swappingFor !== null && !battleSendOutOnly && (() => {
         const target = party.find((m) => m.caughtAt === swappingFor);
         const otherParty = party.filter(
           (m) => m.caughtAt !== swappingFor && !isFainted(m),

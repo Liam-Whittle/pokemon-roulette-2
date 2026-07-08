@@ -4,6 +4,7 @@ import { ITEMS, pickFindItemId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { ItemIcon } from '../components/ItemIcon';
 import { SegmentIcon } from '../components/SegmentIcon';
+import { publishHostActivity } from '../multiplayer/publish';
 import { playSfx } from '../utils/sound';
 
 export function ItemScreen() {
@@ -28,6 +29,14 @@ export function ItemScreen() {
         success: true,
         item: { id: item.id, name: item.name, quantity: 1, icon: item.icon },
         message: `You found a ${item.name}!`,
+      });
+      publishHostActivity({
+        kind: 'item',
+        title: 'Item found!',
+        message: `You found a ${item.name}!`,
+        success: true,
+        itemId: item.id,
+        itemIcon: item.icon,
       });
       setPhase('found');
     }, 2000);

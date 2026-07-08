@@ -4,8 +4,11 @@ import { fetchPokemon } from '../api/pokeapi';
 import { Wheel, type SpinnerSegment } from './Wheel';
 import { GameIcon } from './GameIcon';
 import { useGameStore } from '../store/useGameStore';
+import { publishHostActivity, publishHostWheelSpin } from '../multiplayer/publish';
 import { TYPE_COLORS } from '../data/typeChart';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import { encounterLevelForBadges } from '../utils/xp';
+import { filterEncounterPoolByEvolutionLevel } from '../utils/encounterPool';
 import type { UISpriteKey } from '../data/icons';
 import type { PokemonData } from '../types/game';
 
@@ -32,8 +35,13 @@ function sample<T>(arr: T[], n: number): T[] {
 export function EncounterWheel({ title, uiKey, subtitle, pool, maxWedges = 8 }: EncounterWheelProps) {
   const setScreen = useGameStore((s) => s.setScreen);
   const setCurrentPokemon = useGameStore((s) => s.setCurrentPokemon);
+  const badges = useGameStore((s) => s.badges);
 
-  const ids = useMemo(() => sample(Array.from(new Set(pool)), maxWedges), [pool, maxWedges]);
+  const ids = useMemo(() => {
+    const encounterLevel = encounterLevelForBadges(badges.length);
+    const filtered = filterEncounterPoolByEvolutionLevel(pool, encounterLevel);
+    return sample(Array.from(new Set(filtered)), maxWedges);
+  }, [pool, maxWedges, badges.length]);
   const [mons, setMons] = useState<PokemonData[] | null>(null);
   const [locked, setLocked] = useState(false);
 
@@ -65,6 +73,20 @@ export function EncounterWheel({ title, uiKey, subtitle, pool, maxWedges = 8 }: 
     const chosen = (mons ?? []).find((p) => String(p.id) === seg.id);
     if (!chosen) return;
     setLocked(true);
+    publishHostWheelSpin({
+      kind: 'encounter',
+      title,
+      segments,
+      result: seg,
+    });
+    publishHostActivity({
+      kind: 'notice',
+      title: 'Encounter!',
+      message: `A wild ${chosen.displayName} appeared!`,
+      success: true,
+      pokemonName: chosen.displayName,
+      pokemonSprite: chosen.sprite,
+    });
     setCurrentPokemon(chosen);
     window.setTimeout(() => setScreen('catch'), 700);
   }

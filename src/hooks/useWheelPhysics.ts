@@ -179,6 +179,49 @@ export function useWheelPhysics(
     [isDragging, computeFlickSpeed, startSpin, wheelRef, onWeakFlick],
   );
 
+  /**
+   * Animate the wheel to a known final angle (for remote spectate replay).
+   * Travels several full rotations with an ease-out curve.
+   */
+  const spinToAngle = useCallback(
+    (targetAngle: number, durationMs = 2200) => {
+      cancelAnimationFrame(rafRef.current);
+      velocityRef.current = 0;
+      fastRef.current = false;
+      setIsDragging(false);
+      setDragPower(0);
+
+      const start = angleRef.current;
+      const startNorm = normalizeAngle(start);
+      const targetNorm = normalizeAngle(targetAngle);
+      let travel = targetNorm - startNorm;
+      if (travel <= 0.05) travel += 2 * Math.PI;
+      travel += 5 * 2 * Math.PI;
+
+      const t0 = performance.now();
+      setIsSpinning(true);
+      onSpinStart?.();
+
+      const tick = (now: number) => {
+        const t = Math.min(1, (now - t0) / durationMs);
+        const eased = 1 - (1 - t) ** 3;
+        angleRef.current = start + travel * eased;
+        setAngle(angleRef.current);
+        if (t < 1) {
+          rafRef.current = requestAnimationFrame(tick);
+          return;
+        }
+        angleRef.current = start + travel;
+        setAngle(angleRef.current);
+        velocityRef.current = 0;
+        setIsSpinning(false);
+        onSpinEnd?.(normalizeAngle(angleRef.current));
+      };
+      rafRef.current = requestAnimationFrame(tick);
+    },
+    [onSpinStart, onSpinEnd],
+  );
+
   useEffect(() => {
     return () => cancelAnimationFrame(rafRef.current);
   }, []);
@@ -189,10 +232,23 @@ export function useWheelPhysics(
     isDragging,
     dragPower,
     quickSpin,
+    spinToAngle,
     handlePointerDown,
     handlePointerMove,
     handlePointerUp,
   };
+}
+
+/** Angle that lands the pointer on the midpoint of a weighted segment. */
+export function angleForWeightedSegment(index: number, weights: number[]): number {
+  const total = weights.reduce((sum, weight) => sum + weight, 0);
+  if (total <= 0 || index < 0 || index >= weights.length) return 0;
+  let start = 0;
+  for (let i = 0; i < index; i++) start += (weights[i]! / total) * 2 * Math.PI;
+  const span = (weights[index]! / total) * 2 * Math.PI;
+  const mid = start + span / 2;
+  // getWeightedSegmentIndex uses normalizeAngle(-angle).
+  return -mid;
 }
 
 export function getSegmentIndex(angle: number, segmentCount: number, pointerOffset = 0): number {

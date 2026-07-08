@@ -2,25 +2,70 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, useSpring } from 'framer-motion';
 import { fetchPokemon, fetchPokemonDetail, type PokemonDetail } from '../api/pokeapi';
-import type { PokemonData } from '../types/game';
+import type { CatchBallId, IVs, NatureId, PokemonData, StatKey, StoredMove } from '../types/game';
 import { TypeBadge } from './TypeBadge';
+import { ItemIcon } from './ItemIcon';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import { useGameStore } from '../store/useGameStore';
 import { playClip, stopClip } from '../utils/music';
 import { REGION_CRY_STYLE } from '../data/pools';
-import { MAGIKARP_ID } from '../data/moves';
+import { MAGIKARP_ID, describeMove, formatMoveCategory, formatMovePowerDisplay } from '../data/moves';
+import {
+  getBaseStatsForSpecies,
+  getComputedStats,
+  getNatureLabel,
+  statDeltasFromBase,
+  zeroEVs,
+} from '../utils/stats';
+import { getSpeciesCatchRate } from '../utils/xp';
+
+const BALL_LABELS: Record<CatchBallId, string> = {
+  pokeball: 'Poké Ball',
+  greatball: 'Great Ball',
+  ultraball: 'Ultra Ball',
+  masterball: 'Master Ball',
+};
+
+const STAT_LABELS: Record<StatKey, string> = {
+  hp: 'HP',
+  attack: 'Atk',
+  defense: 'Def',
+  specialAttack: 'SpA',
+  specialDefense: 'SpD',
+  speed: 'Spe',
+};
+
+const STAT_ORDER: StatKey[] = ['hp', 'attack', 'defense', 'specialAttack', 'specialDefense', 'speed'];
 
 interface PokemonDetailModalProps {
   id: number;
   name: string;
   types: string[];
-  powerLevel: number;
   shiny?: boolean;
+  caughtWithBall?: CatchBallId;
+  level?: number;
+  ivs?: IVs;
+  evs?: IVs;
+  nature?: NatureId;
+  moves?: StoredMove[];
+  pp?: Record<string, number>;
   onClose: () => void;
 }
 
-function powerPct(value: number): number {
-  return Math.round((Number.isFinite(value) ? value : 0.3) * 100);
+function formatDelta(value: number): string {
+  if (value > 0) return `+${value}`;
+  if (value < 0) return `${value}`;
+  return '0';
+}
+
+function statBarWidth(value: number): string {
+  return `${Math.min(100, Math.round((value / 200) * 100))}%`;
+}
+
+function deltaClass(value: number): string {
+  if (value > 0) return 'mon-detail-side__delta--pos';
+  if (value < 0) return 'mon-detail-side__delta--neg';
+  return 'mon-detail-side__delta--neutral';
 }
 
 /** Sparkle positions (percent within the art frame) for the shiny shimmer. */
@@ -37,7 +82,6 @@ const SHINY_PARTICLES = [
   { id: 9, left: '32%', top: '14%', delay: 1.6, duration: 2.0 },
 ];
 
-/** One-time celebratory burst radiating outward when a shiny card opens. */
 const SHINY_BURST = Array.from({ length: 14 }, (_, i) => {
   const angle = (i / 14) * Math.PI * 2;
   const distance = 90 + (i % 3) * 26;
@@ -55,16 +99,20 @@ export function PokemonDetailModal({
   id,
   name,
   types,
-  powerLevel,
   shiny = false,
+  caughtWithBall,
+  level,
+  ivs,
+  evs,
+  nature,
+  moves,
+  pp,
   onClose,
 }: PokemonDetailModalProps) {
   const [data, setData] = useState<PokemonData | null>(null);
   const [detail, setDetail] = useState<PokemonDetail | null>(null);
   const muted = useGameStore((s) => s.muted);
-  // Easter egg: a SHINY Magikarp becomes "Magichad" with a cosmic card and joke stats.
   const isMagichad = shiny && id === MAGIKARP_ID;
-  // For shinies, the cry waits until the shiny chime has finished.
   const [introDone, setIntroDone] = useState(!shiny);
   const cryPlayedRef = useRef(false);
 
@@ -73,6 +121,27 @@ export function PokemonDetailModal({
   const spriteX = useSpring(0, { stiffness: 150, damping: 18 });
   const spriteY = useSpring(0, { stiffness: 150, damping: 18 });
   const spriteScale = useSpring(1, { stiffness: 150, damping: 18 });
+
+  const displayLevel = level ?? 5;
+  const displayNature = nature ?? 'hardy';
+  const displayIvs = ivs ?? { hp: 0, attack: 0, defense: 0, specialAttack: 0, specialDefense: 0, speed: 0 };
+  const displayEvs = evs ?? zeroEVs();
+  const catchRate = getSpeciesCatchRate(id);
+
+  const computedStats = isMagichad
+    ? null
+    : getComputedStats({
+        id,
+        level: displayLevel,
+        ivs: displayIvs,
+        evs: displayEvs,
+        nature: displayNature,
+      });
+  const baseStats = isMagichad ? null : getBaseStatsForSpecies(id);
+  const deltas = isMagichad
+    ? null
+    : statDeltasFromBase(id, displayLevel, displayIvs, displayEvs, displayNature);
+  const displayMoves = moves?.slice(0, 4) ?? [];
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!shiny) return;
@@ -103,10 +172,8 @@ export function PokemonDetailModal({
     };
   }, [id]);
 
-  // Shiny chime intro: play it first, then unblock the cry once it ends.
   useEffect(() => {
     if (!shiny) return;
-    // Magichad skips the shiny chime entirely and plays its own line immediately.
     if (isMagichad) {
       setIntroDone(true);
       return;
@@ -136,8 +203,6 @@ export function PokemonDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Play the Pokémon's region-appropriate cry once data is loaded (and, for
-  // shinies, after the chime has finished). Guarded so it only fires once.
   useEffect(() => {
     if (muted || cryPlayedRef.current || !introDone) return;
 
@@ -170,7 +235,6 @@ export function PokemonDetailModal({
 
   const displayName = isMagichad ? 'Magichad' : name;
   const displayGenus = isMagichad ? 'Chad Pokémon' : detail?.genus;
-  const displayPower = isMagichad ? '∞' : powerPct(powerLevel);
   const displayBst = isMagichad ? '∞' : data?.baseStatTotal;
   const displayHeight = isMagichad
     ? '7 foot without shoes'
@@ -189,15 +253,18 @@ export function PokemonDetailModal({
   return createPortal(
     <div className="mon-detail-backdrop" onClick={onClose}>
       <motion.div
-        className={`mon-detail${shiny ? ' mon-detail--shiny' : ''}${isMagichad ? ' mon-detail--magichad' : ''}`}
+        className={`mon-detail-layout${shiny ? ' mon-detail-layout--shiny' : ''}`}
         initial={{ scale: 0.9, opacity: 0, y: 20 }}
         animate={{ scale: 1, opacity: 1, y: 0 }}
         transition={{ type: 'spring', stiffness: 240, damping: 24 }}
-        style={shiny ? { rotateX, rotateY, transformPerspective: 900 } : undefined}
-        onPointerMove={handlePointerMove}
-        onPointerLeave={handlePointerLeave}
         onClick={(e) => e.stopPropagation()}
       >
+        <motion.div
+          className={`mon-detail${shiny ? ' mon-detail--shiny' : ''}${isMagichad ? ' mon-detail--magichad' : ''}`}
+          style={shiny ? { rotateX, rotateY, transformPerspective: 900 } : undefined}
+          onPointerMove={handlePointerMove}
+          onPointerLeave={handlePointerLeave}
+        >
         {shiny && (
           <>
             <div className="mon-detail__foil" aria-hidden />
@@ -280,6 +347,14 @@ export function PokemonDetailModal({
               <span className={`mon-detail__name-text${shiny ? ' mon-detail__name-text--shiny' : ''}`}>
                 {displayName}
               </span>
+              {caughtWithBall && (
+                <ItemIcon
+                  id={caughtWithBall}
+                  icon="🔴"
+                  name={BALL_LABELS[caughtWithBall]}
+                  className="mon-detail__caught-ball"
+                />
+              )}
             </h3>
             <span className="mon-detail__id">{isMagichad ? '#∞' : `#${String(id).padStart(3, '0')}`}</span>
           </div>
@@ -302,8 +377,18 @@ export function PokemonDetailModal({
 
           <div className="mon-detail__stats">
             <div className="mon-detail__stat">
-              <span className="mon-detail__stat-label">Power</span>
-              <span className="mon-detail__stat-value">{displayPower}</span>
+              <span className="mon-detail__stat-label">LVL</span>
+              <span className="mon-detail__stat-value">{isMagichad ? '∞' : displayLevel}</span>
+            </div>
+            <div className="mon-detail__stat">
+              <span className="mon-detail__stat-label">Nature</span>
+              <span className="mon-detail__stat-value">
+                {isMagichad ? 'Chad' : getNatureLabel(displayNature)}
+              </span>
+            </div>
+            <div className="mon-detail__stat">
+              <span className="mon-detail__stat-label">Catch Rate</span>
+              <span className="mon-detail__stat-value">{isMagichad ? '∞' : catchRate}</span>
             </div>
             {(isMagichad || data) && (
               <div className="mon-detail__stat">
@@ -329,6 +414,75 @@ export function PokemonDetailModal({
 
           {displayFlavor && <p className="mon-detail__flavor">{displayFlavor}</p>}
         </div>
+        </motion.div>
+
+        {!isMagichad && computedStats && baseStats && deltas && (
+          <motion.div
+            className="mon-detail-side"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.05, duration: 0.25 }}
+          >
+            <section className="mon-detail-side__panel mon-detail-side__panel--stats">
+              <h4 className="mon-detail-side__title">Battle Stats</h4>
+              <div className="mon-detail-side__stat-list">
+                {STAT_ORDER.map((key) => (
+                  <div key={key} className={`mon-detail-side__stat-row mon-detail-side__stat-row--${key}`}>
+                    <span className="mon-detail-side__stat-label">{STAT_LABELS[key]}</span>
+                    <div className="mon-detail-side__stat-bar">
+                      <div
+                        className="mon-detail-side__stat-fill"
+                        style={{ width: statBarWidth(computedStats[key]) }}
+                      />
+                    </div>
+                    <span className="mon-detail-side__stat-value">{computedStats[key]}</span>
+                    <span className={`mon-detail-side__delta ${deltaClass(deltas[key])}`}>
+                      {formatDelta(deltas[key])}
+                    </span>
+                  </div>
+                ))}
+              </div>
+              <div className="mon-detail-side__iv-ev">
+                <div className="mon-detail-side__iv-ev-row">
+                  <span className="mon-detail-side__iv-ev-label">IV</span>
+                  <span className="mon-detail-side__iv-ev-values">
+                    {STAT_ORDER.map((key) => displayIvs[key]).join(' · ')}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            {displayMoves.length > 0 && (
+              <section className="mon-detail-side__panel mon-detail-side__panel--moves">
+                <h4 className="mon-detail-side__title">Moveset</h4>
+                <div className="mon-detail-side__move-list">
+                  {displayMoves.map((move) => {
+                    const currentPp = pp?.[move.slug] ?? move.maxPp;
+                    const accuracyLabel = move.accuracy > 0 ? `${move.accuracy}%` : '—';
+                    const powerLabel = formatMovePowerDisplay(move, level ?? 5);
+                    return (
+                      <article key={move.slug} className="mon-detail-side__move-card">
+                        <div className="mon-detail-side__move-head">
+                          <h5 className="mon-detail-side__move-name">{move.name}</h5>
+                          <TypeBadge type={move.type} size="sm" />
+                        </div>
+                        <div className="mon-detail-side__move-meta">
+                          <span className="mon-detail-side__move-tag">{formatMoveCategory(move.category)}</span>
+                          <span className="mon-detail-side__move-tag">Pow {powerLabel}</span>
+                          <span className="mon-detail-side__move-tag">Acc {accuracyLabel}</span>
+                          <span className="mon-detail-side__move-tag mon-detail-side__move-tag--pp">
+                            PP {currentPp}/{move.maxPp}
+                          </span>
+                        </div>
+                        <p className="mon-detail-side__move-desc">{describeMove(move, { level: level ?? 5 })}</p>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            )}
+          </motion.div>
+        )}
       </motion.div>
     </div>,
     document.body,

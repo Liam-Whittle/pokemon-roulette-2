@@ -4,6 +4,9 @@ import { localBadge, localTrainerSprite } from '../utils/localAssets';
 /** Small slice weight for rare wheel outcomes (Legendary, Uber Spin). */
 export const RARE_WHEEL_WEIGHT = 0.35;
 
+/** Small slice weight for Mystery pathway wedges (Uber Spin, Full Heal). */
+export const MYSTERY_SMALL_WEDGE_WEIGHT = 0.2;
+
 export const WHEEL_SEGMENTS: WheelSegment[] = [
   { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
   { id: 'fishing', label: 'Fishing', activity: 'fishing', color: '#38bdf8', icon: '🎣' },
@@ -13,18 +16,12 @@ export const WHEEL_SEGMENTS: WheelSegment[] = [
   { id: 'fossil', label: 'Fossil Revive', activity: 'fossil', color: '#fb923c', icon: '🦴' },
 ];
 
-const HUB_WHEEL_BASE: WheelSegment[] = [
-  { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
-  { id: 'fishing', label: 'Fishing', activity: 'fishing', color: '#38bdf8', icon: '🎣', weight: 0.6 },
-  { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
-  { id: 'wild2', label: 'Tall Grass', activity: 'tallgrass', color: '#22c55e', icon: '🍃' },
-  { id: 'cave', label: 'Explore Cave', activity: 'cave', color: '#a78bfa', icon: '🕳️' },
-  { id: 'fossil', label: 'Fossil Revive', activity: 'fossil', color: '#fb923c', icon: '🦴', weight: 0.6 },
-  { id: 'shop', label: 'Visit Shop', activity: 'shop', color: '#f472b6', icon: '🏪' },
-];
-
-export const HUB_WHEEL_LAYOUT_A: WheelSegment[] = [
-  ...HUB_WHEEL_BASE,
+/** Catch Pokémon pathway wheel segments. */
+export const PATH_CATCH_SEGMENTS: WheelSegment[] = [
+  { id: 'wild', label: 'Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
+  { id: 'fishing', label: 'Fishing', activity: 'fishing', color: '#38bdf8', icon: '🎣' },
+  { id: 'cave', label: 'Cave', activity: 'cave', color: '#a78bfa', icon: '🕳️' },
+  { id: 'fossil', label: 'Fossil', activity: 'fossil', color: '#fb923c', icon: '🦴' },
   {
     id: 'legendary',
     label: 'Legendary',
@@ -35,56 +32,62 @@ export const HUB_WHEEL_LAYOUT_A: WheelSegment[] = [
   },
 ];
 
-export const HUB_WHEEL_LAYOUT_B: WheelSegment[] = [
-  { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
-  { id: 'battlegym', label: 'Battle Gym', activity: 'battlegym', color: '#ef4444', icon: '🏆', weight: 0.6 },
+/** Hunt Items pathway wheel segments. */
+export const PATH_ITEMS_SEGMENTS: WheelSegment[] = [
   { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
-  { id: 'wild2', label: 'Tall Grass', activity: 'tallgrass', color: '#22c55e', icon: '🍃' },
-  { id: 'evolve', label: 'Evolve', activity: 'evolve', color: '#a78bfa', icon: '🧬' },
-  { id: 'potion', label: 'Potion', activity: 'potion', color: '#fb923c', icon: '💊', weight: 0.6 },
-  { id: 'shop', label: 'Visit Shop', activity: 'shop', color: '#f472b6', icon: '🏪' },
+  { id: 'stone', label: 'Stone', activity: 'stone', color: '#a78bfa', icon: '🪨' },
+  { id: 'elixir', label: 'Elixir', activity: 'elixir', color: '#38bdf8', icon: '🧪' },
+  { id: 'potion', label: 'Potion', activity: 'potion', color: '#fb923c', icon: '💊' },
+  { id: 'rarecandy', label: 'Rare Candy', activity: 'rarecandy', color: '#f472b6', icon: '🍬' },
+  { id: 'healpowder', label: 'Heal Powder', activity: 'healpowder', color: '#86efac', icon: '🌿' },
+  { id: 'xattack', label: 'X-Attack', activity: 'xattack', color: '#ef4444', icon: '⚔️' },
+];
+
+/** Mystery pathway wheel segments. */
+export const PATH_MYSTERY_SEGMENTS: WheelSegment[] = [
   {
-    id: 'uber',
+    id: 'uberspin',
     label: 'Uber Spin',
     activity: 'uber',
     color: '#c084fc',
     icon: '🌀',
-    weight: RARE_WHEEL_WEIGHT,
+    weight: MYSTERY_SMALL_WEDGE_WEIGHT,
   },
-];
-
-const HUB_WHEEL_LAYOUT_B_ELIXIR: WheelSegment[] = [
-  { id: 'wild', label: 'Wild Grass', activity: 'wild', color: '#4ade80', icon: '🌿' },
-  { id: 'elixir', label: 'Elixir', activity: 'elixir', color: '#38bdf8', icon: '🧪', weight: 0.6 },
-  { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
-  { id: 'wild2', label: 'Tall Grass', activity: 'tallgrass', color: '#22c55e', icon: '🍃' },
-  { id: 'evolve', label: 'Evolve', activity: 'evolve', color: '#a78bfa', icon: '🧬' },
-  { id: 'potion', label: 'Potion', activity: 'potion', color: '#fb923c', icon: '💊', weight: 0.6 },
-  { id: 'shop', label: 'Visit Shop', activity: 'shop', color: '#f472b6', icon: '🏪' },
+  { id: 'teamrocket', label: 'Team Rocket', activity: 'teamrocket', color: '#1e293b', icon: '🚀' },
   {
-    id: 'uber',
-    label: 'Uber Spin',
-    activity: 'uber',
-    color: '#c084fc',
-    icon: '🌀',
-    weight: RARE_WHEEL_WEIGHT,
+    id: 'fullheal',
+    label: 'Full Heal',
+    activity: 'fullheal',
+    color: '#f472b6',
+    icon: '💗',
+    weight: MYSTERY_SMALL_WEDGE_WEIGHT,
   },
+  { id: 'money100', label: '+¥100', activity: 'money100', color: '#fde047', icon: '💰' },
 ];
 
-const POKECENTER_WEDGE: WheelSegment = {
-  id: 'pokecenter',
-  label: 'Heal',
-  activity: 'pokecenter',
-  color: '#f472b6',
-  icon: '💗',
-  weight: RARE_WHEEL_WEIGHT,
+export const PATHWAY_SEGMENTS: Record<'catch' | 'items' | 'mystery', WheelSegment[]> = {
+  catch: PATH_CATCH_SEGMENTS,
+  items: PATH_ITEMS_SEGMENTS,
+  mystery: PATH_MYSTERY_SEGMENTS,
+};
+
+/** Team Rocket encounter Pokémon pool (Ekans through Machop). */
+export const TEAM_ROCKET_POOL = [23, 24, 41, 42, 109, 110, 19, 20, 96, 97, 66];
+
+export const TEAM_ROCKET_LEADER: GymLeader = {
+  id: 'team-rocket-grunt',
+  name: 'Team Rocket Grunt',
+  type: 'poison',
+  badgeName: '',
+  sprite: localTrainerSprite('rocketgrunt.png'),
+  pokemon: [],
 };
 
 export const UBER_SPIN_SEGMENTS = [
-  { id: 'legendary', label: 'Legendary', color: '#fde047', icon: '✨', weight: 1 },
-  { id: 'bonus-item', label: '+1 Item', color: '#fbbf24', icon: '🎁', weight: 1 },
-  { id: 'shinycharm', label: 'Shiny Charm', color: '#f9a8d4', icon: '✨', weight: 1 },
   { id: 'masterball', label: 'Master Ball', color: '#a855f7', icon: '🔮', weight: 1 },
+  { id: 'bonus-all-items', label: '+1 All Items', color: '#fbbf24', icon: '🎁', weight: 1 },
+  { id: 'bonus-xp', label: '+200xp', color: '#4ade80', icon: '⭐', weight: 1 },
+  { id: 'bonus-money', label: '+¥250', color: '#fde047', icon: '💰', weight: 1 },
 ];
 
 export const SHINY_WHEEL_SEGMENTS = [
@@ -100,6 +103,7 @@ export const SHINY_WHEEL_CHARM_SEGMENTS = [
 export const ITEMS = [
   { id: 'potion', name: 'Potion', icon: '💊' },
   { id: 'fullheal', name: 'Full Heal', icon: '💚' },
+  { id: 'healpowder', name: 'Heal Powder', icon: '🌿' },
   { id: 'rarecandy', name: 'Rare Candy', icon: '🍬' },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️' },
   { id: 'maxelixer', name: 'Max Elixir', icon: '🧪' },
@@ -109,7 +113,23 @@ export const ITEMS = [
   { id: 'ultraball', name: 'Ultra Ball', icon: '🟡' },
   { id: 'masterball', name: 'Master Ball', icon: '🟣' },
   { id: 'shinycharm', name: 'Shiny Charm', icon: '✨' },
+  { id: 'firestone', name: 'Fire Stone', icon: '🔥' },
+  { id: 'waterstone', name: 'Water Stone', icon: '💧' },
+  { id: 'thunderstone', name: 'Thunder Stone', icon: '⚡' },
+  { id: 'leafstone', name: 'Leaf Stone', icon: '🍃' },
+  { id: 'moonstone', name: 'Moon Stone', icon: '🌙' },
+  { id: 'tradestone', name: 'Trade Stone', icon: '🔁' },
 ];
+
+export const STONE_ITEM_IDS = [
+  'firestone',
+  'waterstone',
+  'thunderstone',
+  'leafstone',
+  'moonstone',
+  'tradestone',
+] as const;
+export type StoneItemId = (typeof STONE_ITEM_IDS)[number];
 
 /** What each item actually does in THIS game (not the mainline Pokémon games). */
 export const ITEM_DESCRIPTIONS: Record<string, string> = {
@@ -117,25 +137,47 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
     'Use in battle (bag or party icon): heal one non-fainted Pokémon by half its max HP. Cannot revive fainted Pokémon.',
   fullheal:
     'Fully restores HP for every Pokémon in your party. In battle you can only use one per fight (one for the entire Elite Four run).',
+  healpowder:
+    'Cures all status conditions on every Pokémon in your party. Only usable when at least one party Pokémon has a status.',
   rarecandy:
-    'Evolves one random eligible Pokémon in your party. If none of your Pokémon can evolve right now, it turns into 2 Potions instead.',
+    'Level up one Pokémon by 1. Use on a party member from the bag or party tab.',
   xattack:
-    'Use in battle on a move: boosts that move\u2019s power by +20 for the rest of the current enemy Pokémon fight only.',
+    'Use in battle on a move: boosts Physical or Special damage by +40% of that move\u2019s power for the rest of the current enemy fight.',
   maxelixer:
     'Use on one Pokémon (bag or party icon) to fully restore the PP of all of that Pokémon\u2019s moves. Only affects the Pokémon you use it on.',
   maxrevive:
     'If you run out of lives, use a Max Revive on the Game Over screen to revive with one more life and keep your run going.',
   pokeball:
-    'The basic ball for catching wild Pokémon. Standard timing zone in the catch mini-game.',
+    'The basic ball for catching wild Pokémon. 1× catch-rate multiplier (assumes wild Pokémon at 30% HP).',
   greatball:
-    'A better ball: widens the timing zone in the catch mini-game, making catches easier than a regular Poké Ball.',
+    'A better ball: 1.5× catch-rate multiplier (assumes wild Pokémon at 30% HP).',
   ultraball:
-    'A premium ball: widens the timing zone and slows the marker down in the catch mini-game for the easiest standard catch.',
+    'A premium ball: 2× catch-rate multiplier (assumes wild Pokémon at 30% HP).',
   masterball:
-    'Instantly catches any Pokémon with no mini-game \u2014 a guaranteed catch. Best saved for Legendaries.',
+    'Instantly catches any Pokémon with no mini-game — a guaranteed catch. Best saved for Legendaries.',
   shinycharm:
     'While in your bag, it improves the post-catch Shiny Check, boosting the shiny chance from 1 in 40 to 1 in 15.',
+  firestone: 'Use on compatible Pokémon from your Party to trigger Fire Stone evolution.',
+  waterstone: 'Use on compatible Pokémon from your Party to trigger Water Stone evolution.',
+  thunderstone: 'Use on compatible Pokémon from your Party to trigger Thunder Stone evolution.',
+  leafstone: 'Use on compatible Pokémon from your Party to trigger Leaf Stone evolution.',
+  moonstone: 'Use on compatible Pokémon from your Party to trigger Moon Stone evolution.',
+  tradestone: 'Use on trade-evolution Pokémon from your Party to evolve without trading.',
 };
+
+export const CHANCE_BALL_DESCRIPTIONS: Record<string, string> = {
+  pokeball: '1× catch-rate multiplier. Odds use Gen 3–7 shake checks at assumed 30% HP.',
+  greatball: '1.5× catch-rate multiplier. Better odds than a Poké Ball on the same species.',
+  ultraball: '2× catch-rate multiplier. Best standard ball for rare Pokémon.',
+  masterball: '100% catch chance — always catches.',
+};
+
+export function getItemDescription(id: string, catchGamemode: 'skill' | 'chance' = 'chance'): string {
+  if (catchGamemode === 'chance' && id in CHANCE_BALL_DESCRIPTIONS) {
+    return CHANCE_BALL_DESCRIPTIONS[id];
+  }
+  return ITEM_DESCRIPTIONS[id] ?? 'No description available for this item yet.';
+}
 
 export const BALL_ITEM_IDS = ['pokeball', 'greatball', 'ultraball', 'masterball'] as const;
 export type BallItemId = (typeof BALL_ITEM_IDS)[number];
@@ -151,10 +193,11 @@ export const BALL_SPRITES: Record<string, string> = {
 
 export const SHOP_CATALOG = [
   { id: 'potion', name: 'Potion', icon: '💊', price: 50 },
+  { id: 'healpowder', name: 'Heal Powder', icon: '🌿', price: 50 },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️', price: 50 },
   { id: 'maxelixer', name: 'Max Elixir', icon: '🧪', price: 50 },
-  { id: 'rarecandy', name: 'Rare Candy', icon: '🍬', price: 100 },
   { id: 'fullheal', name: 'Full Heal', icon: '💚', price: 200 },
+  { id: 'shinycharm', name: 'Shiny Charm', icon: '✨', price: 300 },
   { id: 'pokeball', name: 'Poké Ball', icon: '🔴', price: 20 },
   { id: 'greatball', name: 'Great Ball', icon: '🔵', price: 30 },
   { id: 'ultraball', name: 'Ultra Ball', icon: '🟡', price: 50 },
@@ -170,33 +213,17 @@ const FIND_ITEM_LOOT: WeightedLootEntry[] = [
   { id: 'pokeball', weight: 8 },
   { id: 'greatball', weight: 5 },
   { id: 'ultraball', weight: 3 },
-  { id: 'potion', weight: 24 },
-  { id: 'rarecandy', weight: 25 },
-  { id: 'xattack', weight: 25 },
+  { id: 'potion', weight: 20 },
+  { id: 'healpowder', weight: 15 },
+  { id: 'rarecandy', weight: 20 },
+  { id: 'xattack', weight: 20 },
 ];
 
-const UBER_BONUS_ITEMS = ['potion', 'xattack', 'rarecandy'];
-
-export function getHubWheelSegments(spinsSinceGym: number, spinsThreshold: number): WheelSegment[] {
-  const isLastSpin = spinsSinceGym === spinsThreshold - 1;
-  const isSecondToLast = spinsSinceGym === spinsThreshold - 2;
-
-  // The final spin before a Gym/Elite fight always presents the Battle Gym wedge.
-  if (isLastSpin) return [...HUB_WHEEL_LAYOUT_B];
-
-  // The second-to-last spin guarantees the Heal wedge, inserted between Tall
-  // Grass and Explore Cave so it isn't crowded next to the small Legendary wedge.
-  if (isSecondToLast) {
-    const layout = [...HUB_WHEEL_LAYOUT_A];
-    const caveIndex = layout.findIndex((seg) => seg.id === 'cave');
-    const insertAt = caveIndex === -1 ? layout.length - 1 : caveIndex;
-    layout.splice(insertAt, 0, POKECENTER_WEDGE);
-    return layout;
-  }
-
-  // Normal spins alternate between Layout A and Layout B (Elixir variant).
-  return spinsSinceGym % 2 === 0 ? [...HUB_WHEEL_LAYOUT_A] : [...HUB_WHEEL_LAYOUT_B_ELIXIR];
-}
+/** Items granted when Uber Spin "+1 All Items" hits an empty bag. */
+export const UBER_EMPTY_BAG_ITEMS = [
+  'potion', 'healpowder', 'xattack', 'rarecandy', 'fullheal', 'maxelixer',
+  'pokeball', 'greatball', 'ultraball',
+];
 
 export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
   const total = entries.reduce((sum, entry) => sum + entry.weight, 0);
@@ -209,32 +236,16 @@ export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
 }
 
 export function pickFindItemId(): string {
+  if (Math.random() < 0.05) return pickRandom(STONE_ITEM_IDS);
   if (Math.random() < 0.15) return 'fullheal';
   if (Math.random() < 0.15) return 'maxelixer';
+  if (Math.random() < 0.12) return 'healpowder';
   return pickWeightedItemId(FIND_ITEM_LOOT);
 }
 
-export function pickUberBonusItemId(): string {
-  return pickRandom(UBER_BONUS_ITEMS);
+export function pickCaveItemId(): string {
+  return pickRandom(ITEMS.filter((item) => !['masterball', 'shinycharm', 'maxrevive'].includes(item.id))).id;
 }
-
-/** BST <= 425 (power <= 45) — common wild encounters (fossil Pokemon excluded) */
-export const GEN1_WILD_LOW: number[] = [
-  1, 4, 7, 10, 13, 16, 19, 21, 23, 25, 27, 29, 32, 35, 37, 39, 41, 43, 46, 48,
-  50, 52, 54, 56, 58, 60, 63, 66, 69, 72, 74, 77, 79, 81, 83, 84, 86, 88, 90,
-  92, 95, 96, 98, 100, 102, 104, 108, 109, 111, 116, 118, 120, 129, 133, 137,
-  147, 148,
-];
-
-/** BST > 425 (power >= 45) — tougher tall-grass encounters (legendaries/fossils excluded) */
-export const GEN1_WILD_HIGH: number[] = [
-  114, 115, 123, 124, 125, 126, 127, 128, 131, 139, 141, 143, 149,
-];
-
-/** Union of both pools (legacy / fallback) */
-export const GEN1_WILD: number[] = [...GEN1_WILD_LOW, ...GEN1_WILD_HIGH];
-
-export const LEGENDARY_ENCOUNTER_CHANCE = 0.1;
 
 // Gen 1 (Kanto) species obtainable with the Old/Good/Super Rod.
 export const GEN1_FISHING: number[] = [
@@ -248,12 +259,27 @@ export const MAX_PARTY = 5;
 export const GEN1_LEGENDARY: number[] = [144, 145, 146, 150, 151];
 
 /**
- * National Pokédex ID ceiling for the currently-playable region. Evolutions
- * that would cross into a later generation (e.g. Onix → Steelix, or Eevee →
- * Espeon/Umbreon) are filtered out until the region that unlocks them is added.
- * Kanto = 151. Raise this (or swap to a per-region value) when new regions ship.
+ * National Pokédex ID ceiling for the currently-playable region.
  */
 export const REGION_MAX_DEX_ID = 151;
+
+const EXCLUSIVE_POOL = new Set([
+  ...GEN1_FISHING,
+  ...GEN1_CAVE,
+  ...FOSSIL_POKEMON,
+  ...GEN1_LEGENDARY,
+]);
+
+/** All Gen 1 grass encounters minus fishing, cave, fossil, and legendary exclusives. */
+export const GEN1_GRASS: number[] = Array.from({ length: REGION_MAX_DEX_ID }, (_, i) => i + 1).filter(
+  (id) => !EXCLUSIVE_POOL.has(id),
+);
+
+/** @deprecated Use GEN1_GRASS */
+export const GEN1_WILD_LOW: number[] = GEN1_GRASS;
+/** @deprecated Use GEN1_GRASS */
+export const GEN1_WILD_HIGH: number[] = GEN1_GRASS;
+export const GEN1_WILD: number[] = GEN1_GRASS;
 
 /**
  * Which cry recording to play for the current region. Kanto uses the retro
@@ -270,8 +296,8 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('brock.png'),
     badgeImage: localBadge(1),
     pokemon: [
-      { id: 74, name: 'geodude', level: 12 },
-      { id: 95, name: 'onix', level: 14 },
+      { id: 74, name: 'geodude', level: 5 },
+      { id: 95, name: 'onix', level: 5 },
     ],
   },
   {
@@ -282,8 +308,8 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('misty.png'),
     badgeImage: localBadge(2),
     pokemon: [
-      { id: 120, name: 'staryu', level: 18 },
-      { id: 121, name: 'starmie', level: 21 },
+      { id: 120, name: 'staryu', level: 10 },
+      { id: 121, name: 'starmie', level: 10 },
     ],
   },
   {
@@ -294,9 +320,9 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('ltsurge.png'),
     badgeImage: localBadge(3),
     pokemon: [
-      { id: 100, name: 'voltorb', level: 21 },
-      { id: 25, name: 'pikachu', level: 18 },
-      { id: 26, name: 'raichu', level: 24 },
+      { id: 100, name: 'voltorb', level: 15 },
+      { id: 25, name: 'pikachu', level: 15 },
+      { id: 26, name: 'raichu', level: 15 },
     ],
   },
   {
@@ -307,9 +333,9 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('erika.png'),
     badgeImage: localBadge(4),
     pokemon: [
-      { id: 114, name: 'tangela', level: 24 },
-      { id: 70, name: 'weepinbell', level: 29 },
-      { id: 45, name: 'vileplume', level: 29 },
+      { id: 114, name: 'tangela', level: 20 },
+      { id: 70, name: 'weepinbell', level: 20 },
+      { id: 45, name: 'vileplume', level: 20 },
     ],
   },
   {
@@ -320,9 +346,9 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('koga.png'),
     badgeImage: localBadge(5),
     pokemon: [
-      { id: 109, name: 'koffing', level: 37 },
-      { id: 109, name: 'koffing', level: 37 },
-      { id: 89, name: 'muk', level: 39 },
+      { id: 109, name: 'koffing', level: 25 },
+      { id: 109, name: 'koffing', level: 25 },
+      { id: 89, name: 'muk', level: 25 },
     ],
   },
   {
@@ -333,9 +359,9 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('sabrina.png'),
     badgeImage: localBadge(6),
     pokemon: [
-      { id: 64, name: 'kadabra', level: 38 },
-      { id: 122, name: 'mr-mime', level: 37 },
-      { id: 65, name: 'alakazam', level: 43 },
+      { id: 64, name: 'kadabra', level: 30 },
+      { id: 122, name: 'mr-mime', level: 30 },
+      { id: 65, name: 'alakazam', level: 30 },
     ],
   },
   {
@@ -346,9 +372,9 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('blaine.png'),
     badgeImage: localBadge(7),
     pokemon: [
-      { id: 58, name: 'growlithe', level: 42 },
-      { id: 77, name: 'ponyta', level: 47 },
-      { id: 59, name: 'arcanine', level: 47 },
+      { id: 58, name: 'growlithe', level: 35 },
+      { id: 77, name: 'ponyta', level: 35 },
+      { id: 59, name: 'arcanine', level: 35 },
     ],
   },
   {
@@ -359,9 +385,9 @@ export const GYM_LEADERS: GymLeader[] = [
     sprite: localTrainerSprite('giovanni.png'),
     badgeImage: localBadge(8),
     pokemon: [
-      { id: 111, name: 'rhyhorn', level: 45 },
-      { id: 51, name: 'dugtrio', level: 42 },
-      { id: 31, name: 'nidoqueen', level: 50 },
+      { id: 111, name: 'rhyhorn', level: 40 },
+      { id: 51, name: 'dugtrio', level: 40 },
+      { id: 31, name: 'nidoqueen', level: 40 },
     ],
   },
 ];
@@ -374,11 +400,11 @@ export const ELITE_FOUR: GymLeader[] = [
     badgeName: 'Elite Four: Lorelei',
     sprite: localTrainerSprite('lorelei-gen1rb.png'),
     pokemon: [
-      { id: 87, name: 'dewgong', level: 54 },
-      { id: 91, name: 'cloyster', level: 53 },
-      { id: 80, name: 'slowbro', level: 54 },
-      { id: 124, name: 'jynx', level: 56 },
-      { id: 131, name: 'lapras', level: 56 },
+      { id: 87, name: 'dewgong', level: 50 },
+      { id: 91, name: 'cloyster', level: 50 },
+      { id: 80, name: 'slowbro', level: 50 },
+      { id: 124, name: 'jynx', level: 50 },
+      { id: 131, name: 'lapras', level: 50 },
     ],
   },
   {
@@ -388,11 +414,11 @@ export const ELITE_FOUR: GymLeader[] = [
     badgeName: 'Elite Four: Bruno',
     sprite: localTrainerSprite('bruno.png'),
     pokemon: [
-      { id: 95, name: 'onix', level: 53 },
-      { id: 107, name: 'hitmonchan', level: 55 },
-      { id: 106, name: 'hitmonlee', level: 55 },
-      { id: 95, name: 'onix', level: 56 },
-      { id: 68, name: 'machamp', level: 58 },
+      { id: 95, name: 'onix', level: 50 },
+      { id: 107, name: 'hitmonchan', level: 50 },
+      { id: 106, name: 'hitmonlee', level: 50 },
+      { id: 95, name: 'onix', level: 50 },
+      { id: 68, name: 'machamp', level: 50 },
     ],
   },
   {
@@ -402,11 +428,11 @@ export const ELITE_FOUR: GymLeader[] = [
     badgeName: 'Elite Four: Agatha',
     sprite: localTrainerSprite('agatha-gen1rb.png'),
     pokemon: [
-      { id: 94, name: 'gengar', level: 56 },
-      { id: 42, name: 'golbat', level: 56 },
-      { id: 93, name: 'haunter', level: 55 },
-      { id: 24, name: 'arbok', level: 58 },
-      { id: 94, name: 'gengar', level: 60 },
+      { id: 94, name: 'gengar', level: 50 },
+      { id: 42, name: 'golbat', level: 50 },
+      { id: 93, name: 'haunter', level: 50 },
+      { id: 24, name: 'arbok', level: 50 },
+      { id: 94, name: 'gengar', level: 50 },
     ],
   },
   {
@@ -416,11 +442,11 @@ export const ELITE_FOUR: GymLeader[] = [
     badgeName: 'Elite Four: Lance',
     sprite: localTrainerSprite('lance.png'),
     pokemon: [
-      { id: 130, name: 'gyarados', level: 58 },
-      { id: 148, name: 'dragonair', level: 56 },
-      { id: 148, name: 'dragonair', level: 56 },
-      { id: 142, name: 'aerodactyl', level: 60 },
-      { id: 149, name: 'dragonite', level: 62 },
+      { id: 130, name: 'gyarados', level: 50 },
+      { id: 148, name: 'dragonair', level: 50 },
+      { id: 148, name: 'dragonair', level: 50 },
+      { id: 142, name: 'aerodactyl', level: 50 },
+      { id: 149, name: 'dragonite', level: 50 },
     ],
   },
   {
@@ -430,12 +456,12 @@ export const ELITE_FOUR: GymLeader[] = [
     badgeName: 'Champion',
     sprite: localTrainerSprite('blue.png'),
     pokemon: [
-      { id: 18, name: 'pidgeot', level: 61 },
-      { id: 65, name: 'alakazam', level: 59 },
-      { id: 112, name: 'rhydon', level: 61 },
-      { id: 103, name: 'exeggutor', level: 61 },
-      { id: 59, name: 'arcanine', level: 61 },
-      { id: 9, name: 'blastoise', level: 63 },
+      { id: 18, name: 'pidgeot', level: 60 },
+      { id: 65, name: 'alakazam', level: 60 },
+      { id: 112, name: 'rhydon', level: 60 },
+      { id: 103, name: 'exeggutor', level: 60 },
+      { id: 59, name: 'arcanine', level: 60 },
+      { id: 9, name: 'blastoise', level: 60 },
     ],
   },
 ];
@@ -452,7 +478,7 @@ export const SPINS_PER_GYM = 3;
  */
 export const ELITE_PREP_SPINS = 8;
 
-export function pickRandom<T>(arr: T[]): T {
+export function pickRandom<T>(arr: readonly T[]): T {
   return arr[Math.floor(Math.random() * arr.length)];
 }
 

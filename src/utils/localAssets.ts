@@ -55,6 +55,25 @@ export function remoteBattleGif(id: number): string {
   return `${POKEAPI_POKEMON}/versions/generation-v/black-white/animated/${id}.gif`;
 }
 
+export function localBattleGif(id: number): string {
+  return localAsset(`pokemon/battle/${id}.gif`);
+}
+
+/** Local battle GIF → remote GIF → static PNG. */
+export function battleGifOnError(
+  e: { currentTarget: HTMLImageElement },
+  id: number,
+  staticFallback?: string,
+): void {
+  const img = e.currentTarget;
+  if (img.dataset.remoteFallback !== '1') {
+    img.dataset.remoteFallback = '1';
+    img.src = remoteBattleGif(id);
+    return;
+  }
+  imgFallback(e, localPokemonSprite(id), staticFallback);
+}
+
 export function localBadge(id: number): string {
   return localAsset(`badges/${id}.png`);
 }

@@ -46,10 +46,23 @@ export function PartyScreen() {
               <div className="party-slot__info">
                 <span className="party-slot__name">
                   {mon.shiny ? '✨ ' : ''}
+                  {mon.guestOwned ? '★ ' : ''}
                   {mon.nickname ?? mon.displayName}
+                  {mon.guestLocked ? ' 🔒' : ''}
                 </span>
+                {mon.guestOwned && (
+                  <span className="party-slot__guest-tag">
+                    {mon.guestLocked ? 'Friend mon (locked until 2 badges)' : 'Friend mon'}
+                  </span>
+                )}
+                <span className="party-slot__level">Lv. {mon.level}</span>
                 <div className="party-slot__types">
                   {mon.types.map((t) => <TypeBadge key={t} type={t} size="sm" />)}
+                </div>
+                <div className="party-slot__moves">
+                  {mon.moves.slice(0, 4).map((move) => (
+                    <span key={move.slug} className="party-slot__move">{move.name}</span>
+                  ))}
                 </div>
               </div>
             </motion.div>

@@ -7,6 +7,8 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "download-assets": "node scripts/download-assets.mjs",
+    "download-battle-gifs": "node scripts/download-battle-gifs.mjs",
+    "build-pokemon-data": "node scripts/build-pokemon-data.mjs",
     "lint": "oxlint",
     "preview": "vite preview"
   },

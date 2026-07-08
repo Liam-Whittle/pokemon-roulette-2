@@ -8,6 +8,8 @@ import { useGameStore } from '../store/useGameStore';
 export function EliteFourScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const setEliteCleared = useGameStore((s) => s.setEliteCleared);
+  const recordChampion = useGameStore((s) => s.recordChampion);
+  const eliteCleared = useGameStore((s) => s.eliteCleared);
 
   const [stage, setStage] = useState(() => {
     const { debugEliteStage, setDebugEliteStage, battleSnapshot } = useGameStore.getState();
@@ -15,41 +17,53 @@ export function EliteFourScreen() {
       setDebugEliteStage(null);
       return debugEliteStage;
     }
-    // Resume mid-run after a refresh/exit.
     if (battleSnapshot?.context === 'elite') return battleSnapshot.eliteStage;
     return 0;
   });
 
   const member = ELITE_FOUR[stage];
+  if (!member) {
+    setScreen('hub');
+    return null;
+  }
+
+  const isChampionStage = stage >= ELITE_FOUR.length - 1;
 
   return (
-    <motion.div className="screen elite-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
-      <Confetti active={stage >= ELITE_FOUR.length - 1 && useGameStore.getState().eliteCleared} />
+    <motion.div
+      className="screen elite-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
+      <Confetti active={isChampionStage && eliteCleared} />
 
       <h2 className="screen-title">👑 Elite Four</h2>
       <div className="elite-progress">
-        {ELITE_FOUR.map((m, i) => (
+        {ELITE_FOUR.map((entry, idx) => (
           <span
-            key={m.id}
-            className={`elite-pip ${i < stage || useGameStore.getState().eliteCleared ? 'elite-pip--done' : ''} ${i === stage && !useGameStore.getState().eliteCleared ? 'elite-pip--current' : ''}`}
+            key={entry.id}
+            className={`elite-progress__dot${idx < stage ? ' elite-progress__dot--done' : ''}${idx === stage ? ' elite-progress__dot--active' : ''}`}
+            title={entry.name}
           />
         ))}
       </div>
+
       <BattleArena
-        key={member.id}
-        title={`Elite Four - ${member.name}`}
+        key={`${member.id}-${stage}`}
+        title={isChampionStage ? 'Champion Battle' : `Elite Four: ${member.name}`}
         battleContext="elite"
         eliteStage={stage}
         leader={member}
-        finalVictory={stage === ELITE_FOUR.length - 1}
+        finalVictory={isChampionStage}
         onWin={() => {
-          if (stage === ELITE_FOUR.length - 1) {
-            setEliteCleared(true);
-            useGameStore.getState().recordChampion();
-            setScreen('champion');
-          } else {
-            setStage((value) => value + 1);
+          if (!isChampionStage) {
+            setStage((prev) => prev + 1);
+            return;
           }
+          setEliteCleared(true);
+          recordChampion();
+          setScreen('champion');
         }}
         onLose={() => {
           if (useGameStore.getState().lives <= 0) {

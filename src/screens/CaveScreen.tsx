@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
-import { ITEMS, pickRandom } from '../data/pools';
+import { ITEMS, pickCaveItemId } from '../data/pools';
 import { GameIcon } from '../components/GameIcon';
 import { ItemIcon } from '../components/ItemIcon';
 import { useGameStore } from '../store/useGameStore';
@@ -33,7 +33,8 @@ export function CaveScreen() {
     playSfx('click', muted);
 
     if (index === itemPathIndex) {
-      const item = pickRandom(ITEMS);
+      const itemId = pickCaveItemId();
+      const item = ITEMS.find((entry) => entry.id === itemId) ?? ITEMS[0];
       addItem(item.id);
       playSfx('item', muted);
       const bagItem: BagItem = { id: item.id, name: item.name, quantity: 1, icon: item.icon };
@@ -54,7 +55,12 @@ export function CaveScreen() {
 
   if (foundItem) {
     return (
-      <motion.div className="screen cave-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+      <motion.div
+        className="screen cave-screen"
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        exit={{ opacity: 0 }}
+      >
         <h2 className="screen-title">Explore Cave</h2>
         <motion.div
           className="cave-item-found"
@@ -79,7 +85,12 @@ export function CaveScreen() {
   }
 
   return (
-    <motion.div className="screen cave-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <motion.div
+      className="screen cave-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
       <h2 className="screen-title">Explore Cave</h2>
       <p className="fossil-screen__subtitle">Choose a path. One hides treasure, the others stir something in the dark.</p>
       <div className="cave-screen__paths">

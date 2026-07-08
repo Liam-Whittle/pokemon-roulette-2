@@ -1,24 +1,27 @@
 import { useState, useCallback, useEffect } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { SidePanel } from '../components/SidePanel';
 import { DebugMenu } from '../components/DebugMenu';
 import { Wheel } from '../components/Wheel';
+import { PathwaySelector, HubShopButton } from '../components/PathwaySelector';
 import {
   ELITE_PREP_SPINS,
-  getHubWheelSegments,
   ITEMS,
-  pickUberBonusItemId,
+  PATHWAY_SEGMENTS,
   SPINS_PER_GYM,
+  STONE_ITEM_IDS,
   TOTAL_GYMS,
+  UBER_EMPTY_BAG_ITEMS,
   UBER_SPIN_SEGMENTS,
+  pickRandom,
 } from '../data/pools';
 import { PokeCenterVisits } from '../components/PokeDollar';
-import { EvolutionModal } from '../components/EvolutionModal';
 import { PokeCenterModal } from '../components/PokeCenterModal';
 import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
+import { publishHostActivity, publishHostWheelSpin } from '../multiplayer/publish';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
-import type { EvolutionInfo, WheelSegment } from '../types/game';
+import type { PathwayId, WheelSegment } from '../types/game';
 
 export function HubScreen() {
   const trainer = useGameStore((s) => s.trainer);
@@ -34,30 +37,27 @@ export function HubScreen() {
   const incrementSpins = useGameStore((s) => s.incrementSpins);
   const setLastGymSpin = useGameStore((s) => s.setLastGymSpin);
   const addItem = useGameStore((s) => s.addItem);
-  const evolveRandomPartyMember = useGameStore((s) => s.evolveRandomPartyMember);
   const restorePartyPp = useGameStore((s) => s.restorePartyPp);
   const reviveHealAllParty = useGameStore((s) => s.reviveHealAllParty);
+  const grantXpAllPartyAndPc = useGameStore((s) => s.grantXpAllPartyAndPc);
+  const addMoney = useGameStore((s) => s.addMoney);
+  const pendingHubNotice = useGameStore((s) => s.pendingHubNotice);
+  const setPendingHubNotice = useGameStore((s) => s.setPendingHubNotice);
 
+  const [activePathway, setActivePathway] = useState<PathwayId | null>(null);
   const [wheelLocked, setWheelLocked] = useState(false);
   const [uberSpinOpen, setUberSpinOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
   const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
 
   const gymBadges = badges.length;
   const allGymsDone = gymBadges >= TOTAL_GYMS;
   const spinsSinceGym = spinsCount - lastGymSpin;
-  // After the 8th badge, give a longer prep run-up before the Elite Four gauntlet.
   const spinsThreshold = allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM;
   const spinsUntilNext = Math.max(0, spinsThreshold - spinsSinceGym);
-  // Freeze the displayed wheel layout for the current spin so it doesn't visibly
-  // swap between Layout A/B the instant a spin resolves. It updates only after an
-  // outcome completes (notice dismissed) or when the Hub remounts after activity.
-  const [displaySpinsSinceGym, setDisplaySpinsSinceGym] = useState(spinsSinceGym);
-  const wheelSegments = getHubWheelSegments(
-    displaySpinsSinceGym,
-    allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM,
-  );
+  const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || pokeCenterOpen;
+
+  const wheelSegments = activePathway ? PATHWAY_SEGMENTS[activePathway] : [];
 
   const maybeTriggerGym = useCallback(() => {
     const state = useGameStore.getState();
@@ -77,118 +77,275 @@ export function HubScreen() {
     return false;
   }, [setLastGymSpin, setScreen]);
 
+  const returnToPathHub = useCallback(() => {
+    setActivePathway(null);
+    maybeTriggerGym();
+  }, [maybeTriggerGym]);
+
   useEffect(() => {
-    // Back at the hub: fully restore PP on every party member's moves. PP still drains
-    // for the duration of a whole Gym battle / Elite Four gauntlet, but refills here so
-    // players aren't forced to constantly farm Elixirs between battles.
     restorePartyPp();
     maybeTriggerGym();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  useEffect(() => {
+    if (!pendingHubNotice) return;
+    setNotice(pendingHubNotice);
+    setPendingHubNotice(null);
+  }, [pendingHubNotice, setPendingHubNotice]);
+
   const handleLand = useCallback(
-    (segment: { activity?: string; id: string }) => {
+    (segment: { activity?: string; id: string; label?: string }) => {
+      if (!activePathway) return;
+
       incrementSpins();
+      grantXpAllPartyAndPc(50);
       setWheelLocked(true);
+      publishHostWheelSpin({
+        kind: activePathway,
+        title: `${activePathway} Path`,
+        segments: wheelSegments,
+        result: { id: segment.id, label: segment.label ?? segment.id },
+      });
 
       setTimeout(async () => {
         if (segment.activity === 'legendary') {
+          publishHostActivity({
+            kind: 'notice',
+            title: 'Legendary!',
+            message: 'A legendary encounter begins!',
+            success: true,
+          });
           startLegendaryEncounter();
-        } else if (segment.activity === 'shop') {
-          setScreen('shop');
         } else if (segment.activity === 'uber') {
           setUberSpinOpen(true);
-        } else if (segment.activity === 'battlegym') {
-          const state = useGameStore.getState();
-          setLastGymSpin(state.spinsCount);
-          setScreen('gym');
+        } else if (segment.activity === 'teamrocket') {
+          const partySize = useGameStore.getState().party.length;
+          if (partySize <= 1) {
+            addItem('potion', 2);
+            const msg =
+              "Come back when you're a challenge for Team Rocket! They laughed you off and left 2 Potions behind.";
+            setNotice(msg);
+            publishHostActivity({
+              kind: 'notice',
+              title: 'Team Rocket',
+              message: msg,
+              success: false,
+              itemId: 'potion',
+            });
+          } else {
+            publishHostActivity({
+              kind: 'notice',
+              title: 'Team Rocket',
+              message: 'Prepare for trouble!',
+              success: true,
+            });
+            setScreen('teamrocket');
+          }
         } else if (segment.activity === 'potion') {
           addItem('potion', 1);
-          setNotice('You received a free Potion!');
+          const msg = 'You received a Potion!';
+          setNotice(msg);
+          publishHostActivity({ kind: 'notice', title: 'Potion!', message: msg, success: true, itemId: 'potion' });
         } else if (segment.activity === 'elixir') {
           addItem('maxelixer', 1);
-          setNotice('You received a free Max Elixir!');
-        } else if (segment.activity === 'pokecenter') {
+          const msg = 'You received a Max Elixir!';
+          setNotice(msg);
+          publishHostActivity({
+            kind: 'notice',
+            title: 'Max Elixir!',
+            message: msg,
+            success: true,
+            itemId: 'maxelixer',
+          });
+        } else if (segment.activity === 'rarecandy') {
+          addItem('rarecandy', 1);
+          const msg = 'You received a Rare Candy!';
+          setNotice(msg);
+          publishHostActivity({
+            kind: 'notice',
+            title: 'Rare Candy!',
+            message: msg,
+            success: true,
+            itemId: 'rarecandy',
+          });
+        } else if (segment.activity === 'healpowder') {
+          addItem('healpowder', 1);
+          const msg = 'You received Heal Powder!';
+          setNotice(msg);
+          publishHostActivity({
+            kind: 'notice',
+            title: 'Heal Powder!',
+            message: msg,
+            success: true,
+            itemId: 'healpowder',
+          });
+        } else if (segment.activity === 'xattack') {
+          addItem('xattack', 1);
+          const msg = 'You received an X-Attack!';
+          setNotice(msg);
+          publishHostActivity({
+            kind: 'notice',
+            title: 'X-Attack!',
+            message: msg,
+            success: true,
+            itemId: 'xattack',
+          });
+        } else if (segment.activity === 'stone') {
+          const stoneId = pickRandom([...STONE_ITEM_IDS]);
+          const stone = ITEMS.find((item) => item.id === stoneId);
+          addItem(stoneId, 1);
+          const stoneName = stone?.name ?? 'Evolution Stone';
+          const msg = `You received a ${stoneName}!`;
+          setNotice(msg);
+          publishHostActivity({
+            kind: 'notice',
+            title: 'Stone!',
+            message: msg,
+            success: true,
+            itemId: stoneId,
+          });
+        } else if (segment.activity === 'fullheal' || segment.activity === 'pokecenter') {
           reviveHealAllParty();
           setPokeCenterOpen(true);
-        } else if (segment.activity === 'evolve') {
-          const result = await evolveRandomPartyMember();
-          if (result.evolution) {
-            setEvolution(result.evolution);
-          } else {
-            setNotice(result.message);
-          }
+          publishHostActivity({
+            kind: 'notice',
+            title: 'Full Heal',
+            message: 'The party was fully healed!',
+            success: true,
+          });
+        } else if (segment.activity === 'money100') {
+          addMoney(100);
+          const msg = 'You found ¥100!';
+          setNotice(msg);
+          publishHostActivity({ kind: 'notice', title: 'Cash!', message: msg, success: true });
         } else {
+          publishHostActivity({
+            kind: 'notice',
+            title: segment.label ?? 'Path chosen',
+            message: `Heading to ${segment.label ?? segment.id}…`,
+            success: true,
+          });
           startActivity(segment as WheelSegment);
         }
         setWheelLocked(false);
+        setActivePathway(null);
       }, 800);
     },
     [
+      activePathway,
       incrementSpins,
+      grantXpAllPartyAndPc,
       startActivity,
       startLegendaryEncounter,
       setScreen,
-      setLastGymSpin,
       addItem,
-      evolveRandomPartyMember,
       reviveHealAllParty,
+      addMoney,
+      wheelSegments,
     ],
   );
 
   const dismissNotice = useCallback(() => {
     setNotice(null);
-    const navigated = maybeTriggerGym();
-    if (!navigated) {
-      const s = useGameStore.getState();
-      setDisplaySpinsSinceGym(s.spinsCount - s.lastGymSpin);
-    }
-  }, [maybeTriggerGym]);
-
-  const dismissEvolution = useCallback(() => {
-    setEvolution(null);
-    const navigated = maybeTriggerGym();
-    if (!navigated) {
-      const s = useGameStore.getState();
-      setDisplaySpinsSinceGym(s.spinsCount - s.lastGymSpin);
-    }
-  }, [maybeTriggerGym]);
+    returnToPathHub();
+  }, [returnToPathHub]);
 
   const dismissPokeCenter = useCallback(() => {
     setPokeCenterOpen(false);
-    const navigated = maybeTriggerGym();
-    if (!navigated) {
-      const s = useGameStore.getState();
-      setDisplaySpinsSinceGym(s.spinsCount - s.lastGymSpin);
-    }
-  }, [maybeTriggerGym]);
+    returnToPathHub();
+  }, [returnToPathHub]);
 
   const handleUberLand = useCallback(
     (segment: { id: string; label: string }) => {
+      publishHostWheelSpin({
+        kind: 'uber',
+        title: 'Uber Spin',
+        segments: UBER_SPIN_SEGMENTS,
+        result: segment,
+      });
       setUberSpinOpen(false);
-      if (segment.id === 'legendary') {
-        startLegendaryEncounter();
-        return;
-      }
-      if (segment.id === 'bonus-item') {
-        const itemId = pickUberBonusItemId();
-        const item = ITEMS.find((entry) => entry.id === itemId);
-        addItem(itemId);
-        setNotice(`Uber Spin awarded a ${item?.name ?? 'bonus item'}!`);
-        return;
-      }
-      if (segment.id === 'shinycharm') {
-        addItem('shinycharm');
-        setNotice('Uber Spin awarded a Shiny Charm!');
-        return;
-      }
       if (segment.id === 'masterball') {
         addItem('masterball');
-        setNotice('Uber Spin awarded a Master Ball!');
+        const msg = 'Uber Spin awarded a Master Ball!';
+        setNotice(msg);
+        publishHostActivity({
+          kind: 'notice',
+          title: 'Uber Spin',
+          message: msg,
+          success: true,
+          itemId: 'masterball',
+        });
+        return;
+      }
+      if (segment.id === 'bonus-all-items') {
+        const state = useGameStore.getState();
+        const itemIds =
+          state.bag.length > 0 ? state.bag.map((item) => item.id) : [...UBER_EMPTY_BAG_ITEMS];
+        for (const itemId of itemIds) {
+          addItem(itemId, 1);
+        }
+        const msg =
+          state.bag.length > 0
+            ? 'Uber Spin awarded +1 to every item in your bag!'
+            : 'Uber Spin stocked your bag with starter items!';
+        setNotice(msg);
+        publishHostActivity({
+          kind: 'notice',
+          title: 'Uber Spin',
+          message: msg,
+          success: true,
+        });
+        return;
+      }
+      if (segment.id === 'bonus-xp') {
+        grantXpAllPartyAndPc(200);
+        const msg = 'Uber Spin awarded +200 XP to your party and PC!';
+        setNotice(msg);
+        publishHostActivity({
+          kind: 'notice',
+          title: 'Uber Spin',
+          message: msg,
+          success: true,
+        });
+        return;
+      }
+      if (segment.id === 'bonus-money') {
+        addMoney(250);
+        const msg = 'Uber Spin awarded ¥250!';
+        setNotice(msg);
+        publishHostActivity({
+          kind: 'notice',
+          title: 'Uber Spin',
+          message: msg,
+          success: true,
+        });
       }
     },
-    [addItem, startLegendaryEncounter],
+    [addItem, addMoney, grantXpAllPartyAndPc],
   );
+
+  const gymCounter = !eliteCleared ? (
+    <p className="hub-gym-counter">
+      {allGymsDone ? (
+        spinsUntilNext === 0 ? (
+          'The Elite Four await!'
+        ) : (
+          <>
+            Elite Four battle in <span className="gym-counter-number">{spinsUntilNext}</span> path
+            {spinsUntilNext === 1 ? '' : 's'}
+          </>
+        )
+      ) : spinsUntilNext === 0 ? (
+        'A Gym Leader is ready to battle!'
+      ) : (
+        <>
+          Next Gym battle in <span className="gym-counter-number">{spinsUntilNext}</span> path
+          {spinsUntilNext === 1 ? '' : 's'}
+        </>
+      )}
+    </p>
+  ) : null;
 
   return (
     <motion.div
@@ -214,12 +371,11 @@ export function HubScreen() {
           <div>
             <h2 className="hub-header__name">{trainer?.name}</h2>
             <p className="hub-header__stats">
-              Party: {party.length}/5 · Badges: {gymBadges}/{TOTAL_GYMS} · Spins: {spinsCount} ·{' '}
+              Party: {party.length}/5 · Badges: {gymBadges}/{TOTAL_GYMS} · Paths: {spinsCount} ·{' '}
               <PokeCenterVisits lives={lives} />
             </p>
           </div>
         </div>
-        <nav className="hub-nav" />
       </header>
 
       {eliteCleared && (
@@ -230,29 +386,42 @@ export function HubScreen() {
 
       <div className="hub-layout">
         <div className="hub-wheel-area">
-          <h3 className="hub-wheel-title">Which Path Will You Take?</h3>
-          <Wheel segments={wheelSegments} onLand={handleLand} disabled={wheelLocked} />
-          {!eliteCleared && (
-            <p className="hub-gym-counter">
-              {allGymsDone ? (
-                spinsUntilNext === 0 ? (
-                  'The Elite Four await!'
-                ) : (
-                  <>
-                    Elite Four battle in <span className="gym-counter-number">{spinsUntilNext}</span> spin
-                    {spinsUntilNext === 1 ? '' : 's'}
-                  </>
-                )
-              ) : spinsUntilNext === 0 ? (
-                'A Gym Leader is ready to battle!'
-              ) : (
-                <>
-                  Next Gym battle in <span className="gym-counter-number">{spinsUntilNext}</span> spin
-                  {spinsUntilNext === 1 ? '' : 's'}
-                </>
-              )}
-            </p>
-          )}
+          <AnimatePresence mode="wait" initial={false}>
+            {activePathway ? (
+              <motion.div
+                key={`wheel-${activePathway}`}
+                className="hub-path-stage"
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                transition={{ duration: 0.28, ease: 'easeOut' }}
+              >
+                <h3 className="hub-wheel-title">
+                  {activePathway === 'catch'
+                    ? 'Catch Pokémon'
+                    : activePathway === 'items'
+                      ? 'Hunt Items'
+                      : 'Mystery Path'}
+                </h3>
+                <Wheel segments={wheelSegments} onLand={handleLand} disabled={wheelLocked} />
+                {gymCounter}
+              </motion.div>
+            ) : (
+              <motion.div
+                key="choose-path"
+                className="hub-path-stage"
+                initial={{ opacity: 0, y: 14, scale: 0.98 }}
+                animate={{ opacity: 1, y: 0, scale: 1 }}
+                exit={{ opacity: 0, y: -10, scale: 0.98 }}
+                transition={{ duration: 0.28, ease: 'easeOut' }}
+              >
+                <h3 className="hub-wheel-title">Choose a Path</h3>
+                <PathwaySelector onSelect={setActivePathway} disabled={pathsDisabled} />
+                {gymCounter}
+                <HubShopButton onClick={() => setScreen('shop')} />
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
         <SidePanel highlightActive />
       </div>
@@ -280,8 +449,6 @@ export function HubScreen() {
           </div>
         </div>
       )}
-
-      {evolution && <EvolutionModal evolution={evolution} onClose={dismissEvolution} />}
 
       {pokeCenterOpen && <PokeCenterModal onClose={dismissPokeCenter} />}
 

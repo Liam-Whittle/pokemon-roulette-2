@@ -40,7 +40,7 @@ export function PokedexScreen() {
               <div key={id} className={`pokedex-entry ${entry.caught ? 'pokedex-entry--caught' : ''} ${entry.caught && entry.shiny ? 'pokedex-entry--shiny' : ''}`}>
                 {entry.caught && (
                   <span className="pokedex-entry__power">
-                    {Math.round((Number.isFinite(entry.powerLevel) ? entry.powerLevel : 0.3) * 100)}
+                    Lv.{entry.level}
                   </span>
                 )}
                 <img

@@ -1,7 +1,12 @@
 import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { getItemSprite, getSegmentSprite } from '../data/icons';
-import { useWheelPhysics, getSegmentWeights, getWeightedSegmentIndex } from '../hooks/useWheelPhysics';
+import {
+  useWheelPhysics,
+  getSegmentWeights,
+  getWeightedSegmentIndex,
+  angleForWeightedSegment,
+} from '../hooks/useWheelPhysics';
 import { playSfx } from '../utils/sound';
 import { useGameStore } from '../store/useGameStore';
 
@@ -16,10 +21,18 @@ export interface SpinnerSegment {
   weight?: number;
 }
 
+/** Drive a non-interactive replay that lands on a known segment (guest spectate). */
+export interface WheelReplay {
+  key: number;
+  segmentId: string;
+}
+
 interface WheelProps {
   segments: SpinnerSegment[];
   onLand: (segment: SpinnerSegment) => void;
   disabled?: boolean;
+  /** When set, the wheel is view-only and animates to the given result. */
+  replay?: WheelReplay | null;
 }
 
 function normalize(angle: number): number {
@@ -39,13 +52,15 @@ function buildSegmentArcs(weights: number[]): { startDeg: number; endDeg: number
   });
 }
 
-export function Wheel({ segments, onLand, disabled }: WheelProps) {
+export function Wheel({ segments, onLand, disabled, replay = null }: WheelProps) {
   const wheelRef = useRef<HTMLDivElement>(null);
   const muted = useGameStore((s) => s.muted);
   const landedRef = useRef(false);
   const prevIdxRef = useRef(-1);
   const segmentsRef = useRef(segments);
+  const lastReplayKey = useRef<number | null>(null);
   const [weakFlick, setWeakFlick] = useState(false);
+  const isReplay = replay != null;
 
   segmentsRef.current = segments;
 
@@ -63,13 +78,18 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
       landedRef.current = true;
       playSfx('spinStop', muted);
       const current = segmentsRef.current;
+      if (replay) {
+        const match = current.find((s) => s.id === replay.segmentId) ?? current[resolveIndex(finalAngle)];
+        if (match) onLand(match);
+        return;
+      }
       const idx = resolveIndex(finalAngle);
-      onLand(current[idx]);
+      onLand(current[idx]!);
     },
-    [onLand, muted, resolveIndex],
+    [onLand, muted, resolveIndex, replay],
   );
 
-  const { angle, isSpinning, isDragging, dragPower, quickSpin, handlePointerDown, handlePointerMove, handlePointerUp } =
+  const { angle, isSpinning, isDragging, dragPower, quickSpin, spinToAngle, handlePointerDown, handlePointerMove, handlePointerUp } =
     useWheelPhysics(wheelRef, {
       friction: 0.99,
       minVelocity: 0.0025,
@@ -85,6 +105,17 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
     });
 
   useEffect(() => {
+    if (!replay || segments.length === 0) return;
+    if (lastReplayKey.current === replay.key) return;
+    lastReplayKey.current = replay.key;
+    const idx = segments.findIndex((s) => s.id === replay.segmentId);
+    if (idx < 0) return;
+    playSfx('spin', muted);
+    landedRef.current = false;
+    spinToAngle(angleForWeightedSegment(idx, weights));
+  }, [replay, segments, weights, spinToAngle, muted]);
+
+  useEffect(() => {
     if (!isSpinning) return;
     const idx = resolveIndex(normalize(angle));
     if (idx !== prevIdxRef.current) {
@@ -98,14 +129,19 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
       <div className="wheel-pointer" aria-hidden="true">▼</div>
       <div
         ref={wheelRef}
-        className={clsx('wheel', isDragging && 'wheel--dragging', isSpinning && 'wheel--spinning', disabled && 'wheel--disabled')}
+        className={clsx(
+          'wheel',
+          isDragging && 'wheel--dragging',
+          isSpinning && 'wheel--spinning',
+          (disabled || isReplay) && 'wheel--disabled',
+        )}
         style={{ transform: `rotate(${angle}rad)` }}
-        onPointerDown={disabled ? undefined : handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={handlePointerUp}
-        onPointerLeave={handlePointerUp}
+        onPointerDown={disabled || isReplay ? undefined : handlePointerDown}
+        onPointerMove={isReplay ? undefined : handlePointerMove}
+        onPointerUp={isReplay ? undefined : handlePointerUp}
+        onPointerLeave={isReplay ? undefined : handlePointerUp}
         role="img"
-        aria-label="Adventure wheel — drag and flick hard to spin"
+        aria-label={isReplay ? 'Spectating wheel spin' : 'Adventure wheel — drag and flick hard to spin'}
       >
         <svg viewBox="0 0 400 400" className="wheel__svg">
           <defs>
@@ -213,29 +249,36 @@ export function Wheel({ segments, onLand, disabled }: WheelProps) {
         </svg>
       </div>
 
-      <div className="wheel-footer">
-        {isDragging ? (
-          <div className="wheel-power">
-            <div className="wheel-power__bar">
-              <div className="wheel-power__fill" style={{ width: `${dragPower * 100}%` }} />
+      {!isReplay && (
+        <div className="wheel-footer">
+          {isDragging ? (
+            <div className="wheel-power">
+              <div className="wheel-power__bar">
+                <div className="wheel-power__fill" style={{ width: `${dragPower * 100}%` }} />
+              </div>
+              <span className="wheel-power__label">Flick hard to launch!</span>
             </div>
-            <span className="wheel-power__label">Flick hard to launch!</span>
-          </div>
-        ) : weakFlick ? (
-          <p className="wheel-hint wheel-hint--warn">Too soft! Flick the wheel harder.</p>
-        ) : (
-          <p className="wheel-hint">Grab the wheel and flick it hard to spin</p>
-        )}
+          ) : weakFlick ? (
+            <p className="wheel-hint wheel-hint--warn">Too soft! Flick the wheel harder.</p>
+          ) : (
+            <p className="wheel-hint">Grab the wheel and flick it hard to spin</p>
+          )}
 
-        <button
-          type="button"
-          className="btn btn--ghost btn--sm wheel-quick-btn"
-          onClick={quickSpin}
-          disabled={isSpinning || isDragging || disabled}
-        >
-          ⚡ Quick Spin
-        </button>
-      </div>
+          <button
+            type="button"
+            className="btn btn--ghost btn--sm wheel-quick-btn"
+            onClick={quickSpin}
+            disabled={isSpinning || isDragging || disabled}
+          >
+            ⚡ Quick Spin
+          </button>
+        </div>
+      )}
+      {isReplay && (
+        <p className="wheel-hint">
+          {isSpinning ? 'Watching the spin…' : 'Spin result'}
+        </p>
+      )}
     </div>
   );
 }

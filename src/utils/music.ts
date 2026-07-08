@@ -1,6 +1,15 @@
 import { asset } from './asset';
 
-export type MusicTrack = 'title' | 'main' | 'gym' | 'elite4' | 'pokemon' | 'gamewin' | 'gamelose';
+export type MusicTrack =
+  | 'title'
+  | 'main'
+  | 'gym'
+  | 'elite4'
+  | 'pokemon'
+  | 'gamewin'
+  | 'gamelose'
+  | 'pokemart'
+  | 'teamrocket';
 
 const TRACKS: Record<MusicTrack, string> = {
   title: asset('sounds/title.mp3'),
@@ -10,6 +19,8 @@ const TRACKS: Record<MusicTrack, string> = {
   pokemon: asset('sounds/pokemon.mp3'),
   gamewin: asset('sounds/game_win.mp3'),
   gamelose: asset('sounds/game_lose.mp3'),
+  pokemart: asset('sounds/pokemart.mp3'),
+  teamrocket: asset('sounds/team_rocket.mp3'),
 };
 
 /** Scales the user volume slider so music stays comfortable across the full range. */

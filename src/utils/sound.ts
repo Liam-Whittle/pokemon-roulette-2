@@ -39,6 +39,10 @@ export const sfx = {
   },
   hit: () => playTone(200, 0.12, 'square', 0.12),
   shake: () => playTone(150, 0.08, 'triangle', 0.1),
+  ballClick: () => {
+    playTone(1800, 0.04, 'square', 0.12);
+    setTimeout(() => playTone(2400, 0.06, 'sine', 0.1), 30);
+  },
   catch: () => {
     playTone(523, 0.15, 'sine', 0.12);
     setTimeout(() => playTone(659, 0.15, 'sine', 0.12), 120);

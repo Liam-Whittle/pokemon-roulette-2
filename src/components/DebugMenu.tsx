@@ -1,5 +1,13 @@
 import { useState } from 'react';
-import { ELITE_FOUR, GYM_LEADERS, ITEMS, WHEEL_SEGMENTS } from '../data/pools';
+import {
+  ELITE_FOUR,
+  GYM_LEADERS,
+  ITEMS,
+  PATHWAY_SEGMENTS,
+  STONE_ITEM_IDS,
+  TOTAL_GYMS,
+  pickRandom,
+} from '../data/pools';
 import { GameIcon } from './GameIcon';
 import { ItemIcon } from './ItemIcon';
 import { SegmentIcon } from './SegmentIcon';
@@ -12,7 +20,11 @@ function titleCase(name: string): string {
   return name.replace(/(^|-)([a-z])/g, (_, sep, c) => (sep ? ' ' : '') + c.toUpperCase());
 }
 
-const MINI_GAMES: WheelSegment[] = WHEEL_SEGMENTS;
+const MINI_GAMES: WheelSegment[] = [
+  ...PATHWAY_SEGMENTS.catch,
+  PATHWAY_SEGMENTS.items.find((segment) => segment.activity === 'item'),
+].filter((segment): segment is WheelSegment => !!segment);
+const DEBUG_ITEMS = ITEMS;
 
 interface DebugMenuProps {
   onUberSpin?: () => void;
@@ -26,9 +38,13 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   const setDebugEliteStage = useGameStore((s) => s.setDebugEliteStage);
   const addItem = useGameStore((s) => s.addItem);
   const addMoney = useGameStore((s) => s.addMoney);
+  const grantXpAllPartyAndPc = useGameStore((s) => s.grantXpAllPartyAndPc);
   const makeRandomPartyShiny = useGameStore((s) => s.makeRandomPartyShiny);
   const debugAddToParty = useGameStore((s) => s.debugAddToParty);
   const reviveHealAllParty = useGameStore((s) => s.reviveHealAllParty);
+  const restoreLives = useGameStore((s) => s.restoreLives);
+  const earnBadge = useGameStore((s) => s.earnBadge);
+  const badges = useGameStore((s) => s.badges);
 
   const [open, setOpen] = useState(false);
   const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
@@ -42,6 +58,11 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   function launchGym(id: string) {
     setDebugGym(id);
     setScreen('gym');
+    setOpen(false);
+  }
+
+  function launchTeamRocket() {
+    setScreen('teamrocket');
     setOpen(false);
   }
 
@@ -99,6 +120,35 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   function launchRandomShiny() {
     makeRandomPartyShiny();
     setOpen(false);
+  }
+
+  function grantRandomStone() {
+    const stoneId = pickRandom([...STONE_ITEM_IDS]);
+    const stoneName = ITEMS.find((item) => item.id === stoneId)?.name ?? 'Stone';
+    addItem(stoneId, 1);
+    setNotice(`You received a ${stoneName}!`);
+  }
+
+  function grantAllStones() {
+    for (const stoneId of STONE_ITEM_IDS) addItem(stoneId, 1);
+    setNotice('You received all evolution stones (+1 each).');
+  }
+
+  function grantNextBadge() {
+    if (badges.length >= TOTAL_GYMS) {
+      setNotice('All gym badges already earned.');
+      return;
+    }
+    const next = GYM_LEADERS[badges.length];
+    if (!next) return;
+    earnBadge({
+      id: next.id,
+      name: next.badgeName,
+      type: next.type,
+      earnedAt: Date.now(),
+      image: next.badgeImage,
+    });
+    setNotice(`Earned ${next.badgeName}.`);
   }
 
   async function togglePokemonList() {
@@ -191,6 +241,27 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
               <button type="button" className="debug-panel__btn" onClick={() => addMoney(100)}>
                 ¥ +100 Dollars
               </button>
+              <button type="button" className="debug-panel__btn" onClick={() => grantXpAllPartyAndPc(1000)}>
+                ⭐ +1000 XP (Party + PC)
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={restoreLives}>
+                💚 Restore Lives
+              </button>
+            </div>
+          </div>
+
+          <div className="debug-panel__section">
+            <p className="debug-panel__label">Progression</p>
+            <div className="debug-panel__grid">
+              <button type="button" className="debug-panel__btn" onClick={grantNextBadge}>
+                🏅 Grant Next Badge ({badges.length}/{TOTAL_GYMS})
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={grantRandomStone}>
+                <SegmentIcon id="stone" className="game-icon-img game-icon-img--btn" /> Grant Random Stone
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={grantAllStones}>
+                <SegmentIcon id="stone" className="game-icon-img game-icon-img--btn" /> Grant All Stones
+              </button>
             </div>
           </div>
 
@@ -243,7 +314,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
           <div className="debug-panel__section">
             <p className="debug-panel__label">Add Items</p>
             <div className="debug-panel__grid">
-              {ITEMS.map((item) => (
+              {DEBUG_ITEMS.map((item) => (
                 <button
                   key={item.id}
                   type="button"
@@ -270,6 +341,10 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                   {leader.name}
                 </button>
               ))}
+              <button type="button" className="debug-panel__btn" onClick={launchTeamRocket}>
+                <SegmentIcon id="teamrocket" fallbackIcon="🚀" className="game-icon-img game-icon-img--btn" />{' '}
+                Team Rocket
+              </button>
             </div>
           </div>
 

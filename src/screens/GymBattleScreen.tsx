@@ -20,7 +20,12 @@ export function GymBattleScreen() {
   });
 
   return (
-    <motion.div className="screen gym-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+    <motion.div
+      className="screen gym-screen"
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      exit={{ opacity: 0 }}
+    >
       <BattleArena
         title="Gym Battle"
         battleContext="gym"

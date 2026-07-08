@@ -1,5 +1,5 @@
 import { asset } from '../utils/asset';
-import { localItemSprite } from '../utils/localAssets';
+import { localItemSprite, localPokemonSprite } from '../utils/localAssets';
 
 function itemSprite(filename: string): string {
   return localItemSprite(filename);
@@ -9,6 +9,7 @@ function itemSprite(filename: string): string {
 export const ITEM_SPRITES: Record<string, string> = {
   potion: itemSprite('potion.png'),
   fullheal: itemSprite('full-heal.png'),
+  healpowder: itemSprite('heal-powder.png'),
   rarecandy: itemSprite('rare-candy.png'),
   xattack: itemSprite('x-attack.png'),
   maxelixer: itemSprite('max-elixir.png'),
@@ -18,6 +19,18 @@ export const ITEM_SPRITES: Record<string, string> = {
   ultraball: itemSprite('ultra-ball.png'),
   masterball: itemSprite('master-ball.png'),
   shinycharm: itemSprite('shiny-charm.png'),
+  firestone: itemSprite('fire-stone.png'),
+  waterstone: itemSprite('water-stone.png'),
+  thunderstone: itemSprite('thunder-stone.png'),
+  leafstone: itemSprite('leaf-stone.png'),
+  moonstone: itemSprite('moon-stone.png'),
+  tradestone: itemSprite('trade-stone.png'),
+  /** Chaos wheel: skip turn (leave / pass). */
+  escaperope: itemSprite('escape-rope.png'),
+  /** Chaos wheel: force a party swap. */
+  ejectbutton: itemSprite('eject-button.png'),
+  electricgem: itemSprite('electric-gem.png'),
+  mysteryegg: itemSprite('mystery-egg.png'),
 };
 
 /** Wheel segment sprites keyed by segment id. */
@@ -31,12 +44,23 @@ export const SEGMENT_SPRITES: Record<string, string> = {
   shop: asset('img/shop.png'),
   legendary: itemSprite('poke-flute.png'),
   uber: itemSprite('master-ball.png'),
+  uberspin: itemSprite('master-ball.png'),
+  teamrocket: asset('img/gym.png'),
   battlegym: asset('img/gym.png'),
   evolve: itemSprite('rare-candy.png'),
   potion: itemSprite('potion.png'),
   elixir: itemSprite('max-elixir.png'),
   pokecenter: itemSprite('sacred-ash.png'),
-  'bonus-item': itemSprite('nugget.png'),
+  fullheal: itemSprite('full-heal.png'),
+  money100: itemSprite('amulet-coin.png'),
+  rarecandy: itemSprite('rare-candy.png'),
+  healpowder: itemSprite('heal-powder.png'),
+  xattack: itemSprite('x-attack.png'),
+  stone: itemSprite('moon-stone.png'),
+  'bonus-all-items': itemSprite('nugget.png'),
+  'bonus-xp': itemSprite('rare-candy.png'),
+  'bonus-money': itemSprite('amulet-coin.png'),
+  masterball: itemSprite('master-ball.png'),
 };
 
 /** UI chrome sprites keyed by semantic name. */
@@ -55,6 +79,13 @@ export const UI_SPRITES = {
 
 export type UISpriteKey = keyof typeof UI_SPRITES;
 
+/** Large hero icons for hub pathway cards. */
+export const PATHWAY_HERO_SPRITES: Record<'catch' | 'items' | 'mystery', string> = {
+  catch: localPokemonSprite(133),
+  items: itemSprite('electric-gem.png'),
+  mystery: itemSprite('mystery-egg.png'),
+};
+
 export function getItemSprite(id: string): string | undefined {
   return ITEM_SPRITES[id];
 }
@@ -65,6 +96,10 @@ export function getSegmentSprite(segmentId: string): string | undefined {
 
 export function getUISprite(key: UISpriteKey): string {
   return UI_SPRITES[key];
+}
+
+export function getPathwayHeroSprite(pathway: 'catch' | 'items' | 'mystery'): string {
+  return PATHWAY_HERO_SPRITES[pathway];
 }
 
 export function gameIconSrc(key: string): string | undefined {

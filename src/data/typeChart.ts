@@ -1,3 +1,6 @@
+/** Same-type attack bonus (Gen 2+ mainline). */
+export const STAB_MULTIPLIER = 1.5;
+
 /** Generation 1 type chart (Red/Blue/Yellow). 15 types only. */
 const CHART: Record<string, Record<string, number>> = {
   normal: { rock: 0.5, ghost: 0 },
@@ -28,12 +31,48 @@ export function getTypeEffectiveness(attackType: string, defenderTypes: string[]
   return multiplier;
 }
 
+export function hasStab(attackerTypes: string[], moveType: string): boolean {
+  const normalized = moveType.toLowerCase();
+  return attackerTypes.some((t) => t.toLowerCase() === normalized);
+}
+
+export function getStabMultiplier(attackerTypes: string[], moveType: string): number {
+  return hasStab(attackerTypes, moveType) ? STAB_MULTIPLIER : 1;
+}
+
+/** Battle log line for type effectiveness (empty on neutral 1×). */
 export function getEffectivenessLabel(multiplier: number): string {
-  if (multiplier >= 4) return '4x Super Effective!';
-  if (multiplier >= 2) return 'Super Effective!';
-  if (multiplier <= 0) return 'No Effect!';
-  if (multiplier < 1) return 'Not Very Effective...';
-  return 'Effective!';
+  if (multiplier <= 0) return "It doesn't affect the opposing Pokémon!";
+  if (multiplier >= 4) return "It's 4× super effective!";
+  if (multiplier >= 2) return "It's super effective!";
+  if (multiplier < 1) return "It's not very effective…";
+  return '';
+}
+
+/** Short chip label for move picker; null when neutral (1×). */
+export function getEffectivenessChipLabel(multiplier: number): string | null {
+  if (multiplier >= 4) return '4× Super';
+  if (multiplier >= 2) return 'Super';
+  if (multiplier <= 0) return 'No Effect';
+  if (multiplier < 1) return 'Not Very';
+  return null;
+}
+
+export function buildHitBattleMessage(
+  usedLine: string,
+  effectiveness: number,
+  damage: number,
+  crit: boolean,
+): string {
+  if (effectiveness <= 0) {
+    return `${usedLine} It doesn't affect the opposing Pokémon!`;
+  }
+  let msg = usedLine;
+  if (crit) msg += ' A critical hit!';
+  msg += ` Dealt ${damage} damage!`;
+  const note = getEffectivenessLabel(effectiveness);
+  if (note) msg += ` ${note}`;
+  return msg;
 }
 
 export const TYPE_COLORS: Record<string, string> = {

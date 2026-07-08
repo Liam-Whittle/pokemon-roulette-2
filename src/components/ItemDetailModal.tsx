@@ -1,7 +1,8 @@
 import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { ItemIcon } from './ItemIcon';
-import { ITEM_DESCRIPTIONS } from '../data/pools';
+import { getItemDescription } from '../data/pools';
+import { useGameStore } from '../store/useGameStore';
 
 interface ItemDetailModalProps {
   id: string;
@@ -11,7 +12,8 @@ interface ItemDetailModalProps {
 }
 
 export function ItemDetailModal({ id, name, icon, onClose }: ItemDetailModalProps) {
-  const description = ITEM_DESCRIPTIONS[id] ?? 'No description available for this item yet.';
+  const catchGamemode = useGameStore((s) => s.catchGamemode) ?? 'skill';
+  const description = getItemDescription(id, catchGamemode);
 
   return createPortal(
     <div className="item-detail-backdrop" onClick={onClose}>

@@ -2,12 +2,14 @@ import { useState } from 'react';
 import { motion, useAnimationControls } from 'framer-motion';
 import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
+import { useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
 import { playSfx } from '../utils/sound';
 import { asset } from '../utils/asset';
 
 const DEFAULT_SUBTITLE = 'Pokemon Roulette but actually good';
 const SECRET_SUBTITLE = 'Johnson is a Jew';
 const SECRET_CLICKS = 5;
+const MULTIPLAYER_ENABLED = false;
 
 export function TitleScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
@@ -17,16 +19,31 @@ export function TitleScreen() {
   const resetGame = useGameStore((s) => s.resetGame);
   const muted = useGameStore((s) => s.muted);
   const hasChampions = useGameStore((s) => s.hallOfChampions.length > 0);
+  const resetMultiplayer = useMultiplayerStore((s) => s.resetMultiplayer);
+  const startHost = useMultiplayerStore((s) => s.startHost);
   const ballControls = useAnimationControls();
   const [ballClicks, setBallClicks] = useState(0);
+  const [pickingMode, setPickingMode] = useState(false);
 
   const secretUnlocked = ballClicks >= SECRET_CLICKS;
+  const canContinue = !!(trainer && starterClaimed);
 
   const spinBall = async () => {
     playSfx('click', muted);
     setBallClicks((count) => count + 1);
     await ballControls.start({ rotate: 360, transition: { duration: 0.6, ease: 'easeOut' } });
     ballControls.set({ rotate: 0 });
+  };
+
+  const beginNewGame = () => {
+    playSfx('click', muted);
+    resetMultiplayer();
+    resetGame();
+    if (MULTIPLAYER_ENABLED) {
+      setPickingMode(true);
+    } else {
+      setScreen('setup');
+    }
   };
 
   return (
@@ -76,34 +93,81 @@ export function TitleScreen() {
         </p>
 
         <div className="title-screen__actions">
-          <button
-            type="button"
-            className="btn btn--primary btn--lg"
-            onClick={() => {
-              playSfx('click', muted);
-              if (trainer && starterClaimed) {
-                // Resume an interrupted Gym/Elite battle if one was in progress.
-                setScreen(battleSnapshot ? battleSnapshot.context : 'hub');
-              } else {
-                setScreen('setup');
-              }
-            }}
-          >
-            {trainer && starterClaimed ? 'Continue Game' : 'New Game'}
-          </button>
+          {!pickingMode ? (
+            <>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => {
+                  playSfx('click', muted);
+                  if (canContinue) {
+                    const ctx = battleSnapshot?.context;
+                    const resumeScreen =
+                      ctx === 'teamrocket' ? 'teamrocket' : ctx === 'gym' || ctx === 'elite' ? ctx : 'hub';
+                    setScreen(resumeScreen);
+                  } else {
+                    beginNewGame();
+                  }
+                }}
+              >
+                {canContinue ? 'Continue Game' : 'New Game'}
+              </button>
 
-          {trainer && starterClaimed && (
-            <button
-              type="button"
-              className="btn btn--ghost"
-              onClick={() => {
-                playSfx('click', muted);
-                resetGame();
-              }}
-            >
-              New Game
-            </button>
-          )}
+              {canContinue && (
+                <button type="button" className="btn btn--ghost" onClick={beginNewGame}>
+                  New Game
+                </button>
+              )}
+            </>
+          ) : MULTIPLAYER_ENABLED ? (
+            <>
+              <p className="title-screen__mode-label">How do you want to play?</p>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => {
+                  playSfx('click', muted);
+                  resetMultiplayer();
+                  setScreen('setup');
+                }}
+              >
+                Solo
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => {
+                  playSfx('click', muted);
+                  resetMultiplayer();
+                  void startHost();
+                  setScreen('mp-host-lobby');
+                }}
+              >
+                Host Game
+              </button>
+              <button
+                type="button"
+                className="btn btn--primary btn--lg"
+                onClick={() => {
+                  playSfx('click', muted);
+                  resetMultiplayer();
+                  setScreen('mp-join');
+                }}
+              >
+                Join Game
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => {
+                  playSfx('click', muted);
+                  setPickingMode(false);
+                }}
+              >
+                Back
+              </button>
+            </>
+          ) : null}
         </div>
       </motion.div>
     </motion.div>

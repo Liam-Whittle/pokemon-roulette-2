@@ -8,10 +8,23 @@ const assetsDir = path.join(root, 'public', 'assets');
 
 const POKEAPI = 'https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites';
 const SHOWDOWN = 'https://play.pokemonshowdown.com/sprites/trainers';
+const BATTLE_GIF_CDN = 'https://cdn.jsdelivr.net/gh/PokeAPI/sprites@master/sprites/pokemon/versions/generation-v/black-white/animated';
+const BATTLE_GIF_RAW = `${POKEAPI}/pokemon/versions/generation-v/black-white/animated`;
+
+function loadGymBattlePokemonIds() {
+  const poolsPath = path.join(root, 'src', 'data', 'pools.ts');
+  const src = fs.readFileSync(poolsPath, 'utf8');
+  const ids = new Set();
+  for (const match of src.matchAll(/\{\s*id:\s*(\d+),\s*name:\s*'[^']+',\s*level:\s*\d+/g)) {
+    ids.add(Number(match[1]));
+  }
+  return [...ids].sort((a, b) => a - b);
+}
 
 const ITEMS = [
   'potion.png',
   'full-heal.png',
+  'heal-powder.png',
   'rare-candy.png',
   'x-attack.png',
   'max-elixir.png',
@@ -22,6 +35,12 @@ const ITEMS = [
   'ultra-ball.png',
   'master-ball.png',
   'shiny-charm.png',
+  'fire-stone.png',
+  'water-stone.png',
+  'thunder-stone.png',
+  'leaf-stone.png',
+  'moon-stone.png',
+  'trade-stone.png',
   'super-rod.png',
   'poke-radar.png',
   'explorer-kit.png',
@@ -34,6 +53,11 @@ const ITEMS = [
   'dubious-disc.png',
   'dowsing-machine.png',
   'heart-scale.png',
+  'escape-rope.png',
+  'eject-button.png',
+  'amulet-coin.png',
+  'electric-gem.png',
+  'mystery-egg.png',
 ];
 
 const TRAINERS = [
@@ -52,29 +76,48 @@ const TRAINERS = [
   'blue.png',
   'red-gen3.png',
   'leaf-gen3.png',
+  'rocketgrunt.png',
 ];
 
-async function download(url, dest, { force = false } = {}) {
+/** Extra Pokémon sprites not covered by the 1–151 batch download. */
+const EXTRA_POKEMON_SPRITES = [];
+const ITEM_SOURCE_OVERRIDES = {
+  'trade-stone.png': 'enigma-stone.png',
+};
+
+async function download(url, dest, { force = false, retries = 6 } = {}) {
   const dir = path.dirname(dest);
   fs.mkdirSync(dir, { recursive: true });
-  if (!force && fs.existsSync(dest)) return;
-  try {
-    const res = await fetch(url);
-    if (!res.ok) {
-      console.warn(`Skip ${url}: ${res.status}`);
+  if (!force && fs.existsSync(dest) && fs.statSync(dest).size > 0) return;
+  for (let attempt = 0; attempt <= retries; attempt++) {
+    try {
+      const res = await fetch(url);
+      if (res.status === 429 && attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      if (!res.ok) {
+        console.warn(`Skip ${url}: ${res.status}`);
+        return;
+      }
+      const buf = Buffer.from(await res.arrayBuffer());
+      fs.writeFileSync(dest, buf);
+      console.log(`Saved ${path.relative(root, dest)}`);
       return;
+    } catch (err) {
+      if (attempt < retries) {
+        await new Promise((r) => setTimeout(r, 1500 * (attempt + 1)));
+        continue;
+      }
+      console.warn(`Failed ${url}:`, err.message);
     }
-    const buf = Buffer.from(await res.arrayBuffer());
-    fs.writeFileSync(dest, buf);
-    console.log(`Saved ${path.relative(root, dest)}`);
-  } catch (err) {
-    console.warn(`Failed ${url}:`, err.message);
   }
 }
 
 async function main() {
   for (const file of ITEMS) {
-    await download(`${POKEAPI}/items/${file}`, path.join(assetsDir, 'items', file), {
+    const sourceFile = ITEM_SOURCE_OVERRIDES[file] ?? file;
+    await download(`${POKEAPI}/items/${sourceFile}`, path.join(assetsDir, 'items', file), {
       force: file === 'ultra-ball.png',
     });
   }
@@ -85,6 +128,17 @@ async function main() {
 
   for (const file of TRAINERS) {
     await download(`${SHOWDOWN}/${file}`, path.join(assetsDir, 'trainers', file));
+  }
+
+  const gymBattleIds = loadGymBattlePokemonIds();
+  console.log(`Downloading ${gymBattleIds.length} gym / Elite Four battle GIFs…`);
+  for (const id of gymBattleIds) {
+    const dest = path.join(assetsDir, 'pokemon', 'battle', `${id}.gif`);
+    await download(`${BATTLE_GIF_CDN}/${id}.gif`, dest);
+    if (!fs.existsSync(dest) || fs.statSync(dest).size === 0) {
+      await download(`${BATTLE_GIF_RAW}/${id}.gif`, dest);
+    }
+    await new Promise((r) => setTimeout(r, 250));
   }
 
   for (let id = 1; id <= 151; id++) {
@@ -104,6 +158,10 @@ async function main() {
       path.join(assetsDir, 'artwork', `${id}-shiny.png`),
       { force: true },
     );
+  }
+
+  for (const { url, dest } of EXTRA_POKEMON_SPRITES) {
+    await download(url, path.join(assetsDir, dest));
   }
 
   console.log('Asset download complete.');
