@@ -10,6 +10,8 @@
     "download-battle-gifs": "node scripts/download-battle-gifs.mjs",
     "build-pokemon-data": "node scripts/build-pokemon-data.mjs",
     "lint": "oxlint",
+    "test": "vitest run",
+    "audit-moves": "node scripts/audit-curated-moves.mjs",
     "preview": "vite preview"
   },
   "dependencies": {
@@ -26,6 +28,7 @@
     "@vitejs/plugin-react": "^6.0.2",
     "oxlint": "^1.69.0",
     "typescript": "~6.0.2",
-    "vite": "^8.1.0"
+    "vite": "^8.1.0",
+    "vitest": "^4.1.10"
   }
 }

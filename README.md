@@ -10,6 +10,7 @@ A polished, animation-rich Pokémon adventure game inspired by [pokemon-roulette
 - **Interactive catch mini-game** — drag back and release to throw a Poké Ball, then nail a timing ring to secure the catch (ball type affects difficulty)
 - **Encounter wheels** — Wild Encounters, Fishing, Cave, and Fossil Revival each spin a wheel of the Pokémon you can run into, with backgrounds themed to the activity
 - **Gym gauntlet → Elite Four → Champion** — turn-based battles with type matchups, party switching, items (Potions, Max Elixir, X-Attack), and a prep phase before the Elite Four
+- **Johto region** — Chikorita/Cyndaquil/Totodile starters, 8 Johto gyms, Lance as Champion, Dark and Steel types, and Gen II move mechanics
 - **Battle depth** — type effectiveness tags, power-advantage damage bonuses, devastating 4× super-effective hits, and PP that drains across a battle but refills back at the hub
 - **Shiny hunting** — every catch rolls a shiny check (boosted by the Shiny Charm), with animated holographic detail cards
 - **Persistent progress** — Pokédex, party, bag, badges, money, and Hall of Fame saved to localStorage
@@ -32,8 +33,12 @@ Open [http://localhost:5173](http://localhost:5173) in your browser.
 
 ```bash
 npm run build
+npm run test
+npm run audit-moves
 npm run preview
 ```
+
+Set `VITE_MULTIPLAYER_ENABLED=true` to expose multiplayer options on the title screen (requires STUN/TURN configuration).
 
 ## How to Play
 

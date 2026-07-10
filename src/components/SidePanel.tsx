@@ -4,15 +4,18 @@ import { TypeBadge } from './TypeBadge';
 import { PokeDollarAmount } from './PokeDollar';
 import { ItemIcon } from './ItemIcon';
 import { EvolutionModal } from './EvolutionModal';
+import { EvolutionPickerModal, type EvolutionPickerOption } from './EvolutionPickerModal';
 import { PokemonDetailModal } from './PokemonDetailModal';
 import { ItemDetailModal } from './ItemDetailModal';
 import { BattleEffectBadges } from './StatusBadge';
 import type { BattleVolatiles } from '../data/battleVolatiles';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { currentHp, maxHpForMon, isFainted, MAX_LEVEL } from '../utils/stats';
-import { canEvolveNow } from '../utils/evolution';
+import { canEvolveNow, getAvailableEvolutions } from '../utils/evolution';
 import { hasReducedPp } from '../data/moves';
+import { getRegionTotalGyms, resolveBadgeImage } from '../data/pools';
 import { playSfx } from '../utils/sound';
+import { imgFallback, remoteBadge } from '../utils/localAssets';
 import type { BagItem, CatchBallId, EvolutionInfo, IVs, NatureId, StoredMove } from '../types/game';
 
 const BALL_LABELS: Record<CatchBallId, string> = {
@@ -106,9 +109,14 @@ export function SidePanel({
   const useHealPowderAllParty = useGameStore((state) => state.useHealPowderAllParty);
   const fullHealUsedInBattle = useGameStore((state) => state.fullHealUsedInBattle);
   const pcExcluded = useGameStore((state) => state.pcExcluded);
+  const region = useGameStore((state) => (state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
 
   const [swappingFor, setSwappingFor] = useState<number | null>(null);
   const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
+  const [evolutionPicker, setEvolutionPicker] = useState<{
+    caughtAt: number;
+    options: EvolutionPickerOption[];
+  } | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [evolving, setEvolving] = useState(false);
   const [selectedMon, setSelectedMon] = useState<SelectedMon | null>(null);
@@ -147,11 +155,11 @@ export function SidePanel({
     }
   }
 
-  async function handleEvolve(caughtAt: number) {
+  async function performEvolution(caughtAt: number, toId: number) {
     if (evolving) return;
     setEvolving(true);
     try {
-      const result = await evolvePartyMember(caughtAt);
+      const result = await evolvePartyMember(caughtAt, toId);
       if (result.evolution) {
         setEvolution(result.evolution);
       } else {
@@ -160,6 +168,42 @@ export function SidePanel({
     } finally {
       setEvolving(false);
     }
+  }
+
+  function handleEvolve(caughtAt: number) {
+    if (evolving) return;
+    const member = party.find((m) => m.caughtAt === caughtAt);
+    if (!member) return;
+
+    const available = getAvailableEvolutions(member.id, member.level, bag, {
+      region,
+      caughtAt: member.caughtAt,
+    });
+    if (available.length === 0) {
+      setNotice(`${member.displayName} cannot evolve yet.`);
+      return;
+    }
+    if (available.length === 1) {
+      void performEvolution(caughtAt, available[0]!.toId);
+      return;
+    }
+
+    setEvolutionPicker({
+      caughtAt,
+      options: available.map((option) => ({
+        ...option,
+        caughtAt,
+        fromSpeciesId: member.id,
+        fromName: member.nickname ?? member.displayName,
+      })),
+    });
+  }
+
+  function handleEvolutionPick(toId: number) {
+    if (!evolutionPicker) return;
+    const { caughtAt } = evolutionPicker;
+    setEvolutionPicker(null);
+    void performEvolution(caughtAt, toId);
   }
 
   function handleSwap(pokemonId: number) {
@@ -235,7 +279,10 @@ export function SidePanel({
                 const fullHp = hp >= max;
                 const ppDrained = hasReducedPp(pokemon.pp, pokemon.moves);
                 const isActive = highlightActive && index === 0;
-                const canEvolve = !inBattle && canEvolveNow(pokemon.id, pokemon.level, bag);
+                const canEvolve = !inBattle && canEvolveNow(pokemon.id, pokemon.level, bag, {
+                  region,
+                  caughtAt: pokemon.caughtAt,
+                });
                 const canUseCandy =
                   allowItems && rareCandyCount > 0 && !fainted && pokemon.level < MAX_LEVEL;
                 const showPotion = allowItems && potionCount > 0 && !fainted && !fullHp;
@@ -458,7 +505,7 @@ export function SidePanel({
                   </button>
                   <div className="side-panel__card-body">
                     <strong>{item.name}</strong>
-                    <span>x{item.quantity}</span>
+                    <span className="side-panel-margfix">x{item.quantity}</span>
                   </div>
                 </div>
               ))}
@@ -466,27 +513,37 @@ export function SidePanel({
             <div className="side-panel__badges">
               <div className="side-panel__badges-head">
                 <strong>Badges</strong>
-                <span>{badges.length}/8</span>
+                <span>{badges.length}/{getRegionTotalGyms(region)}</span>
               </div>
               {badges.length === 0 ? (
                 <p className="side-panel__empty">No badges yet.</p>
               ) : (
                 <div className="side-panel__badge-grid">
-                  {badges.map((badge) =>
-                    badge.image ? (
+                  {badges.map((badge) => {
+                    const badgeSrc = resolveBadgeImage(badge, region);
+                    return badgeSrc ? (
                       <img
                         key={badge.id}
-                        src={badge.image}
+                        src={badgeSrc}
                         alt={badge.name}
                         title={badge.name}
                         className="side-panel__badge-img"
+                        onError={(e) => {
+                          const match = badgeSrc.match(/badges\/(\d+)\.png/);
+                          const badgeNum = match ? Number(match[1]) : 0;
+                          imgFallback(
+                            e,
+                            badgeNum > 0 ? remoteBadge(badgeNum) : undefined,
+                            PLACEHOLDER_SPRITE,
+                          );
+                        }}
                       />
                     ) : (
                       <span key={badge.id} className="side-panel__badge-emoji" title={badge.name}>
                         🏅
                       </span>
-                    ),
-                  )}
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -549,6 +606,13 @@ export function SidePanel({
       </div>
 
       {evolution && <EvolutionModal evolution={evolution} onClose={() => setEvolution(null)} />}
+      {evolutionPicker && (
+        <EvolutionPickerModal
+          options={evolutionPicker.options}
+          onSelect={handleEvolutionPick}
+          onCancel={() => setEvolutionPicker(null)}
+        />
+      )}
 
       {selectedMon && (
         <PokemonDetailModal

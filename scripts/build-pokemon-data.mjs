@@ -6,9 +6,20 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const cacheDir = path.join(root, 'src', 'data', 'cache');
 const BASE = 'https://pokeapi.co/api/v2';
-const REGION_MAX = 151;
+const REGION_MAX = 251;
 
-const GEN1_VERSION_GROUPS = new Set(['red-blue', 'blue', 'yellow', 'red-green']);
+/** Fairy was not a type in Gen II; these moves were Normal in G/S/C. */
+const GEN2_FAIRY_TO_NORMAL = new Set(['charm', 'moonlight', 'sweet-kiss']);
+
+function gen2MoveType(slug, type) {
+  if (type === 'fairy' && GEN2_FAIRY_TO_NORMAL.has(slug)) return 'normal';
+  return type;
+}
+
+const GEN12_VERSION_GROUPS = new Set([
+  'red-blue', 'blue', 'yellow', 'red-green',
+  'gold-silver', 'crystal',
+]);
 
 const GEN_ORDER = {
   'generation-i': 1,
@@ -37,14 +48,14 @@ function gen1Types(data) {
   return past[0]?.types ?? data.types.map((t) => t.type.name);
 }
 
-function extractGen1MoveSlugs(moves) {
+function extractGen12MoveSlugs(moves) {
   const slugs = new Set();
   for (const entry of moves) {
     const slug = entry.move.name;
-    const inGen1 = entry.version_group_details?.some((d) =>
-      GEN1_VERSION_GROUPS.has(d.version_group.name),
+    const inGen12 = entry.version_group_details?.some((d) =>
+      GEN12_VERSION_GROUPS.has(d.version_group.name),
     );
-    if (inGen1) slugs.add(slug);
+    if (inGen12) slugs.add(slug);
   }
   return [...slugs];
 }
@@ -141,7 +152,7 @@ async function main() {
       specialDefense: data.stats[4].base_stat,
       speed: data.stats[5].base_stat,
     };
-    const learnset = extractGen1MoveSlugs(data.moves ?? []);
+    const learnset = extractGen12MoveSlugs(data.moves ?? []);
     learnset.forEach((s) => allMoveSlugs.add(s));
 
     species[id] = {
@@ -171,7 +182,7 @@ async function main() {
           .split('-')
           .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
           .join(' '),
-        type: m.type.name,
+        type: gen2MoveType(slug, m.type.name),
         power: m.power ?? 0,
         accuracy: m.accuracy ?? 100,
         category: mapCategory(m.damage_class),

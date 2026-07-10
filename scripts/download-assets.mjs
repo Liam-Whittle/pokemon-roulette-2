@@ -48,6 +48,9 @@ const ITEMS = [
   'poke-flute.png',
   'nugget.png',
   'kings-rock.png',
+  'metal-coat.png',
+  'dragon-scale.png',
+  'sun-stone.png',
   'gold-bottle-cap.png',
   'reaper-cloth.png',
   'dubious-disc.png',
@@ -77,12 +80,27 @@ const TRAINERS = [
   'red-gen3.png',
   'leaf-gen3.png',
   'rocketgrunt.png',
+  'ethan.png',
+  'lyra.png',
+  'falkner.png',
+  'bugsy.png',
+  'whitney.png',
+  'morty.png',
+  'chuck.png',
+  'jasmine.png',
+  'pryce.png',
+  'clair.png',
+  'will.png',
+  'karen.png',
 ];
 
 /** Extra Pokémon sprites not covered by the 1–151 batch download. */
 const EXTRA_POKEMON_SPRITES = [];
 const ITEM_SOURCE_OVERRIDES = {
   'trade-stone.png': 'enigma-stone.png',
+  'metal-coat.png': 'metal-coat.png',
+  'dragon-scale.png': 'dragon-scale.png',
+  'sun-stone.png': 'sun-stone.png',
 };
 
 async function download(url, dest, { force = false, retries = 6 } = {}) {
@@ -122,7 +140,7 @@ async function main() {
     });
   }
 
-  for (let i = 1; i <= 8; i++) {
+  for (let i = 1; i <= 16; i++) {
     await download(`${POKEAPI}/badges/${i}.png`, path.join(assetsDir, 'badges', `${i}.png`));
   }
 
@@ -141,7 +159,7 @@ async function main() {
     await new Promise((r) => setTimeout(r, 250));
   }
 
-  for (let id = 1; id <= 151; id++) {
+  for (let id = 1; id <= 251; id++) {
     await download(`${POKEAPI}/pokemon/${id}.png`, path.join(assetsDir, 'pokemon', `${id}.png`));
     await download(
       `${POKEAPI}/pokemon/shiny/${id}.png`,

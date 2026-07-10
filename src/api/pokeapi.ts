@@ -120,15 +120,21 @@ export interface PokemonListEntry {
   name: string;
 }
 
-export async function fetchGen1List(): Promise<PokemonListEntry[]> {
-  return cachedFetch('gen1-list', async () => {
+export async function fetchRegionList(region: 'Kanto' | 'Johto'): Promise<PokemonListEntry[]> {
+  const maxId = region === 'Johto' ? 251 : 151;
+  const cacheKey = region === 'Johto' ? 'gen12-list' : 'gen1-list';
+  return cachedFetch(cacheKey, async () => {
     const entries: PokemonListEntry[] = [];
-    for (let id = 1; id <= 151; id++) {
+    for (let id = 1; id <= maxId; id++) {
       const sp = getCachedSpecies(id);
       if (sp) entries.push({ id, name: sp.name });
     }
     return entries;
   });
+}
+
+export async function fetchGen1List(): Promise<PokemonListEntry[]> {
+  return fetchRegionList('Kanto');
 }
 
 export interface PokemonDetail {

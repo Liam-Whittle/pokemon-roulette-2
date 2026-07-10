@@ -24,6 +24,10 @@ export const ITEM_SPRITES: Record<string, string> = {
   thunderstone: itemSprite('thunder-stone.png'),
   leafstone: itemSprite('leaf-stone.png'),
   moonstone: itemSprite('moon-stone.png'),
+  kingsrock: itemSprite('kings-rock.png'),
+  metalcoat: itemSprite('metal-coat.png'),
+  dragonscale: itemSprite('dragon-scale.png'),
+  sunstone: itemSprite('sun-stone.png'),
   tradestone: itemSprite('trade-stone.png'),
   /** Chaos wheel: skip turn (leave / pass). */
   escaperope: itemSprite('escape-rope.png'),

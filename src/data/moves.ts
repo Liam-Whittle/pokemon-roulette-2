@@ -1,6 +1,7 @@
 import type { BattleMove, CaughtPokemon, MoveCategory, StatusAilment, StoredMove } from '../types/game';
 import { cachedMoveToStored, getCachedSpecies, getSpeciesWeightKg } from './speciesCache';
 import { CURATED_SPECIES_MOVES_GEN1 } from './speciesMovesGen1';
+import { CURATED_SPECIES_MOVES_GEN2 } from './speciesMovesGen2';
 import { getStabMultiplier } from './typeChart';
 import { CRIT_CHANCE, CRIT_MULT, HIGH_CRIT_CHANCE, XATTACK_POWER_BONUS } from '../utils/battle';
 import { getComputedStats } from '../utils/stats';
@@ -26,6 +27,7 @@ export function extractGen1MoveSlugs(
 
 function toMoveSlug(name: string): string {
   const normalized = name
+    .replace(/([a-z])([A-Z])/g, '$1 $2')
     .trim()
     .toLowerCase()
     .replace(/[’']/g, '')
@@ -37,6 +39,15 @@ function toMoveSlug(name: string): string {
     'double-edge': 'double-edge',
     'high-jump-kick': 'high-jump-kick',
     'vice-grip': 'vice-grip',
+    selfdestruct: 'self-destruct',
+    'hidden-power-bug': 'hidden-power',
+    'hidden-power-ice': 'hidden-power',
+    softboiled: 'soft-boiled',
+    'hi-jump-kick': 'high-jump-kick',
+    'dragon-breath': 'dragon-breath',
+    'octazooka': 'octazooka',
+    'faint-attack': 'feint-attack',
+    'sacred-fire': 'sacred-fire',
   };
   return aliases[normalized] ?? normalized;
 }
@@ -69,7 +80,7 @@ export function assignMoves(speciesId: number, types: string[], _level = 5, pref
   void _level;
   void preferStrong;
 
-  const curated = CURATED_SPECIES_MOVES_GEN1[speciesId];
+  const curated = CURATED_SPECIES_MOVES_GEN1[speciesId] ?? CURATED_SPECIES_MOVES_GEN2[speciesId];
   if (curated) {
     return curated.moves
       .map((moveName) => {
@@ -139,6 +150,7 @@ const HIGH_CRIT_MOVE_SLUGS = new Set([
   'razor-leaf',
   'slash',
   'crabhammer',
+  'aeroblast',
 ]);
 
 export function isHighCritMove(slug: string): boolean {
@@ -170,6 +182,7 @@ export function computeDamage(opts: {
   attackMultiplier?: number;
   defenseMultiplier?: number;
   screenDamageMult?: number;
+  weatherMult?: number;
 }): number {
   if (opts.effectiveness <= 0) return 0;
 
@@ -199,6 +212,9 @@ export function computeDamage(opts: {
   if (opts.screenDamageMult != null && opts.screenDamageMult < 1) {
     base *= opts.screenDamageMult;
   }
+  if (opts.weatherMult != null && opts.weatherMult !== 1) {
+    base *= opts.weatherMult;
+  }
   const stab = getStabMultiplier(opts.attacker.types, opts.moveType);
   let dmg = base * stab * opts.effectiveness;
   if (opts.crit) dmg *= CRIT_MULT;
@@ -216,12 +232,56 @@ export function getLowKickPower(weightKg: number): number {
 }
 
 /** Power fed into the damage formula (before type/STAB/crit). */
+export interface MovePowerContext {
+  defenderSpeciesId: number;
+  attackerHp?: number;
+  attackerMaxHp?: number;
+  hitIndex?: number;
+  rolloutPower?: number;
+}
+
+/** Return power at max happiness (no happiness stat tracked). */
+export function getReturnPower(): number {
+  return 102;
+}
+
+/** Reversal power tiers by remaining HP percentage (Gen II). */
+export function getReversalPower(hp: number, maxHp: number): number {
+  const pct = maxHp > 0 ? hp / maxHp : 1;
+  if (pct <= 0.09375) return 200;
+  if (pct <= 0.1875) return 100;
+  if (pct <= 0.3542) return 80;
+  if (pct <= 0.6875) return 40;
+  return 20;
+}
+
+export function getTripleKickPower(hitIndex: number): number {
+  return 10 * (hitIndex + 1);
+}
+
 export function getEffectiveMovePower(
   move: Pick<StoredMove, 'slug' | 'power'>,
-  defenderSpeciesId: number,
+  ctx: MovePowerContext | number,
 ): number {
+  const context: MovePowerContext =
+    typeof ctx === 'number' ? { defenderSpeciesId: ctx } : ctx;
+
   if (move.slug === 'low-kick') {
-    return getLowKickPower(getSpeciesWeightKg(defenderSpeciesId));
+    return getLowKickPower(getSpeciesWeightKg(context.defenderSpeciesId));
+  }
+  if (move.slug === 'return') {
+    return getReturnPower();
+  }
+  if (move.slug === 'reversal') {
+    const maxHp = context.attackerMaxHp ?? 1;
+    const hp = context.attackerHp ?? maxHp;
+    return getReversalPower(hp, maxHp);
+  }
+  if (move.slug === 'triple-kick') {
+    return getTripleKickPower(context.hitIndex ?? 0);
+  }
+  if (move.slug === 'rollout' && context.rolloutPower != null) {
+    return context.rolloutPower;
   }
   return move.power;
 }
@@ -282,6 +342,12 @@ export function formatMovePowerDisplay(
     }
     return 'Var';
   }
+  if (move.slug === 'return') {
+    const power = getReturnPower();
+    return String(boosted ? Math.round(power * (1 + XATTACK_POWER_BONUS)) : power);
+  }
+  if (move.slug === 'reversal') return 'Var';
+  if (move.slug === 'present') return 'Var';
 
   const fixed = getFixedDamage(move, level, opts?.defenderHp ?? 100);
   if (fixed !== null) return String(fixed);

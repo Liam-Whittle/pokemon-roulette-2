@@ -98,6 +98,7 @@ export default function App() {
   const setMuted = useGameStore((s) => s.setMuted);
   const screen = useGameStore((s) => s.screen);
   const currentActivity = useGameStore((s) => s.currentActivity);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const [showMusicPrompt, setShowMusicPrompt] = useState(true);
   const bgRef = useRef<HTMLDivElement>(null);
   const target = useRef({ x: 0, y: 0 });
@@ -177,10 +178,12 @@ export default function App() {
       setMusicTrack('title');
     } else if (screen === 'catch' || screen === 'fishing' || screen === 'fossil' || screen === 'cave') {
       setMusicTrack('pokemon');
+    } else if (screen === 'hub') {
+      setMusicTrack(region === 'Johto' ? 'johto' : 'kanto');
     } else {
       setMusicTrack('main');
     }
-  }, [screen]);
+  }, [screen, region]);
 
   // On the catch screen, match the background to the activity that triggered the
   // encounter (fishing/fossil/cave) instead of always showing the main hub art.

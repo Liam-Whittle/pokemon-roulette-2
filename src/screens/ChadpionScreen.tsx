@@ -8,6 +8,7 @@ import { useGameStore } from '../store/useGameStore';
  */
 export function ChadpionScreen() {
   const resetGame = useGameStore((s) => s.resetGame);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
 
   return (
     <motion.div
@@ -34,7 +35,7 @@ export function ChadpionScreen() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4 }}
         >
-          New Chadpion of Kanto??
+          New Chadpion of {region}??
         </motion.h1>
 
         <motion.p
@@ -43,7 +44,9 @@ export function ChadpionScreen() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.9 }}
         >
-          New regions coming soon
+          {region === 'Johto'
+            ? 'You conquered the Johto League!'
+            : 'New regions coming soon'}
         </motion.p>
 
         <motion.button

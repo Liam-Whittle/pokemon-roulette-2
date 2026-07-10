@@ -7,7 +7,7 @@ import { imgFallback, remoteTrainerSprite } from '../utils/localAssets';
 import { localTrainerSprite } from '../utils/localAssets';
 import type { TrainerPreset } from '../types/game';
 
-const TRAINERS: TrainerPreset[] = [
+const KANTO_TRAINERS: TrainerPreset[] = [
   {
     id: 'boy',
     label: 'Red',
@@ -20,14 +20,29 @@ const TRAINERS: TrainerPreset[] = [
   },
 ];
 
+const JOHTO_TRAINERS: TrainerPreset[] = [
+  {
+    id: 'boy',
+    label: 'Ethan',
+    sprite: localTrainerSprite('ethan.png'),
+  },
+  {
+    id: 'girl',
+    label: 'Lyra',
+    sprite: localTrainerSprite('lyra.png'),
+  },
+];
+
 export function TrainerSetup() {
   const setTrainer = useGameStore((s) => s.setTrainer);
   const setCatchGamemode = useGameStore((s) => s.setCatchGamemode);
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
 
+  const [region, setRegion] = useState<'Kanto' | 'Johto'>('Kanto');
+  const trainers = region === 'Johto' ? JOHTO_TRAINERS : KANTO_TRAINERS;
   const [name, setName] = useState('');
-  const [selected, setSelected] = useState<TrainerPreset>(TRAINERS[0]);
+  const [selected, setSelected] = useState<TrainerPreset>(KANTO_TRAINERS[0]);
 
   const handleStart = () => {
     if (!name.trim()) return;
@@ -36,10 +51,16 @@ export function TrainerSetup() {
       name: name.trim(),
       avatar: selected.sprite,
       gender: selected.id,
-      region: 'Kanto',
+      region,
     });
     setCatchGamemode('chance');
     setScreen('starter');
+  };
+
+  const handleRegionChange = (nextRegion: 'Kanto' | 'Johto') => {
+    playSfx('click', muted);
+    setRegion(nextRegion);
+    setSelected(nextRegion === 'Johto' ? JOHTO_TRAINERS[0] : KANTO_TRAINERS[0]);
   };
 
   return (
@@ -52,9 +73,27 @@ export function TrainerSetup() {
       <h2 className="screen-title">Create Your Trainer</h2>
 
       <div className="setup-form">
+        <p className="setup-form__label">Choose Region</p>
+        <div className="trainer-picker">
+          <button
+            type="button"
+            className={`trainer-card ${region === 'Kanto' ? 'trainer-card--selected' : ''}`}
+            onClick={() => handleRegionChange('Kanto')}
+          >
+            <span className="trainer-card__label">Kanto</span>
+          </button>
+          <button
+            type="button"
+            className={`trainer-card ${region === 'Johto' ? 'trainer-card--selected' : ''}`}
+            onClick={() => handleRegionChange('Johto')}
+          >
+            <span className="trainer-card__label">Johto</span>
+          </button>
+        </div>
+
         <p className="setup-form__label">Choose Your Trainer</p>
         <div className="trainer-picker">
-          {TRAINERS.map((t) => (
+          {trainers.map((t) => (
             <button
               key={t.id}
               type="button"
@@ -100,7 +139,7 @@ export function TrainerSetup() {
           maxLength={12}
         />
 
-        <p className="setup-form__region">Region: Kanto 🗾</p>
+        <p className="setup-form__region">Region: {region} 🗾</p>
 
         <button
           type="button"

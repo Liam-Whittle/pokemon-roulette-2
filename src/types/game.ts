@@ -279,6 +279,18 @@ export interface BattleSnapshot {
   xAttackPhysical?: boolean;
   xAttackSpecial?: boolean;
   log: string[];
+  phase?: 'prep' | 'choose' | 'between' | 'forcedSwap' | 'victory' | 'result';
+  battleField?: import('../data/battleField').BattleField;
+  playerVolatiles?: import('../data/battleVolatiles').BattleVolatiles;
+  enemyVolatiles?: import('../data/battleVolatiles').BattleVolatiles;
+  playerStages?: { atk: number; def: number; spa: number; spd: number; spe: number; acc: number; eva: number };
+  enemyStages?: { atk: number; def: number; spa: number; spd: number; spe: number; acc: number; eva: number };
+  transformSnapshot?: import('../data/moveEffects').TransformSnapshot | null;
+  playerPendingTurn?: { kind: 'solar-charge' | 'hyper-recharge' | 'charge'; slug: string } | null;
+  enemyPendingTurn?: { kind: 'solar-charge' | 'hyper-recharge' | 'charge'; slug: string } | null;
+  playerLastMoveSlug?: string | null;
+  enemyLastMoveSlug?: string | null;
+  message?: string;
 }
 
 export interface BattleWheelSegment {

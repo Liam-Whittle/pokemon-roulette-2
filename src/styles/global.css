@@ -2475,11 +2475,16 @@ body {
   image-rendering: pixelated;
 }
 
+.side-panel-margfix {
+  margin: 0 !important;
+}
+
 .side-panel__dex-entry .side-panel__dex-power {
   font-size: 0.72rem;
   font-weight: 700;
   color: #f97316;
   white-space: nowrap;
+  margin: 0;
 }
 
 .side-panel__dex-status {
@@ -4798,6 +4803,103 @@ body {
   right: 0.75rem;
   z-index: 3;
   opacity: 0.85;
+}
+
+.evo-picker-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 350;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1rem;
+  background: rgba(8, 10, 24, 0.72);
+  backdrop-filter: blur(4px);
+}
+
+.evo-picker {
+  width: min(420px, 94vw);
+  max-height: min(80vh, 560px);
+  overflow: auto;
+  padding: 1.25rem;
+  border-radius: 1rem;
+  background: linear-gradient(180deg, rgba(30, 27, 75, 0.98), rgba(15, 15, 35, 0.98));
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.evo-picker__title {
+  margin: 0 0 0.35rem;
+  font-size: 1.2rem;
+  color: var(--text);
+}
+
+.evo-picker__subtitle {
+  margin: 0 0 1rem;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+}
+
+.evo-picker__list {
+  list-style: none;
+  margin: 0 0 1rem;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.evo-picker__option {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  padding: 0.65rem 0.75rem;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 0.75rem;
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.15s ease, border-color 0.15s ease;
+}
+
+.evo-picker__option:hover {
+  background: rgba(255, 255, 255, 0.09);
+  border-color: rgba(167, 139, 250, 0.55);
+}
+
+.evo-picker__sprite {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
+  flex-shrink: 0;
+}
+
+.evo-picker__details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.evo-picker__name {
+  font-size: 1rem;
+}
+
+.evo-picker__method {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.evo-picker__types {
+  display: flex;
+  gap: 0.25rem;
+  flex-wrap: wrap;
+}
+
+.evo-picker__cancel {
+  width: 100%;
 }
 
 .fishing-missed__icon {

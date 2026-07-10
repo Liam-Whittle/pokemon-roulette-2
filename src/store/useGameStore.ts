@@ -12,16 +12,19 @@ import { createCaughtPokemon, createCaughtAtLevel, migrateCaughtPokemon } from '
 import { getCachedSpecies } from '../data/speciesCache';
 import { filterEncounterPoolByEvolutionLevel } from '../utils/encounterPool';
 import {
-  FOSSIL_POKEMON,
-  GEN1_CAVE,
-  GEN1_FISHING,
-  GEN1_GRASS,
-  GEN1_LEGENDARY,
   ITEMS,
   MAX_PARTY,
+  getRegionCavePool,
+  getRegionFishingPool,
+  getRegionFossilPool,
+  getRegionGrassPool,
+  getRegionGymLeaders,
+  getRegionLegendaryPool,
+  resolveBadgeImage,
   pickRandom,
   pickRandomPokemonId,
 } from '../data/pools';
+import type { RegionId } from '../data/pools';
 import type {
   ActivityResult,
   ActivityType,
@@ -290,6 +293,10 @@ function filteredPoolForBadges(pool: number[], badgeCount: number): number[] {
   return filterEncounterPoolByEvolutionLevel(pool, encounterLevelForBadges(badgeCount));
 }
 
+function getActiveRegion(state: Pick<GameState, 'trainer'>): RegionId {
+  return state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
+}
+
 function upsertBagItem(bag: BagItem[], itemId: string, quantity: number): BagItem[] {
   const itemDef = ITEMS.find((i) => i.id === itemId);
   if (!itemDef) return bag;
@@ -385,12 +392,17 @@ export const useGameStore = create<GameState>()(
           shop: 'shop',
         };
 
+        const activeRegion = getActiveRegion(get());
         const isGrass = segment.activity === 'wild' || segment.activity === 'tallgrass';
         const isLegendary = segment.activity === 'legendary';
         const encounterId = isLegendary
-          ? pickRandomPokemonId(filteredPoolForBadges(GEN1_LEGENDARY, get().badges.length))
+          ? pickRandomPokemonId(
+            filteredPoolForBadges(getRegionLegendaryPool(activeRegion), get().badges.length),
+          )
           : isGrass
-            ? pickRandomPokemonId(filteredPoolForBadges(GEN1_GRASS, get().badges.length))
+            ? pickRandomPokemonId(
+              filteredPoolForBadges(getRegionGrassPool(activeRegion), get().badges.length),
+            )
             : null;
 
         if (isGrass || isLegendary) resetEncounterSession();
@@ -406,11 +418,12 @@ export const useGameStore = create<GameState>()(
 
       startLegendaryEncounter: () => {
         resetEncounterSession();
+        const activeRegion = getActiveRegion(get());
         set({
           currentSegment: null,
           currentActivity: 'tallgrass',
           currentEncounterId: pickRandomPokemonId(
-            filteredPoolForBadges(GEN1_LEGENDARY, get().badges.length),
+            filteredPoolForBadges(getRegionLegendaryPool(activeRegion), get().badges.length),
           ),
           currentPokemon: null,
           screen: 'catch',
@@ -741,7 +754,11 @@ export const useGameStore = create<GameState>()(
         if (!member) {
           return { message: 'Pokémon not found in party.', evolution: null };
         }
-        const available = getAvailableEvolutions(member.id, member.level, get().bag);
+        const currentRegion = getActiveRegion(get());
+        const available = getAvailableEvolutions(member.id, member.level, get().bag, {
+          region: currentRegion,
+          caughtAt: member.caughtAt,
+        });
         if (available.length === 0) {
           return { message: `${member.displayName} cannot evolve yet.`, evolution: null };
         }
@@ -790,7 +807,11 @@ export const useGameStore = create<GameState>()(
       earnBadge: (badge) => {
         set((state) => {
           if (state.badges.some((b) => b.id === badge.id)) return state;
-          const badges = [...state.badges, badge];
+          const region = getActiveRegion(state);
+          const image =
+            badge.image ??
+            getRegionGymLeaders(region).find((leader) => leader.id === badge.id)?.badgeImage;
+          const badges = [...state.badges, { ...badge, image }];
           return {
             badges,
             party: syncGuestLocks(state.party, badges.length),
@@ -876,19 +897,37 @@ export const useGameStore = create<GameState>()(
       },
 
       getEncounterId: (activity) => {
+        const activeRegion = getActiveRegion(get());
         switch (activity) {
           case 'fishing':
-            return pickRandomPokemonId(filteredPoolForBadges(GEN1_FISHING, get().badges.length));
+            return pickRandomPokemonId(
+              filteredPoolForBadges(getRegionFishingPool(activeRegion), get().badges.length),
+            );
           case 'cave':
-            return pickRandomPokemonId(filteredPoolForBadges(GEN1_CAVE, get().badges.length));
-          case 'fossil':
-            return pickRandomPokemonId(filteredPoolForBadges(FOSSIL_POKEMON, get().badges.length));
+            return pickRandomPokemonId(
+              filteredPoolForBadges(getRegionCavePool(activeRegion), get().badges.length),
+            );
+          case 'fossil': {
+            const fossilPool = getRegionFossilPool(activeRegion);
+            if (fossilPool.length === 0) {
+              return pickRandomPokemonId(
+                filteredPoolForBadges(getRegionGrassPool(activeRegion), get().badges.length),
+              );
+            }
+            return pickRandomPokemonId(
+              filteredPoolForBadges(fossilPool, get().badges.length),
+            );
+          }
           case 'tallgrass':
           case 'legendary':
           case 'wild':
-            return pickRandomPokemonId(filteredPoolForBadges(GEN1_GRASS, get().badges.length));
+            return pickRandomPokemonId(
+              filteredPoolForBadges(getRegionGrassPool(activeRegion), get().badges.length),
+            );
           default:
-            return pickRandomPokemonId(filteredPoolForBadges(GEN1_GRASS, get().badges.length));
+            return pickRandomPokemonId(
+              filteredPoolForBadges(getRegionGrassPool(activeRegion), get().badges.length),
+            );
         }
       },
 
@@ -1097,6 +1136,7 @@ export const useGameStore = create<GameState>()(
     {
       name: 'pokemon-catch-quest',
       partialize: (state) => ({
+        screen: state.screen,
         trainer: state.trainer,
         party: state.party,
         pcExcluded: state.pcExcluded,
@@ -1109,6 +1149,10 @@ export const useGameStore = create<GameState>()(
         musicVolume: state.musicVolume,
         showTypeEffectiveness: state.showTypeEffectiveness,
         money: state.money,
+        currentActivity: state.currentActivity,
+        currentSegment: state.currentSegment,
+        currentEncounterId: state.currentEncounterId,
+        currentPokemon: state.currentPokemon,
         spinsCount: state.spinsCount,
         lastGymSpin: state.lastGymSpin,
         eliteCleared: state.eliteCleared,
@@ -1141,17 +1185,28 @@ export const useGameStore = create<GameState>()(
             delete dex[id].proteinUsed;
           }
         }
-        // Wipe pre-ranked Hall of Fame entries (legacy avgLevel / avgPower era).
-        state.hallOfChampions = [];
+        if (Array.isArray(state.hallOfChampions)) {
+          state.hallOfChampions = (state.hallOfChampions as ChampionRecord[]).filter(
+            (entry) => typeof entry.timeMs === 'number' && !!entry.region,
+          );
+        }
         if (typeof state.runStartedAt !== 'number') state.runStartedAt = null;
         if (typeof state.itemsUsed !== 'number') state.itemsUsed = 0;
         if (typeof state.livesUsed !== 'number') state.livesUsed = 0;
         if (typeof state.revivesUsed !== 'number') state.revivesUsed = 0;
         if (typeof state.faints !== 'number') state.faints = 0;
         if (typeof state.shiniesCaught !== 'number') state.shiniesCaught = 0;
+        if (Array.isArray(state.badges)) {
+          const trainer = state.trainer as { region?: string } | null;
+          const region = trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
+          state.badges = (state.badges as Badge[]).map((badge) => {
+            const image = resolveBadgeImage(badge, region);
+            return image ? { ...badge, image } : badge;
+          });
+        }
         return state;
       },
-      version: 9,
+      version: 11,
     },
   ),
 );

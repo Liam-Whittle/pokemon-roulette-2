@@ -32,6 +32,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "aeroblast": {
+    "slug": "aeroblast",
+    "name": "Aeroblast",
+    "type": "flying",
+    "power": 100,
+    "accuracy": 95,
+    "category": "special",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "agility": {
     "slug": "agility",
     "name": "Agility",
@@ -51,6 +62,28 @@
     "accuracy": 100,
     "category": "status",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "ancient-power": {
+    "slug": "ancient-power",
+    "name": "Ancient Power",
+    "type": "rock",
+    "power": 60,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "attract": {
+    "slug": "attract",
+    "name": "Attract",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 15,
     "statusEffect": null,
     "isToxic": false
   },
@@ -84,6 +117,39 @@
     "accuracy": 100,
     "category": "status",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "baton-pass": {
+    "slug": "baton-pass",
+    "name": "Baton Pass",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 40,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "beat-up": {
+    "slug": "beat-up",
+    "name": "Beat Up",
+    "type": "dark",
+    "power": 0,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "belly-drum": {
+    "slug": "belly-drum",
+    "name": "Belly Drum",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
     "statusEffect": null,
     "isToxic": false
   },
@@ -153,6 +219,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "bone-rush": {
+    "slug": "bone-rush",
+    "name": "Bone Rush",
+    "type": "ground",
+    "power": 25,
+    "accuracy": 90,
+    "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "bonemerang": {
     "slug": "bonemerang",
     "name": "Bonemerang",
@@ -182,6 +259,17 @@
     "power": 65,
     "accuracy": 100,
     "category": "special",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "charm": {
+    "slug": "charm",
+    "name": "Charm",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
     "pp": 20,
     "statusEffect": null,
     "isToxic": false
@@ -252,6 +340,28 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "conversion-2": {
+    "slug": "conversion-2",
+    "name": "Conversion 2",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 30,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "cotton-spore": {
+    "slug": "cotton-spore",
+    "name": "Cotton Spore",
+    "type": "grass",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 40,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "counter": {
     "slug": "counter",
     "name": "Counter",
@@ -270,6 +380,39 @@
     "power": 100,
     "accuracy": 90,
     "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "cross-chop": {
+    "slug": "cross-chop",
+    "name": "Cross Chop",
+    "type": "fighting",
+    "power": 100,
+    "accuracy": 80,
+    "category": "physical",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "crunch": {
+    "slug": "crunch",
+    "name": "Crunch",
+    "type": "dark",
+    "power": 80,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "curse": {
+    "slug": "curse",
+    "name": "Curse",
+    "type": "ghost",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
     "pp": 10,
     "statusEffect": null,
     "isToxic": false
@@ -293,6 +436,28 @@
     "accuracy": 100,
     "category": "status",
     "pp": 40,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "destiny-bond": {
+    "slug": "destiny-bond",
+    "name": "Destiny Bond",
+    "type": "ghost",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "detect": {
+    "slug": "detect",
+    "name": "Detect",
+    "type": "fighting",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
     "statusEffect": null,
     "isToxic": false
   },
@@ -373,6 +538,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "dragon-breath": {
+    "slug": "dragon-breath",
+    "name": "Dragon Breath",
+    "type": "dragon",
+    "power": 60,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 20,
+    "statusEffect": "paralysis",
+    "isToxic": false
+  },
   "dragon-rage": {
     "slug": "dragon-rage",
     "name": "Dragon Rage",
@@ -403,6 +579,17 @@
     "accuracy": 100,
     "category": "physical",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "dynamic-punch": {
+    "slug": "dynamic-punch",
+    "name": "Dynamic Punch",
+    "type": "fighting",
+    "power": 100,
+    "accuracy": 50,
+    "category": "physical",
+    "pp": 5,
     "statusEffect": null,
     "isToxic": false
   },
@@ -439,6 +626,28 @@
     "statusEffect": "burn",
     "isToxic": false
   },
+  "encore": {
+    "slug": "encore",
+    "name": "Encore",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "endure": {
+    "slug": "endure",
+    "name": "Endure",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "explosion": {
     "slug": "explosion",
     "name": "Explosion",
@@ -447,6 +656,39 @@
     "accuracy": 100,
     "category": "physical",
     "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "extreme-speed": {
+    "slug": "extreme-speed",
+    "name": "Extreme Speed",
+    "type": "normal",
+    "power": 80,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "false-swipe": {
+    "slug": "false-swipe",
+    "name": "False Swipe",
+    "type": "normal",
+    "power": 40,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 40,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "feint-attack": {
+    "slug": "feint-attack",
+    "name": "Feint Attack",
+    "type": "dark",
+    "power": 60,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 20,
     "statusEffect": null,
     "isToxic": false
   },
@@ -494,6 +736,28 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "flail": {
+    "slug": "flail",
+    "name": "Flail",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "flame-wheel": {
+    "slug": "flame-wheel",
+    "name": "Flame Wheel",
+    "type": "fire",
+    "power": 60,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 25,
+    "statusEffect": "burn",
+    "isToxic": false
+  },
   "flamethrower": {
     "slug": "flamethrower",
     "name": "Flamethrower",
@@ -538,12 +802,45 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "foresight": {
+    "slug": "foresight",
+    "name": "Foresight",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 40,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "frustration": {
+    "slug": "frustration",
+    "name": "Frustration",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "fury-attack": {
     "slug": "fury-attack",
     "name": "Fury Attack",
     "type": "normal",
     "power": 15,
     "accuracy": 85,
+    "category": "physical",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "fury-cutter": {
+    "slug": "fury-cutter",
+    "name": "Fury Cutter",
+    "type": "bug",
+    "power": 40,
+    "accuracy": 95,
     "category": "physical",
     "pp": 20,
     "statusEffect": null,
@@ -557,6 +854,28 @@
     "accuracy": 80,
     "category": "physical",
     "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "future-sight": {
+    "slug": "future-sight",
+    "name": "Future Sight",
+    "type": "psychic",
+    "power": 120,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "giga-drain": {
+    "slug": "giga-drain",
+    "name": "Giga Drain",
+    "type": "grass",
+    "power": 75,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 10,
     "statusEffect": null,
     "isToxic": false
   },
@@ -644,6 +963,28 @@
     "power": 70,
     "accuracy": 100,
     "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "heal-bell": {
+    "slug": "heal-bell",
+    "name": "Heal Bell",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "hidden-power": {
+    "slug": "hidden-power",
+    "name": "Hidden Power",
+    "type": "normal",
+    "power": 60,
+    "accuracy": 100,
+    "category": "special",
     "pp": 15,
     "statusEffect": null,
     "isToxic": false
@@ -747,6 +1088,28 @@
     "statusEffect": "freeze",
     "isToxic": false
   },
+  "icy-wind": {
+    "slug": "icy-wind",
+    "name": "Icy Wind",
+    "type": "ice",
+    "power": 55,
+    "accuracy": 95,
+    "category": "special",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "iron-tail": {
+    "slug": "iron-tail",
+    "name": "Iron Tail",
+    "type": "steel",
+    "power": 100,
+    "accuracy": 75,
+    "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "jump-kick": {
     "slug": "jump-kick",
     "name": "Jump Kick",
@@ -835,6 +1198,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "lock-on": {
+    "slug": "lock-on",
+    "name": "Lock On",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "lovely-kiss": {
     "slug": "lovely-kiss",
     "name": "Lovely Kiss",
@@ -854,6 +1228,39 @@
     "accuracy": 100,
     "category": "physical",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "mach-punch": {
+    "slug": "mach-punch",
+    "name": "Mach Punch",
+    "type": "fighting",
+    "power": 40,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 30,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "magnitude": {
+    "slug": "magnitude",
+    "name": "Magnitude",
+    "type": "ground",
+    "power": 0,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 30,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "mean-look": {
+    "slug": "mean-look",
+    "name": "Mean Look",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
     "statusEffect": null,
     "isToxic": false
   },
@@ -901,6 +1308,28 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "megahorn": {
+    "slug": "megahorn",
+    "name": "Megahorn",
+    "type": "bug",
+    "power": 120,
+    "accuracy": 85,
+    "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "metal-claw": {
+    "slug": "metal-claw",
+    "name": "Metal Claw",
+    "type": "steel",
+    "power": 50,
+    "accuracy": 95,
+    "category": "physical",
+    "pp": 35,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "metronome": {
     "slug": "metronome",
     "name": "Metronome",
@@ -909,6 +1338,17 @@
     "accuracy": 100,
     "category": "status",
     "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "milk-drink": {
+    "slug": "milk-drink",
+    "name": "Milk Drink",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
     "statusEffect": null,
     "isToxic": false
   },
@@ -923,6 +1363,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "mind-reader": {
+    "slug": "mind-reader",
+    "name": "Mind Reader",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "minimize": {
     "slug": "minimize",
     "name": "Minimize",
@@ -931,6 +1382,17 @@
     "accuracy": 100,
     "category": "status",
     "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "mirror-coat": {
+    "slug": "mirror-coat",
+    "name": "Mirror Coat",
+    "type": "psychic",
+    "power": 0,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 20,
     "statusEffect": null,
     "isToxic": false
   },
@@ -956,6 +1418,39 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "moonlight": {
+    "slug": "moonlight",
+    "name": "Moonlight",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "morning-sun": {
+    "slug": "morning-sun",
+    "name": "Morning Sun",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "mud-slap": {
+    "slug": "mud-slap",
+    "name": "Mud Slap",
+    "type": "ground",
+    "power": 20,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "night-shade": {
     "slug": "night-shade",
     "name": "Night Shade",
@@ -964,6 +1459,50 @@
     "accuracy": 100,
     "category": "special",
     "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "nightmare": {
+    "slug": "nightmare",
+    "name": "Nightmare",
+    "type": "ghost",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "octazooka": {
+    "slug": "octazooka",
+    "name": "Octazooka",
+    "type": "water",
+    "power": 65,
+    "accuracy": 85,
+    "category": "special",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "outrage": {
+    "slug": "outrage",
+    "name": "Outrage",
+    "type": "dragon",
+    "power": 120,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "pain-split": {
+    "slug": "pain-split",
+    "name": "Pain Split",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 20,
     "statusEffect": null,
     "isToxic": false
   },
@@ -986,6 +1525,17 @@
     "accuracy": 100,
     "category": "physical",
     "pp": 35,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "perish-song": {
+    "slug": "perish-song",
+    "name": "Perish Song",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1055,6 +1605,39 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "powder-snow": {
+    "slug": "powder-snow",
+    "name": "Powder Snow",
+    "type": "ice",
+    "power": 40,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 25,
+    "statusEffect": "freeze",
+    "isToxic": false
+  },
+  "present": {
+    "slug": "present",
+    "name": "Present",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 90,
+    "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "protect": {
+    "slug": "protect",
+    "name": "Protect",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "psybeam": {
     "slug": "psybeam",
     "name": "Psybeam",
@@ -1063,6 +1646,17 @@
     "accuracy": 100,
     "category": "special",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "psych-up": {
+    "slug": "psych-up",
+    "name": "Psych Up",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1088,6 +1682,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "pursuit": {
+    "slug": "pursuit",
+    "name": "Pursuit",
+    "type": "dark",
+    "power": 40,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "quick-attack": {
     "slug": "quick-attack",
     "name": "Quick Attack",
@@ -1107,6 +1712,28 @@
     "accuracy": 100,
     "category": "physical",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "rain-dance": {
+    "slug": "rain-dance",
+    "name": "Rain Dance",
+    "type": "water",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "rapid-spin": {
+    "slug": "rapid-spin",
+    "name": "Rapid Spin",
+    "type": "normal",
+    "power": 50,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 40,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1165,6 +1792,28 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "return": {
+    "slug": "return",
+    "name": "Return",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "reversal": {
+    "slug": "reversal",
+    "name": "Reversal",
+    "type": "fighting",
+    "power": 0,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "roar": {
     "slug": "roar",
     "name": "Roar",
@@ -1184,6 +1833,17 @@
     "accuracy": 90,
     "category": "physical",
     "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "rock-smash": {
+    "slug": "rock-smash",
+    "name": "Rock Smash",
+    "type": "fighting",
+    "power": 40,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 15,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1209,6 +1869,39 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "rollout": {
+    "slug": "rollout",
+    "name": "Rollout",
+    "type": "rock",
+    "power": 30,
+    "accuracy": 90,
+    "category": "physical",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "sacred-fire": {
+    "slug": "sacred-fire",
+    "name": "Sacred Fire",
+    "type": "fire",
+    "power": 100,
+    "accuracy": 95,
+    "category": "physical",
+    "pp": 5,
+    "statusEffect": "burn",
+    "isToxic": false
+  },
+  "safeguard": {
+    "slug": "safeguard",
+    "name": "Safeguard",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 25,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "sand-attack": {
     "slug": "sand-attack",
     "name": "Sand Attack",
@@ -1217,6 +1910,28 @@
     "accuracy": 100,
     "category": "status",
     "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "sandstorm": {
+    "slug": "sandstorm",
+    "name": "Sandstorm",
+    "type": "rock",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "scary-face": {
+    "slug": "scary-face",
+    "name": "Scary Face",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1264,6 +1979,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "shadow-ball": {
+    "slug": "shadow-ball",
+    "name": "Shadow Ball",
+    "type": "ghost",
+    "power": 80,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "sharpen": {
     "slug": "sharpen",
     "name": "Sharpen",
@@ -1284,6 +2010,17 @@
     "category": "status",
     "pp": 15,
     "statusEffect": "sleep",
+    "isToxic": false
+  },
+  "sketch": {
+    "slug": "sketch",
+    "name": "Sketch",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 1,
+    "statusEffect": null,
     "isToxic": false
   },
   "skull-bash": {
@@ -1341,6 +2078,17 @@
     "statusEffect": "sleep",
     "isToxic": false
   },
+  "sleep-talk": {
+    "slug": "sleep-talk",
+    "name": "Sleep Talk",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "sludge": {
     "slug": "sludge",
     "name": "Sludge",
@@ -1349,6 +2097,17 @@
     "accuracy": 100,
     "category": "special",
     "pp": 20,
+    "statusEffect": "poison",
+    "isToxic": false
+  },
+  "sludge-bomb": {
+    "slug": "sludge-bomb",
+    "name": "Sludge Bomb",
+    "type": "poison",
+    "power": 90,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 10,
     "statusEffect": "poison",
     "isToxic": false
   },
@@ -1371,6 +2130,17 @@
     "accuracy": 100,
     "category": "status",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "snore": {
+    "slug": "snore",
+    "name": "Snore",
+    "type": "normal",
+    "power": 50,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 15,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1407,6 +2177,28 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "spark": {
+    "slug": "spark",
+    "name": "Spark",
+    "type": "electric",
+    "power": 65,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 20,
+    "statusEffect": "paralysis",
+    "isToxic": false
+  },
+  "spider-web": {
+    "slug": "spider-web",
+    "name": "Spider Web",
+    "type": "bug",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "spike-cannon": {
     "slug": "spike-cannon",
     "name": "Spike Cannon",
@@ -1415,6 +2207,28 @@
     "accuracy": 100,
     "category": "physical",
     "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "spikes": {
+    "slug": "spikes",
+    "name": "Spikes",
+    "type": "ground",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "spite": {
+    "slug": "spite",
+    "name": "Spite",
+    "type": "ghost",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 10,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1438,6 +2252,17 @@
     "category": "status",
     "pp": 15,
     "statusEffect": "sleep",
+    "isToxic": false
+  },
+  "steel-wing": {
+    "slug": "steel-wing",
+    "name": "Steel Wing",
+    "type": "steel",
+    "power": 70,
+    "accuracy": 90,
+    "category": "physical",
+    "pp": 25,
+    "statusEffect": null,
     "isToxic": false
   },
   "stomp": {
@@ -1506,6 +2331,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "sunny-day": {
+    "slug": "sunny-day",
+    "name": "Sunny Day",
+    "type": "fire",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "super-fang": {
     "slug": "super-fang",
     "name": "Super Fang",
@@ -1539,6 +2375,39 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "swagger": {
+    "slug": "swagger",
+    "name": "Swagger",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 85,
+    "category": "status",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "sweet-kiss": {
+    "slug": "sweet-kiss",
+    "name": "Sweet Kiss",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 75,
+    "category": "status",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "sweet-scent": {
+    "slug": "sweet-scent",
+    "name": "Sweet Scent",
+    "type": "normal",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "swift": {
     "slug": "swift",
     "name": "Swift",
@@ -1558,6 +2427,17 @@
     "accuracy": 100,
     "category": "status",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "synthesis": {
+    "slug": "synthesis",
+    "name": "Synthesis",
+    "type": "grass",
+    "power": 0,
+    "accuracy": 100,
+    "category": "status",
+    "pp": 5,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1602,6 +2482,17 @@
     "accuracy": 100,
     "category": "status",
     "pp": 20,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "thief": {
+    "slug": "thief",
+    "name": "Thief",
+    "type": "dark",
+    "power": 60,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 25,
     "statusEffect": null,
     "isToxic": false
   },
@@ -1704,6 +2595,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "triple-kick": {
+    "slug": "triple-kick",
+    "name": "Triple Kick",
+    "type": "fighting",
+    "power": 10,
+    "accuracy": 90,
+    "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "twineedle": {
     "slug": "twineedle",
     "name": "Twineedle",
@@ -1713,6 +2615,17 @@
     "category": "physical",
     "pp": 20,
     "statusEffect": "poison",
+    "isToxic": false
+  },
+  "twister": {
+    "slug": "twister",
+    "name": "Twister",
+    "type": "dragon",
+    "power": 40,
+    "accuracy": 100,
+    "category": "special",
+    "pp": 20,
+    "statusEffect": null,
     "isToxic": false
   },
   "vice-grip": {
@@ -1737,6 +2650,17 @@
     "statusEffect": null,
     "isToxic": false
   },
+  "vital-throw": {
+    "slug": "vital-throw",
+    "name": "Vital Throw",
+    "type": "fighting",
+    "power": 70,
+    "accuracy": 100,
+    "category": "physical",
+    "pp": 10,
+    "statusEffect": null,
+    "isToxic": false
+  },
   "water-gun": {
     "slug": "water-gun",
     "name": "Water Gun",
@@ -1755,6 +2679,17 @@
     "power": 80,
     "accuracy": 100,
     "category": "physical",
+    "pp": 15,
+    "statusEffect": null,
+    "isToxic": false
+  },
+  "whirlpool": {
+    "slug": "whirlpool",
+    "name": "Whirlpool",
+    "type": "water",
+    "power": 35,
+    "accuracy": 85,
+    "category": "special",
     "pp": 15,
     "statusEffect": null,
     "isToxic": false
@@ -1801,6 +2736,17 @@
     "category": "physical",
     "pp": 20,
     "statusEffect": null,
+    "isToxic": false
+  },
+  "zap-cannon": {
+    "slug": "zap-cannon",
+    "name": "Zap Cannon",
+    "type": "electric",
+    "power": 120,
+    "accuracy": 50,
+    "category": "special",
+    "pp": 5,
+    "statusEffect": "paralysis",
     "isToxic": false
   }
 }

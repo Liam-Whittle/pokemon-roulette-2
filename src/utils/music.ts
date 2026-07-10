@@ -3,6 +3,8 @@ import { asset } from './asset';
 export type MusicTrack =
   | 'title'
   | 'main'
+  | 'kanto'
+  | 'johto'
   | 'gym'
   | 'elite4'
   | 'pokemon'
@@ -14,6 +16,8 @@ export type MusicTrack =
 const TRACKS: Record<MusicTrack, string> = {
   title: asset('sounds/title.mp3'),
   main: asset('sounds/main.mp3'),
+  kanto: asset('sounds/kanto.mp3'),
+  johto: asset('sounds/johto.mp3'),
   gym: asset('sounds/gym.mp3'),
   elite4: asset('sounds/elite4.mp3'),
   pokemon: asset('sounds/pokemon.mp3'),

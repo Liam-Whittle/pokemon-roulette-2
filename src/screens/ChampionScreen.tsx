@@ -4,6 +4,7 @@ import { useGameStore } from '../store/useGameStore';
 
 export function ChampionScreen() {
   const resetGame = useGameStore((s) => s.resetGame);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
 
   return (
     <motion.div
@@ -30,7 +31,7 @@ export function ChampionScreen() {
           animate={{ y: 0, opacity: 1 }}
           transition={{ delay: 0.4 }}
         >
-          New Champion of Kanto!!
+          New Champion of {region}!!
         </motion.h1>
 
         <motion.p
@@ -39,7 +40,9 @@ export function ChampionScreen() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.9 }}
         >
-          New regions coming soon
+          {region === 'Johto'
+            ? 'You conquered the Johto League!'
+            : 'New regions coming soon'}
         </motion.p>
 
         <motion.button

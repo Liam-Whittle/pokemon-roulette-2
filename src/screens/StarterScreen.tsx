@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
 import { Confetti } from '../components/Confetti';
 import { SpriteCard } from '../components/SpriteCard';
-import { STARTER_IDS, pickRandom } from '../data/pools';
+import { getRegionStarters, pickRandom } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { asset } from '../utils/asset';
@@ -13,10 +13,11 @@ export function StarterScreen() {
   const addStarterPokemon = useGameStore((state) => state.addStarterPokemon);
   const setScreen = useGameStore((state) => state.setScreen);
   const muted = useGameStore((state) => state.muted);
+  const region = useGameStore((state) => (state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const [starter, setStarter] = useState<PokemonData | null>(null);
   const [revealed, setRevealed] = useState(false);
 
-  const starterId = useMemo(() => pickRandom(STARTER_IDS), []);
+  const starterId = useMemo(() => pickRandom(getRegionStarters(region)), [region]);
   const isShiny = useMemo(() => Math.random() < 1 / 40, []);
 
   useEffect(() => {
@@ -38,8 +39,12 @@ export function StarterScreen() {
   return (
     <motion.div className="screen starter-screen" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
       <Confetti active={revealed} />
-      <h2 className="screen-title">A Kanto Starter Appears!</h2>
-      <p className="starter-screen__subtitle">Professor Oak hands you a random partner.</p>
+      <h2 className="screen-title">A {region} Starter Appears!</h2>
+      <p className="starter-screen__subtitle">
+        {region === 'Johto'
+          ? 'Professor Elm hands you a random partner.'
+          : 'Professor Oak hands you a random partner.'}
+      </p>
 
       {!revealed ? (
         <motion.img

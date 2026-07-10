@@ -24,11 +24,47 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "aeroblast",
+    "name": "Aeroblast",
+    "inCuratedCount": 1,
+    "category": "special",
+    "power": 100,
+    "accuracy": 95,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "agility",
     "name": "Agility",
-    "inCuratedCount": 4,
+    "inCuratedCount": 8,
     "category": "status",
     "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "amnesia",
+    "name": "Amnesia",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "ancient-power",
+    "name": "Ancient Power",
+    "inCuratedCount": 1,
+    "category": "special",
+    "power": 60,
     "accuracy": 100,
     "statusEffect": null,
     "battleStatus": "standard",
@@ -72,6 +108,18 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "baton-pass",
+    "name": "Baton Pass",
+    "inCuratedCount": 5,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "bind",
     "name": "Bind",
     "inCuratedCount": 2,
@@ -86,7 +134,7 @@
   {
     "slug": "bite",
     "name": "Bite",
-    "inCuratedCount": 18,
+    "inCuratedCount": 21,
     "category": "physical",
     "power": 60,
     "accuracy": 100,
@@ -110,7 +158,7 @@
   {
     "slug": "body-slam",
     "name": "Body Slam",
-    "inCuratedCount": 5,
+    "inCuratedCount": 10,
     "category": "physical",
     "power": 85,
     "accuracy": 100,
@@ -168,6 +216,18 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "charm",
+    "name": "Charm",
+    "inCuratedCount": 5,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "clamp",
     "name": "Clamp",
     "inCuratedCount": 2,
@@ -182,7 +242,7 @@
   {
     "slug": "comet-punch",
     "name": "Comet Punch",
-    "inCuratedCount": 2,
+    "inCuratedCount": 3,
     "category": "physical",
     "power": 18,
     "accuracy": 85,
@@ -194,7 +254,7 @@
   {
     "slug": "confuse-ray",
     "name": "Confuse Ray",
-    "inCuratedCount": 5,
+    "inCuratedCount": 15,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -228,6 +288,18 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "counter",
+    "name": "Counter",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "crabhammer",
     "name": "Crabhammer",
     "inCuratedCount": 1,
@@ -240,9 +312,33 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "crunch",
+    "name": "Crunch",
+    "inCuratedCount": 6,
+    "category": "physical",
+    "power": 80,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
+    "slug": "curse",
+    "name": "Curse",
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "defense-curl",
     "name": "Defense Curl",
-    "inCuratedCount": 2,
+    "inCuratedCount": 6,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -254,7 +350,7 @@
   {
     "slug": "dig",
     "name": "Dig",
-    "inCuratedCount": 2,
+    "inCuratedCount": 7,
     "category": "physical",
     "power": 80,
     "accuracy": 100,
@@ -312,6 +408,30 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "double-team",
+    "name": "Double Team",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "dragon-breath",
+    "name": "Dragon Breath",
+    "inCuratedCount": 1,
+    "category": "special",
+    "power": 60,
+    "accuracy": 100,
+    "statusEffect": "paralysis",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "dragon-rage",
     "name": "Dragon Rage",
     "inCuratedCount": 2,
@@ -326,7 +446,7 @@
   {
     "slug": "drill-peck",
     "name": "Drill Peck",
-    "inCuratedCount": 5,
+    "inCuratedCount": 7,
     "category": "physical",
     "power": 80,
     "accuracy": 100,
@@ -337,20 +457,20 @@
   },
   {
     "slug": "dynamic-punch",
-    "name": "dynamic-punch",
-    "inCuratedCount": 1,
-    "category": "missing",
-    "power": null,
-    "accuracy": null,
+    "name": "Dynamic Punch",
+    "inCuratedCount": 3,
+    "category": "physical",
+    "power": 100,
+    "accuracy": 50,
     "statusEffect": null,
-    "battleStatus": "missing-cache",
+    "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
     "slug": "earthquake",
     "name": "Earthquake",
-    "inCuratedCount": 11,
+    "inCuratedCount": 35,
     "category": "physical",
     "power": 100,
     "accuracy": 100,
@@ -372,9 +492,21 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "encore",
+    "name": "Encore",
+    "inCuratedCount": 6,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "explosion",
     "name": "Explosion",
-    "inCuratedCount": 2,
+    "inCuratedCount": 6,
     "category": "physical",
     "power": 250,
     "accuracy": 100,
@@ -385,20 +517,44 @@
   },
   {
     "slug": "extreme-speed",
-    "name": "extreme-speed",
+    "name": "Extreme Speed",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 80,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "faint-attack",
+    "name": "faint-attack",
     "inCuratedCount": 1,
     "category": "missing",
     "power": null,
     "accuracy": null,
     "statusEffect": null,
     "battleStatus": "missing-cache",
-    "descriptionStatus": "accurate",
-    "gen1EffectSummary": "curated in moveDescriptions.ts"
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
+    "slug": "fire-blast",
+    "name": "Fire Blast",
+    "inCuratedCount": 2,
+    "category": "special",
+    "power": 110,
+    "accuracy": 85,
+    "statusEffect": "burn",
+    "battleStatus": "standard",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
   },
   {
     "slug": "fire-punch",
     "name": "Fire Punch",
-    "inCuratedCount": 2,
+    "inCuratedCount": 5,
     "category": "physical",
     "power": 75,
     "accuracy": 100,
@@ -422,7 +578,7 @@
   {
     "slug": "flamethrower",
     "name": "Flamethrower",
-    "inCuratedCount": 10,
+    "inCuratedCount": 19,
     "category": "special",
     "power": 90,
     "accuracy": 100,
@@ -446,7 +602,7 @@
   {
     "slug": "fly",
     "name": "Fly",
-    "inCuratedCount": 3,
+    "inCuratedCount": 7,
     "category": "physical",
     "power": 90,
     "accuracy": 95,
@@ -480,9 +636,21 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "giga-drain",
+    "name": "Giga Drain",
+    "inCuratedCount": 7,
+    "category": "special",
+    "power": 75,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "glare",
     "name": "Glare",
-    "inCuratedCount": 2,
+    "inCuratedCount": 3,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -554,7 +722,7 @@
   {
     "slug": "headbutt",
     "name": "Headbutt",
-    "inCuratedCount": 5,
+    "inCuratedCount": 7,
     "category": "physical",
     "power": 70,
     "accuracy": 100,
@@ -562,6 +730,66 @@
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "heal-bell",
+    "name": "Heal Bell",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "hi-jump-kick",
+    "name": "hi-jump-kick",
+    "inCuratedCount": 1,
+    "category": "missing",
+    "power": null,
+    "accuracy": null,
+    "statusEffect": null,
+    "battleStatus": "missing-cache",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
+    "slug": "hidden-power",
+    "name": "Hidden Power",
+    "inCuratedCount": 4,
+    "category": "special",
+    "power": 60,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "hidden-power-bug",
+    "name": "hidden-power-bug",
+    "inCuratedCount": 2,
+    "category": "missing",
+    "power": null,
+    "accuracy": null,
+    "statusEffect": null,
+    "battleStatus": "missing-cache",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
+    "slug": "hidden-power-ice",
+    "name": "hidden-power-ice",
+    "inCuratedCount": 1,
+    "category": "missing",
+    "power": null,
+    "accuracy": null,
+    "statusEffect": null,
+    "battleStatus": "missing-cache",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
   },
   {
     "slug": "high-jump-kick",
@@ -626,7 +854,7 @@
   {
     "slug": "hypnosis",
     "name": "Hypnosis",
-    "inCuratedCount": 10,
+    "inCuratedCount": 15,
     "category": "status",
     "power": 0,
     "accuracy": 60,
@@ -638,7 +866,7 @@
   {
     "slug": "ice-beam",
     "name": "Ice Beam",
-    "inCuratedCount": 4,
+    "inCuratedCount": 17,
     "category": "special",
     "power": 90,
     "accuracy": 100,
@@ -650,11 +878,35 @@
   {
     "slug": "ice-punch",
     "name": "Ice Punch",
-    "inCuratedCount": 2,
+    "inCuratedCount": 9,
     "category": "physical",
     "power": 75,
     "accuracy": 100,
     "statusEffect": "freeze",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "icy-wind",
+    "name": "Icy Wind",
+    "inCuratedCount": 2,
+    "category": "special",
+    "power": 55,
+    "accuracy": 95,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "iron-tail",
+    "name": "Iron Tail",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 100,
+    "accuracy": 75,
+    "statusEffect": null,
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
@@ -698,7 +950,7 @@
   {
     "slug": "leech-seed",
     "name": "Leech Seed",
-    "inCuratedCount": 1,
+    "inCuratedCount": 6,
     "category": "status",
     "power": 0,
     "accuracy": 90,
@@ -734,7 +986,7 @@
   {
     "slug": "light-screen",
     "name": "Light Screen",
-    "inCuratedCount": 1,
+    "inCuratedCount": 9,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -746,7 +998,7 @@
   {
     "slug": "lovely-kiss",
     "name": "Lovely Kiss",
-    "inCuratedCount": 1,
+    "inCuratedCount": 2,
     "category": "status",
     "power": 0,
     "accuracy": 75,
@@ -768,6 +1020,30 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "mach-punch",
+    "name": "Mach Punch",
+    "inCuratedCount": 2,
+    "category": "physical",
+    "power": 40,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "mean-look",
+    "name": "Mean Look",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "meditate",
     "name": "Meditate",
     "inCuratedCount": 1,
@@ -778,6 +1054,18 @@
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "mega-drain",
+    "name": "Mega Drain",
+    "inCuratedCount": 3,
+    "category": "special",
+    "power": 40,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
   },
   {
     "slug": "mega-punch",
@@ -792,14 +1080,62 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "megahorn",
+    "name": "Megahorn",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 120,
+    "accuracy": 85,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "metal-claw",
+    "name": "Metal Claw",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 50,
+    "accuracy": 95,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "metronome",
     "name": "Metronome",
-    "inCuratedCount": 3,
+    "inCuratedCount": 4,
     "category": "status",
     "power": 0,
     "accuracy": 100,
     "statusEffect": null,
     "battleStatus": "implemented",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "milk-drink",
+    "name": "Milk Drink",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "mind-reader",
+    "name": "Mind Reader",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
@@ -816,12 +1152,60 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
-    "slug": "night-shade",
-    "name": "Night Shade",
-    "inCuratedCount": 2,
+    "slug": "mirror-coat",
+    "name": "Mirror Coat",
+    "inCuratedCount": 3,
     "category": "special",
     "power": 0,
     "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "moonlight",
+    "name": "Moonlight",
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "morning-sun",
+    "name": "Morning Sun",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "night-shade",
+    "name": "Night Shade",
+    "inCuratedCount": 7,
+    "category": "special",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "octazooka",
+    "name": "Octazooka",
+    "inCuratedCount": 2,
+    "category": "special",
+    "power": 65,
+    "accuracy": 85,
     "statusEffect": null,
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
@@ -912,9 +1296,21 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "present",
+    "name": "Present",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 0,
+    "accuracy": 90,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "psybeam",
     "name": "Psybeam",
-    "inCuratedCount": 5,
+    "inCuratedCount": 7,
     "category": "special",
     "power": 65,
     "accuracy": 100,
@@ -926,7 +1322,7 @@
   {
     "slug": "psychic",
     "name": "Psychic",
-    "inCuratedCount": 10,
+    "inCuratedCount": 18,
     "category": "special",
     "power": 90,
     "accuracy": 100,
@@ -938,7 +1334,7 @@
   {
     "slug": "quick-attack",
     "name": "Quick Attack",
-    "inCuratedCount": 15,
+    "inCuratedCount": 18,
     "category": "physical",
     "power": 40,
     "accuracy": 100,
@@ -948,9 +1344,21 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "rapid-spin",
+    "name": "Rapid Spin",
+    "inCuratedCount": 5,
+    "category": "physical",
+    "power": 50,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "razor-leaf",
     "name": "Razor Leaf",
-    "inCuratedCount": 5,
+    "inCuratedCount": 9,
     "category": "physical",
     "power": 55,
     "accuracy": 95,
@@ -962,7 +1370,7 @@
   {
     "slug": "recover",
     "name": "Recover",
-    "inCuratedCount": 3,
+    "inCuratedCount": 10,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -974,7 +1382,7 @@
   {
     "slug": "reflect",
     "name": "Reflect",
-    "inCuratedCount": 1,
+    "inCuratedCount": 11,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -986,8 +1394,32 @@
   {
     "slug": "rest",
     "name": "Rest",
-    "inCuratedCount": 3,
+    "inCuratedCount": 16,
     "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "return",
+    "name": "Return",
+    "inCuratedCount": 20,
+    "category": "physical",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "reversal",
+    "name": "Reversal",
+    "inCuratedCount": 1,
+    "category": "physical",
     "power": 0,
     "accuracy": 100,
     "statusEffect": null,
@@ -1008,12 +1440,60 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "rock-slide",
+    "name": "Rock Slide",
+    "inCuratedCount": 11,
+    "category": "physical",
+    "power": 75,
+    "accuracy": 90,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
     "slug": "rock-throw",
     "name": "Rock Throw",
     "inCuratedCount": 4,
     "category": "physical",
     "power": 50,
     "accuracy": 90,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "rollout",
+    "name": "Rollout",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 30,
+    "accuracy": 90,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "sacred-fire",
+    "name": "Sacred Fire",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 100,
+    "accuracy": 95,
+    "statusEffect": "burn",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "safeguard",
+    "name": "Safeguard",
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
     "statusEffect": null,
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
@@ -1046,7 +1526,7 @@
   {
     "slug": "screech",
     "name": "Screech",
-    "inCuratedCount": 1,
+    "inCuratedCount": 4,
     "category": "status",
     "power": 0,
     "accuracy": 85,
@@ -1080,14 +1560,26 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
-    "slug": "shadow-ball",
-    "name": "shadow-ball",
+    "slug": "selfdestruct",
+    "name": "selfdestruct",
     "inCuratedCount": 1,
     "category": "missing",
     "power": null,
     "accuracy": null,
     "statusEffect": null,
     "battleStatus": "missing-cache",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
+    "slug": "shadow-ball",
+    "name": "Shadow Ball",
+    "inCuratedCount": 8,
+    "category": "special",
+    "power": 80,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
@@ -1106,7 +1598,7 @@
   {
     "slug": "sing",
     "name": "Sing",
-    "inCuratedCount": 6,
+    "inCuratedCount": 8,
     "category": "status",
     "power": 0,
     "accuracy": 55,
@@ -1154,7 +1646,7 @@
   {
     "slug": "slash",
     "name": "Slash",
-    "inCuratedCount": 12,
+    "inCuratedCount": 14,
     "category": "physical",
     "power": 70,
     "accuracy": 100,
@@ -1166,11 +1658,23 @@
   {
     "slug": "sleep-powder",
     "name": "Sleep Powder",
-    "inCuratedCount": 12,
+    "inCuratedCount": 16,
     "category": "status",
     "power": 0,
     "accuracy": 75,
     "statusEffect": "sleep",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "sleep-talk",
+    "name": "Sleep Talk",
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
@@ -1181,6 +1685,18 @@
     "inCuratedCount": 5,
     "category": "special",
     "power": 65,
+    "accuracy": 100,
+    "statusEffect": "poison",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "sludge-bomb",
+    "name": "Sludge Bomb",
+    "inCuratedCount": 4,
+    "category": "special",
+    "power": 90,
     "accuracy": 100,
     "statusEffect": "poison",
     "battleStatus": "standard",
@@ -1202,7 +1718,7 @@
   {
     "slug": "smokescreen",
     "name": "Smokescreen",
-    "inCuratedCount": 2,
+    "inCuratedCount": 3,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -1224,9 +1740,21 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "softboiled",
+    "name": "softboiled",
+    "inCuratedCount": 1,
+    "category": "missing",
+    "power": null,
+    "accuracy": null,
+    "statusEffect": null,
+    "battleStatus": "missing-cache",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
     "slug": "solar-beam",
     "name": "Solar Beam",
-    "inCuratedCount": 5,
+    "inCuratedCount": 9,
     "category": "special",
     "power": 120,
     "accuracy": 100,
@@ -1248,6 +1776,30 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "spider-web",
+    "name": "Spider Web",
+    "inCuratedCount": 1,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "spikes",
+    "name": "Spikes",
+    "inCuratedCount": 4,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "splash",
     "name": "Splash",
     "inCuratedCount": 1,
@@ -1262,11 +1814,23 @@
   {
     "slug": "spore",
     "name": "Spore",
-    "inCuratedCount": 2,
+    "inCuratedCount": 3,
     "category": "status",
     "power": 0,
     "accuracy": 100,
     "statusEffect": "sleep",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "steel-wing",
+    "name": "Steel Wing",
+    "inCuratedCount": 2,
+    "category": "physical",
+    "power": 70,
+    "accuracy": 90,
+    "statusEffect": null,
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
@@ -1296,6 +1860,18 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "strength",
+    "name": "Strength",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 80,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "string-shot",
     "name": "String Shot",
     "inCuratedCount": 3,
@@ -1310,7 +1886,7 @@
   {
     "slug": "stun-spore",
     "name": "Stun Spore",
-    "inCuratedCount": 3,
+    "inCuratedCount": 7,
     "category": "status",
     "power": 0,
     "accuracy": 75,
@@ -1326,6 +1902,18 @@
     "category": "physical",
     "power": 80,
     "accuracy": 80,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "sunny-day",
+    "name": "Sunny Day",
+    "inCuratedCount": 7,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
     "statusEffect": null,
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
@@ -1356,21 +1944,45 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "surf",
+    "name": "Surf",
+    "inCuratedCount": 19,
+    "category": "special",
+    "power": 90,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
+  },
+  {
     "slug": "swagger",
-    "name": "swagger",
+    "name": "Swagger",
     "inCuratedCount": 2,
-    "category": "missing",
-    "power": null,
-    "accuracy": null,
+    "category": "status",
+    "power": 0,
+    "accuracy": 85,
     "statusEffect": null,
     "battleStatus": "implemented",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "sweet-kiss",
+    "name": "Sweet Kiss",
+    "inCuratedCount": 3,
+    "category": "status",
+    "power": 0,
+    "accuracy": 75,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "swift",
     "name": "Swift",
-    "inCuratedCount": 3,
+    "inCuratedCount": 5,
     "category": "special",
     "power": 60,
     "accuracy": 100,
@@ -1382,7 +1994,19 @@
   {
     "slug": "swords-dance",
     "name": "Swords Dance",
-    "inCuratedCount": 1,
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "synthesis",
+    "name": "Synthesis",
+    "inCuratedCount": 4,
     "category": "status",
     "power": 0,
     "accuracy": 100,
@@ -1442,7 +2066,7 @@
   {
     "slug": "thunder",
     "name": "Thunder",
-    "inCuratedCount": 1,
+    "inCuratedCount": 3,
     "category": "special",
     "power": 110,
     "accuracy": 70,
@@ -1454,7 +2078,7 @@
   {
     "slug": "thunder-punch",
     "name": "Thunder Punch",
-    "inCuratedCount": 1,
+    "inCuratedCount": 4,
     "category": "physical",
     "power": 75,
     "accuracy": 100,
@@ -1478,7 +2102,7 @@
   {
     "slug": "thunder-wave",
     "name": "Thunder Wave",
-    "inCuratedCount": 9,
+    "inCuratedCount": 18,
     "category": "status",
     "power": 0,
     "accuracy": 90,
@@ -1490,7 +2114,7 @@
   {
     "slug": "thunderbolt",
     "name": "Thunderbolt",
-    "inCuratedCount": 6,
+    "inCuratedCount": 16,
     "category": "special",
     "power": 90,
     "accuracy": 100,
@@ -1498,6 +2122,18 @@
     "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "toxic",
+    "name": "Toxic",
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 90,
+    "statusEffect": "poison",
+    "battleStatus": "standard",
+    "descriptionStatus": "generic",
+    "gen1EffectSummary": "needs description"
   },
   {
     "slug": "transform",
@@ -1524,14 +2160,26 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
-    "slug": "twineedle",
-    "name": "twineedle",
+    "slug": "triple-kick",
+    "name": "Triple Kick",
     "inCuratedCount": 1,
-    "category": "missing",
-    "power": null,
-    "accuracy": null,
+    "category": "physical",
+    "power": 10,
+    "accuracy": 90,
     "statusEffect": null,
-    "battleStatus": "missing-cache",
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
+    "slug": "twineedle",
+    "name": "Twineedle",
+    "inCuratedCount": 1,
+    "category": "physical",
+    "power": 25,
+    "accuracy": 100,
+    "statusEffect": "poison",
+    "battleStatus": "standard",
     "descriptionStatus": "accurate",
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
@@ -1584,9 +2232,21 @@
     "gen1EffectSummary": "curated in moveDescriptions.ts"
   },
   {
+    "slug": "whirlwind",
+    "name": "Whirlwind",
+    "inCuratedCount": 2,
+    "category": "status",
+    "power": 0,
+    "accuracy": 100,
+    "statusEffect": null,
+    "battleStatus": "standard",
+    "descriptionStatus": "accurate",
+    "gen1EffectSummary": "curated in moveDescriptions.ts"
+  },
+  {
     "slug": "wing-attack",
     "name": "Wing Attack",
-    "inCuratedCount": 6,
+    "inCuratedCount": 9,
     "category": "physical",
     "power": 60,
     "accuracy": 100,
@@ -1610,7 +2270,7 @@
   {
     "slug": "wrap",
     "name": "Wrap",
-    "inCuratedCount": 7,
+    "inCuratedCount": 8,
     "category": "physical",
     "power": 15,
     "accuracy": 90,

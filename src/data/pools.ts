@@ -71,6 +71,14 @@ export const PATHWAY_SEGMENTS: Record<'catch' | 'items' | 'mystery', WheelSegmen
   mystery: PATH_MYSTERY_SEGMENTS,
 };
 
+/** Catch-path wheel segments; Johto has no fossil revival activity. */
+export function getRegionCatchSegments(region: RegionId): WheelSegment[] {
+  if (region === 'Johto') {
+    return PATH_CATCH_SEGMENTS.filter((segment) => segment.activity !== 'fossil');
+  }
+  return PATH_CATCH_SEGMENTS;
+}
+
 /** Team Rocket encounter Pokémon pool (Ekans through Machop). */
 export const TEAM_ROCKET_POOL = [23, 24, 41, 42, 109, 110, 19, 20, 96, 97, 66];
 
@@ -118,6 +126,10 @@ export const ITEMS = [
   { id: 'thunderstone', name: 'Thunder Stone', icon: '⚡' },
   { id: 'leafstone', name: 'Leaf Stone', icon: '🍃' },
   { id: 'moonstone', name: 'Moon Stone', icon: '🌙' },
+  { id: 'kingsrock', name: "King's Rock", icon: '👑' },
+  { id: 'metalcoat', name: 'Metal Coat', icon: '⚙️' },
+  { id: 'dragonscale', name: 'Dragon Scale', icon: '🐉' },
+  { id: 'sunstone', name: 'Sun Stone', icon: '☀️' },
   { id: 'tradestone', name: 'Trade Stone', icon: '🔁' },
 ];
 
@@ -127,6 +139,10 @@ export const STONE_ITEM_IDS = [
   'thunderstone',
   'leafstone',
   'moonstone',
+  'kingsrock',
+  'metalcoat',
+  'dragonscale',
+  'sunstone',
   'tradestone',
 ] as const;
 export type StoneItemId = (typeof STONE_ITEM_IDS)[number];
@@ -162,6 +178,10 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   thunderstone: 'Use on compatible Pokémon from your Party to trigger Thunder Stone evolution.',
   leafstone: 'Use on compatible Pokémon from your Party to trigger Leaf Stone evolution.',
   moonstone: 'Use on compatible Pokémon from your Party to trigger Moon Stone evolution.',
+  kingsrock: "Use on Poliwhirl or Slowpoke in Johto to trigger King's Rock evolution.",
+  metalcoat: 'Use on Onix or Scyther in Johto to trigger Metal Coat evolution.',
+  dragonscale: 'Use on Seadra in Johto to trigger Dragon Scale evolution.',
+  sunstone: 'Use on Gloom or Sunkern in Johto to trigger Sun Stone evolution.',
   tradestone: 'Use on trade-evolution Pokémon from your Party to evolve without trading.',
 };
 
@@ -235,8 +255,8 @@ export function pickWeightedItemId(entries: WeightedLootEntry[]): string {
   return entries[entries.length - 1].id;
 }
 
-export function pickFindItemId(): string {
-  if (Math.random() < 0.05) return pickRandom(STONE_ITEM_IDS);
+export function pickFindItemId(region: RegionId = 'Kanto'): string {
+  if (Math.random() < 0.05) return pickRandom(getStoneItemIdsForRegion(region));
   if (Math.random() < 0.15) return 'fullheal';
   if (Math.random() < 0.15) return 'maxelixer';
   if (Math.random() < 0.12) return 'healpowder';
@@ -286,6 +306,10 @@ export const GEN1_WILD: number[] = GEN1_GRASS;
  * Game Boy ("legacy") cries; later regions can switch to 'latest'.
  */
 export const REGION_CRY_STYLE: 'legacy' | 'latest' = 'legacy';
+
+export function getCryStyleForRegion(region: RegionId): 'legacy' | 'latest' {
+  return region === 'Johto' ? 'latest' : 'legacy';
+}
 
 export const GYM_LEADERS: GymLeader[] = [
   {
@@ -466,6 +490,223 @@ export const ELITE_FOUR: GymLeader[] = [
   },
 ];
 
+export type RegionId = 'Kanto' | 'Johto';
+
+export const JOHTO_STARTER_IDS = [152, 155, 158] as const;
+export const JOHTO_LEGENDARY: number[] = [243, 244, 245, 249, 250, 251];
+
+const JOHTO_GEN1_EVOLUTION_BASES = [
+  25, 26, 35, 36, 39, 40, 133, 61, 79, 95, 123, 117, 44, 41, 42, 125, 124, 126,
+];
+
+export const JOHTO_FISHING: number[] = [
+  60, 61, 79, 90, 116, 117, 120, 129, 130,
+  170, 171, 183, 184, 186, 194, 195, 211, 222, 223, 224, 226, 230,
+];
+
+export const JOHTO_CAVE: number[] = [
+  41, 42, 74, 75, 95, 167, 168, 185, 194, 195, 198, 200, 207, 208, 213, 214, 215, 220, 221,
+  246, 247,
+];
+
+const JOHTO_EXCLUSIVE_POOL = new Set([
+  ...JOHTO_FISHING,
+  ...JOHTO_CAVE,
+  ...JOHTO_LEGENDARY,
+]);
+
+export const JOHTO_GRASS: number[] = [
+  ...Array.from({ length: 100 }, (_, i) => i + 152),
+  ...JOHTO_GEN1_EVOLUTION_BASES,
+].filter((id, idx, arr) => arr.indexOf(id) === idx && !JOHTO_EXCLUSIVE_POOL.has(id));
+
+export const JOHTO_FOSSIL: number[] = [];
+
+export const JOHTO_TEAM_ROCKET_POOL = [
+  ...TEAM_ROCKET_POOL,
+  228, 229, 198,
+];
+
+export const JOHTO_GYM_LEADERS: GymLeader[] = [
+  {
+    id: 'falkner',
+    name: 'Falkner',
+    type: 'flying',
+    badgeName: 'Zephyr Badge',
+    sprite: localTrainerSprite('falkner.png'),
+    badgeImage: localBadge(9),
+    pokemon: [
+      { id: 16, name: 'pidgey', level: 8 },
+      { id: 17, name: 'pidgeotto', level: 9 },
+    ],
+  },
+  {
+    id: 'bugsy',
+    name: 'Bugsy',
+    type: 'bug',
+    badgeName: 'Hive Badge',
+    sprite: localTrainerSprite('bugsy.png'),
+    badgeImage: localBadge(10),
+    pokemon: [
+      { id: 11, name: 'metapod', level: 14 },
+      { id: 14, name: 'kakuna', level: 14 },
+      { id: 123, name: 'scyther', level: 16 },
+    ],
+  },
+  {
+    id: 'whitney',
+    name: 'Whitney',
+    type: 'normal',
+    badgeName: 'Plain Badge',
+    sprite: localTrainerSprite('whitney.png'),
+    badgeImage: localBadge(11),
+    pokemon: [
+      { id: 35, name: 'clefairy', level: 18 },
+      { id: 241, name: 'miltank', level: 20 },
+    ],
+  },
+  {
+    id: 'morty',
+    name: 'Morty',
+    type: 'ghost',
+    badgeName: 'Fog Badge',
+    sprite: localTrainerSprite('morty.png'),
+    badgeImage: localBadge(12),
+    pokemon: [
+      { id: 92, name: 'gastly', level: 21 },
+      { id: 93, name: 'haunter', level: 21 },
+      { id: 93, name: 'haunter', level: 23 },
+      { id: 94, name: 'gengar', level: 25 },
+    ],
+  },
+  {
+    id: 'chuck',
+    name: 'Chuck',
+    type: 'fighting',
+    badgeName: 'Storm Badge',
+    sprite: localTrainerSprite('chuck.png'),
+    badgeImage: localBadge(13),
+    pokemon: [
+      { id: 95, name: 'onix', level: 27 },
+      { id: 62, name: 'poliwrath', level: 30 },
+    ],
+  },
+  {
+    id: 'jasmine',
+    name: 'Jasmine',
+    type: 'steel',
+    badgeName: 'Mineral Badge',
+    sprite: localTrainerSprite('jasmine.png'),
+    badgeImage: localBadge(14),
+    pokemon: [
+      { id: 81, name: 'magnemite', level: 30 },
+      { id: 81, name: 'magnemite', level: 30 },
+      { id: 208, name: 'steelix', level: 35 },
+    ],
+  },
+  {
+    id: 'pryce',
+    name: 'Pryce',
+    type: 'ice',
+    badgeName: 'Glacier Badge',
+    sprite: localTrainerSprite('pryce.png'),
+    badgeImage: localBadge(15),
+    pokemon: [
+      { id: 87, name: 'dewgong', level: 30 },
+      { id: 91, name: 'cloyster', level: 32 },
+      { id: 221, name: 'piloswine', level: 34 },
+    ],
+  },
+  {
+    id: 'clair',
+    name: 'Clair',
+    type: 'dragon',
+    badgeName: 'Rising Badge',
+    sprite: localTrainerSprite('clair.png'),
+    badgeImage: localBadge(16),
+    pokemon: [
+      { id: 148, name: 'dragonair', level: 37 },
+      { id: 148, name: 'dragonair', level: 37 },
+      { id: 142, name: 'aerodactyl', level: 37 },
+      { id: 230, name: 'kingdra', level: 40 },
+    ],
+  },
+];
+
+export const JOHTO_ELITE_FOUR: GymLeader[] = [
+  {
+    id: 'will',
+    name: 'Will',
+    type: 'psychic',
+    badgeName: 'Elite Four: Will',
+    sprite: localTrainerSprite('will.png'),
+    pokemon: [
+      { id: 178, name: 'xatu', level: 40 },
+      { id: 124, name: 'jynx', level: 41 },
+      { id: 80, name: 'slowbro', level: 41 },
+      { id: 178, name: 'xatu', level: 42 },
+      { id: 199, name: 'slowking', level: 42 },
+    ],
+  },
+  {
+    id: 'koga-johto',
+    name: 'Koga',
+    type: 'poison',
+    badgeName: 'Elite Four: Koga',
+    sprite: localTrainerSprite('koga.png'),
+    pokemon: [
+      { id: 169, name: 'crobat', level: 42 },
+      { id: 89, name: 'muk', level: 42 },
+      { id: 110, name: 'weezing', level: 43 },
+      { id: 110, name: 'weezing', level: 43 },
+      { id: 169, name: 'crobat', level: 44 },
+    ],
+  },
+  {
+    id: 'bruno-johto',
+    name: 'Bruno',
+    type: 'fighting',
+    badgeName: 'Elite Four: Bruno',
+    sprite: localTrainerSprite('bruno.png'),
+    pokemon: [
+      { id: 95, name: 'onix', level: 42 },
+      { id: 107, name: 'hitmonchan', level: 42 },
+      { id: 106, name: 'hitmonlee', level: 42 },
+      { id: 95, name: 'onix', level: 43 },
+      { id: 68, name: 'machamp', level: 46 },
+    ],
+  },
+  {
+    id: 'karen',
+    name: 'Karen',
+    type: 'dark',
+    badgeName: 'Elite Four: Karen',
+    sprite: localTrainerSprite('karen.png'),
+    pokemon: [
+      { id: 197, name: 'umbreon', level: 42 },
+      { id: 169, name: 'crobat', level: 42 },
+      { id: 229, name: 'houndoom', level: 47 },
+      { id: 198, name: 'murkrow', level: 44 },
+      { id: 94, name: 'gengar', level: 45 },
+    ],
+  },
+  {
+    id: 'champion-lance-johto',
+    name: 'Champion Lance',
+    type: 'dragon',
+    badgeName: 'Champion',
+    sprite: localTrainerSprite('lance.png'),
+    pokemon: [
+      { id: 130, name: 'gyarados', level: 44 },
+      { id: 149, name: 'dragonite', level: 47 },
+      { id: 149, name: 'dragonite', level: 47 },
+      { id: 142, name: 'aerodactyl', level: 46 },
+      { id: 149, name: 'dragonite', level: 50 },
+      { id: 245, name: 'suicune', level: 50 },
+    ],
+  },
+];
+
 export const TOTAL_GYMS = GYM_LEADERS.length;
 
 /** Hub spins required between each Gym battle. */
@@ -484,4 +725,65 @@ export function pickRandom<T>(arr: readonly T[]): T {
 
 export function pickRandomPokemonId(pool: number[]): number {
   return pickRandom(pool);
+}
+
+export function getRegionStarters(region: RegionId): number[] {
+  return region === 'Johto' ? [...JOHTO_STARTER_IDS] : [...STARTER_IDS];
+}
+
+export function getRegionFishingPool(region: RegionId): number[] {
+  return region === 'Johto' ? JOHTO_FISHING : GEN1_FISHING;
+}
+
+export function getRegionCavePool(region: RegionId): number[] {
+  return region === 'Johto' ? JOHTO_CAVE : GEN1_CAVE;
+}
+
+export function getRegionFossilPool(region: RegionId): number[] {
+  return region === 'Johto' ? JOHTO_FOSSIL : FOSSIL_POKEMON;
+}
+
+export function getRegionGrassPool(region: RegionId): number[] {
+  return region === 'Johto' ? JOHTO_GRASS : GEN1_GRASS;
+}
+
+export function getRegionLegendaryPool(region: RegionId): number[] {
+  return region === 'Johto' ? JOHTO_LEGENDARY : GEN1_LEGENDARY;
+}
+
+export function getRegionRocketPool(region: RegionId): number[] {
+  return region === 'Johto' ? JOHTO_TEAM_ROCKET_POOL : TEAM_ROCKET_POOL;
+}
+
+export function getStoneItemIdsForRegion(region: RegionId): StoneItemId[] {
+  if (region === 'Johto') return [...STONE_ITEM_IDS];
+  return [
+    'firestone',
+    'waterstone',
+    'thunderstone',
+    'leafstone',
+    'moonstone',
+    'tradestone',
+  ];
+}
+
+export function getRegionGymLeaders(region: RegionId): GymLeader[] {
+  return region === 'Johto' ? JOHTO_GYM_LEADERS : GYM_LEADERS;
+}
+
+export function getRegionEliteFour(region: RegionId): GymLeader[] {
+  return region === 'Johto' ? JOHTO_ELITE_FOUR : ELITE_FOUR;
+}
+
+export function getRegionTotalGyms(region: RegionId): number {
+  return getRegionGymLeaders(region).length;
+}
+
+/** Resolve a badge sprite from persisted data or the region gym roster. */
+export function resolveBadgeImage(
+  badge: { id: string; image?: string },
+  region: RegionId,
+): string | undefined {
+  if (badge.image) return badge.image;
+  return getRegionGymLeaders(region).find((leader) => leader.id === badge.id)?.badgeImage;
 }

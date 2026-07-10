@@ -1,6 +1,7 @@
 import speciesJson from './cache/species-gen1.json';
 import movesJson from './cache/moves.json';
 import type { BaseStats, MoveCategory, StatusAilment, StoredMove } from '../types/game';
+import { applyGen2MoveType } from './gen2MoveTypes';
 
 export interface CachedSpecies {
   id: number;
@@ -55,7 +56,7 @@ export function cachedMoveToStored(slug: string): StoredMove | null {
   return {
     slug: m.slug,
     name: m.name,
-    type: m.type,
+    type: applyGen2MoveType(m.slug, m.type),
     power: m.power,
     accuracy: m.accuracy,
     category: m.category,

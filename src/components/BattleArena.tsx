@@ -8,27 +8,42 @@ import {
   moveKey,
   rollHit,
 } from '../data/moves';
-import { calculateMoveDamage } from '../data/battleArenaEffects';
+import { calculateMoveDamage, resolveDamageHits } from '../data/battleArenaEffects';
 import {
   applyVolatilesPatch,
+  counterReleaseDamage,
   effectiveAccuracy,
-  getMultiHitCount,
+  isCounterMove,
   mergeStageDelta,
+  resolveCounterMove,
   resolvePostDamage,
   resolveStatusMove,
+  volatilesPatchOnSleep,
   type StatStages,
 } from '../data/battleMoveResolver';
+import {
+  clearBattleField,
+  EMPTY_BATTLE_FIELD,
+  initBattleHiddenPowerTypes,
+  spikesChipDamage,
+  type BattleField,
+} from '../data/battleField';
+import { isSunny, tickWeather, weatherLabel } from '../data/battleWeather';
 import {
   CHARGE_MOVE_SLUGS,
   confusionSelfDamagePower,
   getMovePriority,
+  HALF_HEAL_MOVES,
   isConfused,
+  isRolloutLocked,
   revertTransform,
   rollConfusionSelfHit,
   storedMoveFromSlug,
+  WEATHER_HEAL_MOVES,
   type TransformSnapshot,
 } from '../data/moveEffects';
 import {
+  accumulateCounterDamage,
   clearVolatiles,
   EMPTY_VOLATILES,
   isThrashLocked,
@@ -36,6 +51,7 @@ import {
   tickVolatileTurns,
   type BattleVolatiles,
 } from '../data/battleVolatiles';
+import { healFractionForMove, mergeFieldPatch } from '../utils/battleStatusApply';
 import { getTypeEffectiveness, getEffectivenessChipLabel, buildHitBattleMessage, TYPE_COLORS } from '../data/typeChart';
 import { SidePanel } from './SidePanel';
 import { BattleEffectBadges, hasVisibleBattleEffects } from './StatusBadge';
@@ -131,11 +147,24 @@ function HpBar({ current, max, label }: { current: number; max: number; label?: 
   );
 }
 
-function pickEnemyMove(enemyMon: CaughtPokemon): StoredMove | null {
-  const damaging = enemyMon.moves.filter((m) => m.category !== 'status' && m.power > 0);
-  const pool = damaging.length > 0 ? damaging : enemyMon.moves;
-  if (pool.length === 0) return null;
-  return pool[Math.floor(Math.random() * pool.length)];
+function pickEnemyMove(enemyMon: CaughtPokemon, volatiles: BattleVolatiles): StoredMove | null {
+  if (volatiles.encoreMoveSlug) {
+    const encore = enemyMon.moves.find((m) => m.slug === volatiles.encoreMoveSlug);
+    if (encore) return encore;
+  }
+  if (volatiles.thrashLock) {
+    const thrash = enemyMon.moves.find((m) => m.slug === volatiles.thrashLock!.slug);
+    if (thrash) return thrash;
+  }
+  if (volatiles.rolloutLock) {
+    const rollout = enemyMon.moves.find((m) => m.slug === 'rollout');
+    if (rollout) return rollout;
+  }
+  const pool = enemyMon.moves.filter((m) => m.slug !== volatiles.disabledMoveSlug);
+  const damaging = pool.filter((m) => m.category !== 'status' && m.power > 0);
+  const picks = damaging.length > 0 ? damaging : pool;
+  if (picks.length === 0) return null;
+  return picks[Math.floor(Math.random() * picks.length)];
 }
 
 export function BattleArena({
@@ -173,6 +202,7 @@ export function BattleArena({
   const fullHealUsedInBattle = useGameStore((s) => s.fullHealUsedInBattle);
   const grantXpAllPartyAndPc = useGameStore((s) => s.grantXpAllPartyAndPc);
   const markSeen = useGameStore((s) => s.markSeen);
+  const battleRegion = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
 
   const [enemyTeam, setEnemyTeam] = useState<CaughtPokemon[]>([]);
   const [enemySpeciesById, setEnemySpeciesById] = useState<Record<number, PokemonData>>({});
@@ -202,6 +232,7 @@ export function BattleArena({
   const [transformSnapshot, setTransformSnapshot] = useState<TransformSnapshot | null>(null);
   const [playerLastMoveSlug, setPlayerLastMoveSlug] = useState<string | null>(null);
   const [enemyLastMoveSlug, setEnemyLastMoveSlug] = useState<string | null>(null);
+  const [battleField, setBattleField] = useState<BattleField>(EMPTY_BATTLE_FIELD);
 
   const logRef = useRef<HTMLDivElement | null>(null);
   const onMoveClickRef = useRef<(move: BattleMove) => Promise<void>>(async () => {});
@@ -210,6 +241,9 @@ export function BattleArena({
   const resolveTurnRef = useRef<(move: BattleMove, hostUsedAttack: boolean) => Promise<void>>(async () => {});
   const pendingAutoRunRef = useRef(false);
   const thrashAutoRunRef = useRef<string | null>(null);
+  const counterReleaseRef = useRef(false);
+  /** True when a faint ended the turn before end-of-turn effects ran (Gen V+ forced swap). */
+  const pendingEndOfTurnRef = useRef(false);
 
   const mpConnected = useMultiplayerStore((s) => s.role === 'host' && s.connectionStatus === 'connected');
   const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
@@ -268,6 +302,14 @@ export function BattleArena({
     }));
   }, []);
 
+  const revertActiveTransformIfNeeded = useCallback(() => {
+    const outgoing = useGameStore.getState().party[0];
+    if (outgoing && transformSnapshot) {
+      patchPartyMember(outgoing.caughtAt, revertTransform(outgoing, transformSnapshot));
+      setTransformSnapshot(null);
+    }
+  }, [patchPartyMember, transformSnapshot]);
+
   // Load the enemy team once per leader. This must NOT depend on party state,
   // otherwise taking damage would re-run it and reset the enemy's HP/index.
   useEffect(() => {
@@ -287,7 +329,7 @@ export function BattleArena({
         ? null
         : Math.max(1, Math.min(100, avgPartyLevel + (battleContext === 'elite' ? eliteBonus : 0)));
     const levels =
-      scaledLevel == null || battleContext === 'teamrocket'
+      scaledLevel == null
         ? leader.pokemon.map((p) => p.level)
         : leader.pokemon.map(() => scaledLevel);
     fetchPokemonBatch(enemyIds).then((speciesData) => {
@@ -321,6 +363,10 @@ export function BattleArena({
         setTransformSnapshot(null);
         setPlayerLastMoveSlug(null);
         setEnemyLastMoveSlug(null);
+        setBattleField({
+          ...clearBattleField(),
+          hiddenPowerTypes: initBattleHiddenPowerTypes(useGameStore.getState().party, team),
+        });
         setPhase('prep');
         setMessage('');
         setLog([]);
@@ -344,7 +390,49 @@ export function BattleArena({
           setFullHealUsedInBattle(snap.fullHealUsed);
           setXAttackPhysical(!!snap.xAttackPhysical);
           setXAttackSpecial(!!snap.xAttackSpecial);
-          setPhase('choose');
+          setPlayerStages(snap.playerStages ?? ZERO_STAGES);
+          setEnemyStages(snap.enemyStages ?? ZERO_STAGES);
+          setPlayerVolatiles(snap.playerVolatiles ?? clearVolatiles());
+          setEnemyVolatiles(snap.enemyVolatiles ?? clearVolatiles());
+          setTransformSnapshot(snap.transformSnapshot ?? null);
+          setPlayerLastMoveSlug(snap.playerLastMoveSlug ?? null);
+          setEnemyLastMoveSlug(snap.enemyLastMoveSlug ?? null);
+          setBattleField(
+            snap.battleField ?? {
+              ...clearBattleField(),
+              hiddenPowerTypes: initBattleHiddenPowerTypes(useGameStore.getState().party, team),
+            },
+          );
+          setPhase(snap.phase ?? 'choose');
+          if (snap.message) setMessage(snap.message);
+          const active = useGameStore.getState().party[0];
+          if (snap.playerPendingTurn && active) {
+            const pendingMove = active.moves.find((m) => m.slug === snap.playerPendingTurn!.slug);
+            if (pendingMove) {
+              setPlayerPendingTurn({
+                kind: snap.playerPendingTurn.kind,
+                move: {
+                  ...pendingMove,
+                  ownerCaughtAt: active.caughtAt,
+                  ownerDisplayName: active.nickname ?? active.displayName,
+                  fromActive: true,
+                  currentPp: active.pp?.[pendingMove.slug] ?? pendingMove.maxPp,
+                  maxPp: pendingMove.maxPp,
+                },
+              });
+            }
+          } else {
+            setPlayerPendingTurn(null);
+          }
+          const resumedEnemy = team[idx];
+          if (snap.enemyPendingTurn && resumedEnemy) {
+            const pendingMove = resumedEnemy.moves.find((m) => m.slug === snap.enemyPendingTurn!.slug);
+            if (pendingMove) {
+              setEnemyPendingTurn({ kind: snap.enemyPendingTurn.kind, move: pendingMove });
+            }
+          } else {
+            setEnemyPendingTurn(null);
+          }
           const resumed = team[idx];
           const resumedSpecies = resumed ? speciesMap[resumed.id] : null;
           if (resumedSpecies) markSeen(resumedSpecies);
@@ -371,6 +459,22 @@ export function BattleArena({
       xAttackPhysical,
       xAttackSpecial,
       log,
+      phase,
+      battleField,
+      playerVolatiles,
+      enemyVolatiles,
+      playerStages,
+      enemyStages,
+      transformSnapshot,
+      playerPendingTurn: playerPendingTurn
+        ? { kind: playerPendingTurn.kind, slug: playerPendingTurn.move.slug }
+        : null,
+      enemyPendingTurn: enemyPendingTurn
+        ? { kind: enemyPendingTurn.kind, slug: enemyPendingTurn.move.slug }
+        : null,
+      playerLastMoveSlug,
+      enemyLastMoveSlug,
+      message,
     });
   }, [
     loading,
@@ -385,6 +489,17 @@ export function BattleArena({
     eliteStage,
     leader.id,
     saveBattleSnapshot,
+    battleField,
+    playerVolatiles,
+    enemyVolatiles,
+    playerStages,
+    enemyStages,
+    transformSnapshot,
+    playerPendingTurn,
+    enemyPendingTurn,
+    playerLastMoveSlug,
+    enemyLastMoveSlug,
+    message,
   ]);
 
   useEffect(() => () => stopClips(), []);
@@ -399,8 +514,16 @@ export function BattleArena({
       const mon = team[index];
       if (!mon) return;
       const max = maxHpForMon(mon);
+      let hp = max;
+      if (battleField.spikesActive && !mon.types.includes('flying')) {
+        const chip = spikesChipDamage(max, mon.types);
+        hp = Math.max(1, max - chip);
+        if (chip > 0) {
+          say(`Spikes dug into ${mon.displayName}!`);
+        }
+      }
       setEnemyIndex(index);
-      setEnemyHp(max);
+      setEnemyHp(hp);
       setXAttackPhysical(false);
       setXAttackSpecial(false);
       setEnemyPendingTurn(null);
@@ -408,14 +531,14 @@ export function BattleArena({
       setEnemyVolatiles(clearVolatiles());
       setEnemyLastMoveSlug(null);
       setEnemyTeam((prev) =>
-        prev.map((m, i) => (i === index ? { ...m, status: undefined, hp: max } : m)),
+        prev.map((m, i) => (i === index ? { ...m, status: undefined, hp } : m)),
       );
       const species = enemySpeciesById[mon.id];
       if (species) markSeen(species);
       say(`${leader.name} sent out ${mon.displayName}!`);
       playSfx('battle', muted);
     },
-    [enemySpeciesById, leader.name, markSeen, muted, say],
+    [battleField.spikesActive, enemySpeciesById, leader.name, markSeen, muted, say],
   );
 
   const triggerShake = () => {
@@ -545,7 +668,9 @@ export function BattleArena({
       return;
     }
 
-    playSfx('win', muted);
+    if (battleContext !== 'teamrocket') {
+      playSfx('win', muted);
+    }
     setPhase('result');
     say(finalVictory ? 'Champion victory!' : `${leader.badgeName} earned!`);
     await delay(1400);
@@ -602,6 +727,7 @@ export function BattleArena({
             await handlePartyWipe();
             return;
           }
+          revertActiveTransformIfNeeded();
           setPhase('forcedSwap');
           say(`${updated?.nickname ?? updated?.displayName ?? 'Your Pokémon'} fainted! Choose a replacement.`);
           playSfx('fail', muted);
@@ -627,6 +753,30 @@ export function BattleArena({
     setPlayerVolatiles((v) => tickVolatileTurns(v));
     setEnemyVolatiles((v) => tickVolatileTurns(v));
 
+    setBattleField((field) => {
+      const ticked = tickWeather(field.weather, field.weatherTurns);
+      return { ...field, weather: ticked.weather, weatherTurns: ticked.turns };
+    });
+
+    const playerAfterCurse = useGameStore.getState().party[0];
+    if (playerAfterCurse && playerVolatiles.cursed && !isFainted(playerAfterCurse)) {
+      const curseDmg = Math.max(1, Math.floor(maxHpForMon(playerAfterCurse) / 4));
+      damagePartyMember(playerAfterCurse.caughtAt, curseDmg);
+      say(`${playerAfterCurse.displayName} is afflicted by the curse!`);
+      showDamage(`-${curseDmg}`, 'player');
+      await delay(700);
+    }
+    if (enemy && enemyVolatiles.cursed && enemyHp > 0) {
+      const curseDmg = Math.max(1, Math.floor(maxHpForMon(enemy) / 4));
+      const newHp = Math.max(0, enemyHp - curseDmg);
+      setEnemyHp(newHp);
+      patchEnemy({ hp: newHp });
+      say(`${enemy.displayName} is afflicted by the curse!`);
+      showDamage(`-${curseDmg}`, 'enemy');
+      await delay(700);
+      if (newHp <= 0) await advanceAfterEnemyFaint();
+    }
+
     const playerAfter = useGameStore.getState().party[0];
     if (playerAfter && playerVolatiles.leechSeeded && enemy && enemyHp > 0) {
       const drain = Math.max(1, Math.floor(maxHpForMon(playerAfter) / 8));
@@ -648,7 +798,8 @@ export function BattleArena({
       showDamage(`-${drain}`, 'enemy');
       await delay(700);
     }
-  }, [advanceAfterEnemyFaint, enemy, enemyHp, enemyVolatiles, handlePartyWipe, muted, patchEnemy, playerVolatiles.leechSeeded, say, damagePartyMember]);
+    pendingEndOfTurnRef.current = false;
+  }, [advanceAfterEnemyFaint, battleField.weatherTurns, damagePartyMember, enemy, enemyHp, enemyVolatiles, handlePartyWipe, muted, patchEnemy, playerVolatiles.cursed, playerVolatiles.leechSeeded, say]);
 
   const canAct = useCallback(
     (
@@ -718,6 +869,23 @@ export function BattleArena({
     const target = useGameStore.getState().party[0];
     if (!target || isFainted(target)) return false;
 
+    if (enemyVolatiles.counterPending?.releaseNextTurn) {
+      const pending = enemyVolatiles.counterPending;
+      const counterDmg = counterReleaseDamage(pending);
+      if (counterDmg > 0) {
+        damagePartyMember(target.caughtAt, counterDmg);
+        triggerShake();
+        playSfx('hit', muted);
+        showDamage(`-${counterDmg}`, 'player');
+        say(`${leader.name}'s ${enemy.displayName} countered the attack!`);
+        await delay(900);
+      } else {
+        say(`But it failed!`);
+        await delay(600);
+      }
+      setEnemyVolatiles((v) => ({ ...v, counterPending: undefined }));
+    }
+
     const actCheck = canAct(enemy, 'enemy', enemyVolatiles);
     if (actCheck.message) say(actCheck.message);
     if (!actCheck.canAct) return false;
@@ -732,13 +900,13 @@ export function BattleArena({
     const stored =
       enemyPendingTurn?.kind === 'solar-charge' || enemyPendingTurn?.kind === 'charge'
         ? enemyPendingTurn.move
-        : pickEnemyMove(enemy);
+        : pickEnemyMove(enemy, enemyVolatiles);
     if (!stored) return false;
 
     if (enemyPendingTurn?.kind === 'solar-charge' || enemyPendingTurn?.kind === 'charge') {
       setEnemyPendingTurn(null);
       say(`${leader.name}'s ${enemy.displayName} unleashed ${stored.name}!`);
-    } else if (stored.slug === 'solar-beam') {
+    } else if (stored.slug === 'solar-beam' && !isSunny(battleField.weather)) {
       setEnemyPendingTurn({ kind: 'solar-charge', move: stored });
       say(`${leader.name}'s ${enemy.displayName} is taking in sunlight!`);
       await delay(900);
@@ -752,21 +920,29 @@ export function BattleArena({
 
     setEnemyLastMoveSlug(stored.slug);
 
-    const hitAccuracy = Math.max(
-      1,
-      Math.min(
-        100,
-        effectiveAccuracy(stored.slug, stored.accuracy) *
-          (stageMult(enemyStages.acc) / stageMult(playerStages.eva)),
-      ),
-    );
-    if (!rollHit(hitAccuracy)) {
-      say(`${leader.name}'s ${enemy.displayName} used ${stored.name}! But it missed!`);
+    if (isCounterMove(stored.slug)) {
+      const counterResult = resolveCounterMove(stored.slug, `${leader.name}'s ${enemy.displayName}`, stored.name);
+      for (const msg of counterResult.messages) say(msg);
+      setEnemyVolatiles((v) => applyVolatilesPatch(v, counterResult.attackerVolatilesPatch));
       await delay(900);
       return false;
     }
 
+    const hitAccuracy = Math.max(
+      1,
+      Math.min(
+        100,
+        effectiveAccuracy(stored.slug, stored.accuracy, enemyVolatiles, battleField.weather) *
+          (stageMult(enemyStages.acc) / stageMult(playerStages.eva)),
+      ),
+    );
+
     if (stored.category === 'status') {
+      if (!rollHit(hitAccuracy)) {
+        say(`${leader.name}'s ${enemy.displayName} used ${stored.name}! But it missed!`);
+        await delay(900);
+        return false;
+      }
       say(`${leader.name}'s ${enemy.displayName} used ${stored.name}!`);
       const statusResult = resolveStatusMove({
         slug: stored.slug,
@@ -778,6 +954,10 @@ export function BattleArena({
         defenderLastMoveSlug: playerLastMoveSlug,
       });
       for (const msg of statusResult.messages) say(msg);
+      if (statusResult.failed) {
+        await delay(900);
+        return false;
+      }
       if (statusResult.attackerStageDelta) {
         setEnemyStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
       }
@@ -792,12 +972,57 @@ export function BattleArena({
       }
       if (statusResult.defenderStatus) {
         setPartyMemberStatus(target.caughtAt, statusResult.defenderStatus);
+        if (statusResult.defenderStatus.kind === 'sleep') {
+          setPlayerVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
+        }
+      }
+      if (statusResult.fieldPatch) {
+        setBattleField((f) => mergeFieldPatch(f, statusResult.fieldPatch));
+      }
+      if (statusResult.healFraction != null || HALF_HEAL_MOVES.has(stored.slug)) {
+        const frac = healFractionForMove(
+          stored.slug,
+          battleField.weather,
+          statusResult.healFraction,
+        );
+        const healed = Math.min(maxHpForMon(enemy), enemyHp + Math.max(1, Math.floor(maxHpForMon(enemy) * frac)));
+        setEnemyHp(healed);
+        patchEnemy({ hp: healed });
+      }
+      if (statusResult.sleepTalkMove) {
+        const { move: talked, powerMultiplier } = statusResult.sleepTalkMove;
+        const talkDmg = calculateMoveDamage({
+          move: talked,
+          attacker: enemy,
+          defender: target,
+          defenderHp: currentHp(target),
+          attackerVolatiles: enemyVolatiles,
+          defenderVolatiles: playerVolatiles,
+          attackerStages: enemyStages,
+          defenderStages: playerStages,
+          region: battleRegion,
+          weather: battleField.weather,
+          powerMultiplier,
+        });
+        if (talkDmg.damage > 0) {
+          damagePartyMember(target.caughtAt, talkDmg.damage);
+          showDamage(`-${talkDmg.damage}`, 'player');
+        }
+        say(`${enemy.displayName} used ${talked.name} in its sleep!`);
       }
       if (statusResult.attackerStatus) {
         patchEnemy({ status: statusResult.attackerStatus, hp: maxHpForMon(enemy) });
         setEnemyHp(maxHpForMon(enemy));
       }
-      if (stored.slug === 'recover' || stored.slug === 'soft-boiled') {
+      if (statusResult.clearAttackerStatus) {
+        patchEnemy({ status: undefined });
+      }
+      if (statusResult.attackerHpCost) {
+        const newHp = Math.max(1, enemyHp - statusResult.attackerHpCost);
+        setEnemyHp(newHp);
+        patchEnemy({ hp: newHp });
+      }
+      if (HALF_HEAL_MOVES.has(stored.slug) && statusResult.healFraction == null && !WEATHER_HEAL_MOVES.has(stored.slug)) {
         const healed = Math.min(maxHpForMon(enemy), enemyHp + Math.max(1, Math.floor(maxHpForMon(enemy) / 2)));
         setEnemyHp(healed);
         patchEnemy({ hp: healed });
@@ -806,28 +1031,41 @@ export function BattleArena({
       return false;
     }
 
-    let totalDamage = 0;
-    let lastCrit = false;
-    let lastEffectiveness = 1;
-    const hits = getMultiHitCount(stored.slug);
-    for (let h = 0; h < hits; h++) {
-      const { damage, crit, effectiveness } = calculateMoveDamage({
-        move: stored,
-        attacker: enemy,
-        defender: target,
-        defenderHp: currentHp(target),
-        attackerVolatiles: enemyVolatiles,
-        defenderVolatiles: playerVolatiles,
-        attackerStages: enemyStages,
-        defenderStages: playerStages,
-      });
-      totalDamage += damage;
-      lastCrit = crit;
-      lastEffectiveness = effectiveness;
+    const dmgResult = resolveDamageHits({
+      move: stored,
+      attacker: enemy,
+      defender: target,
+      defenderHp: currentHp(target),
+      attackerVolatiles: enemyVolatiles,
+      defenderVolatiles: playerVolatiles,
+      attackerStages: enemyStages,
+      defenderStages: playerStages,
+      region: battleRegion,
+      weather: battleField.weather,
+      hitAccuracy,
+    });
+
+    if (dmgResult.missed) {
+      say(`${leader.name}'s ${enemy.displayName} used ${stored.name}! But it missed!`);
+      await delay(900);
+      return false;
+    }
+
+    const totalDamage = dmgResult.totalDamage;
+    const lastCrit = dmgResult.lastCrit;
+    const lastEffectiveness = dmgResult.lastEffectiveness;
+
+    if (dmgResult.presentHeal) {
+      useGameStore.getState().healPartyMember(target.caughtAt, dmgResult.presentHeal);
+      say(`${leader.name}'s ${enemy.displayName} used Present! ${target.displayName} recovered HP!`);
+      await delay(900);
+      return false;
     }
 
     if (totalDamage > 0) {
       damagePartyMember(target.caughtAt, totalDamage);
+      const cat = stored.category === 'physical' ? 'physical' : 'special';
+      setPlayerVolatiles((v) => accumulateCounterDamage(v, dmgResult.lastHitDamage, cat));
       triggerShake();
       playSfx('hit', muted);
       showDamage(`-${totalDamage}`, 'player');
@@ -850,16 +1088,28 @@ export function BattleArena({
       attacker: enemy,
       defender: target,
       damageDealt: totalDamage,
+      connectingHits: dmgResult.hits,
       attackerVolatiles: enemyVolatiles,
       defenderVolatiles: playerVolatiles,
     });
     for (const msg of post.messages) say(msg);
-    if (post.defenderStatus) setPartyMemberStatus(target.caughtAt, post.defenderStatus);
+    if (post.defenderStatus) {
+      setPartyMemberStatus(target.caughtAt, post.defenderStatus);
+      if (post.defenderStatus.kind === 'sleep') {
+        setPlayerVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
+      }
+    }
     if (post.defenderVolatilesPatch) {
       setPlayerVolatiles((v) => applyVolatilesPatch(v, post.defenderVolatilesPatch));
     }
     if (post.attackerVolatilesPatch) {
       setEnemyVolatiles((v) => applyVolatilesPatch(v, post.attackerVolatilesPatch));
+    }
+    if (post.defenderStageDelta) {
+      setPlayerStages((s) => mergeStageDelta(s, post.defenderStageDelta));
+    }
+    if (post.attackerStageDelta) {
+      setEnemyStages((s) => mergeStageDelta(s, post.attackerStageDelta));
     }
     if (post.recoilDamage) {
       const newHp = Math.max(0, enemyHp - post.recoilDamage);
@@ -871,6 +1121,9 @@ export function BattleArena({
       const healed = Math.min(maxHpForMon(enemy), enemyHp + post.drainHeal);
       setEnemyHp(healed);
       patchEnemy({ hp: healed });
+    }
+    if (post.clearSpikes) {
+      setBattleField((f) => ({ ...f, spikesActive: false }));
     }
 
     const updated = useGameStore.getState().party[0];
@@ -889,6 +1142,8 @@ export function BattleArena({
         await handlePartyWipe();
         return true;
       }
+      revertActiveTransformIfNeeded();
+      pendingEndOfTurnRef.current = true;
       setPhase('forcedSwap');
       say(`${target.nickname ?? target.displayName} fainted! Choose a replacement.`);
       playSfx('fail', muted);
@@ -996,8 +1251,10 @@ export function BattleArena({
       const pending = playerPendingTurn;
       const isChargeRelease = pending?.kind === 'solar-charge' || pending?.kind === 'charge';
 
+      const rolloutSlug = playerVolatiles.rolloutLock ? 'rollout' : null;
       const thrashSlug = playerVolatiles.thrashLock?.slug;
-      const thrashStored = thrashSlug ? attacker.moves.find((m) => m.slug === thrashSlug) : null;
+      const forcedSlug = thrashSlug ?? rolloutSlug;
+      const forcedStored = forcedSlug ? attacker.moves.find((m) => m.slug === forcedSlug) : null;
 
       let releaseMove: BattleMove;
       if (isChargeRelease && pending) {
@@ -1011,30 +1268,32 @@ export function BattleArena({
         };
         setPlayerPendingTurn(null);
         say(`${attacker.nickname ?? attacker.displayName} unleashed ${releaseMove.name}!`);
-      } else if (thrashStored) {
+      } else if (forcedStored) {
         releaseMove = {
           ...move,
-          ...thrashStored,
-          name: thrashStored.name,
-          slug: thrashStored.slug,
+          ...forcedStored,
+          name: forcedStored.name,
+          slug: forcedStored.slug,
           ownerCaughtAt: attacker.caughtAt,
           ownerDisplayName: attacker.nickname ?? attacker.displayName,
           fromActive: true,
-          currentPp: attacker.pp?.[thrashStored.slug] ?? thrashStored.maxPp,
-          maxPp: thrashStored.maxPp,
+          currentPp: attacker.pp?.[forcedStored.slug] ?? forcedStored.maxPp,
+          maxPp: forcedStored.maxPp,
         };
       } else {
         releaseMove = move;
       }
 
       if (!isChargeRelease && !playerPendingTurn) {
-        if (releaseMove.slug === 'solar-beam') {
+        if (releaseMove.slug === 'solar-beam' && !isSunny(battleField.weather)) {
           setPlayerPendingTurn({ kind: 'solar-charge', move: releaseMove });
           say(`${attacker.nickname ?? attacker.displayName} is taking in sunlight!`);
           await delay(900);
           return 'continue';
         }
-        if (CHARGE_MOVE_SLUGS.has(releaseMove.slug) && releaseMove.slug !== 'solar-beam') {
+        if (releaseMove.slug === 'solar-beam' && isSunny(battleField.weather)) {
+          // instant in sun
+        } else if (CHARGE_MOVE_SLUGS.has(releaseMove.slug) && releaseMove.slug !== 'solar-beam') {
           setPlayerPendingTurn({ kind: 'charge', move: releaseMove });
           say(`${attacker.nickname ?? attacker.displayName} is charging ${releaseMove.name}!`);
           await delay(900);
@@ -1048,31 +1307,43 @@ export function BattleArena({
         return 'continue';
       }
 
-      if (releaseMove.currentPp > 0 && !thrashSlug) {
+      if (releaseMove.currentPp > 0 && !forcedSlug) {
         useMovePp(releaseMove.ownerCaughtAt, releaseMove.slug, releaseMove.maxPp);
-      } else if (releaseMove.currentPp > 0 && thrashSlug && releaseMove.slug !== thrashSlug) {
+      } else if (releaseMove.currentPp > 0 && forcedSlug && releaseMove.slug !== forcedSlug) {
         useMovePp(releaseMove.ownerCaughtAt, releaseMove.slug, releaseMove.maxPp);
-      } else if (thrashSlug && releaseMove.slug === thrashSlug && releaseMove.currentPp > 0) {
+      } else if (forcedSlug && releaseMove.slug === forcedSlug && releaseMove.currentPp > 0) {
         useMovePp(releaseMove.ownerCaughtAt, releaseMove.slug, releaseMove.maxPp);
       }
 
       setPlayerLastMoveSlug(releaseMove.slug);
 
-        const hitAccuracy = Math.max(
-          1,
-          Math.min(
-            100,
-            effectiveAccuracy(releaseMove.slug, releaseMove.accuracy) *
-              (stageMult(playerStages.acc) / stageMult(enemyStages.eva)),
-          ),
+      if (isCounterMove(releaseMove.slug)) {
+        const counterResult = resolveCounterMove(
+          releaseMove.slug,
+          attacker.nickname ?? attacker.displayName,
+          releaseMove.name,
         );
+        for (const msg of counterResult.messages) say(msg);
+        setPlayerVolatiles((v) => applyVolatilesPatch(v, counterResult.attackerVolatilesPatch));
+        await delay(900);
+        return 'continue';
+      }
+
+      const hitAccuracy = Math.max(
+        1,
+        Math.min(
+          100,
+          effectiveAccuracy(releaseMove.slug, releaseMove.accuracy, playerVolatiles, battleField.weather) *
+            (stageMult(playerStages.acc) / stageMult(enemyStages.eva)),
+        ),
+      );
+
+      if (releaseMove.category === 'status') {
         if (!rollHit(hitAccuracy)) {
           say(`${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}! But it missed!`);
           await delay(900);
           return 'continue';
         }
-
-        if (releaseMove.category === 'status') {
         say(`${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}!`);
         const statusResult = resolveStatusMove({
           slug: releaseMove.slug,
@@ -1084,28 +1355,88 @@ export function BattleArena({
           transformTarget: enemy,
           defenderLastMoveSlug: enemyLastMoveSlug,
         });
-        for (const msg of statusResult.messages) say(msg);
-        if (statusResult.attackerStageDelta) {
-          setPlayerStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
+      for (const msg of statusResult.messages) say(msg);
+      if (statusResult.failed) {
+        await delay(900);
+        return 'continue';
+      }
+      if (statusResult.attackerStageDelta) {
+        setPlayerStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
+      }
+      if (statusResult.defenderStageDelta) {
+        setEnemyStages((s) => mergeStageDelta(s, statusResult.defenderStageDelta));
+      }
+      if (statusResult.attackerVolatilesPatch) {
+        setPlayerVolatiles((v) => applyVolatilesPatch(v, statusResult.attackerVolatilesPatch));
+      }
+      if (statusResult.defenderVolatilesPatch) {
+        setEnemyVolatiles((v) => applyVolatilesPatch(v, statusResult.defenderVolatilesPatch));
+      }
+      if (statusResult.defenderStatus) {
+        patchEnemy({ status: statusResult.defenderStatus });
+          if (statusResult.defenderStatus.kind === 'sleep') {
+            setEnemyVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
+          }
         }
-        if (statusResult.defenderStageDelta) {
-          setEnemyStages((s) => mergeStageDelta(s, statusResult.defenderStageDelta));
+        if (statusResult.fieldPatch) {
+          setBattleField((f) => mergeFieldPatch(f, statusResult.fieldPatch));
         }
-        if (statusResult.attackerVolatilesPatch) {
-          setPlayerVolatiles((v) => applyVolatilesPatch(v, statusResult.attackerVolatilesPatch));
+        if (statusResult.clearAttackerStatus) {
+          setPartyMemberStatus(attacker.caughtAt, undefined);
         }
-        if (statusResult.defenderVolatilesPatch) {
-          setEnemyVolatiles((v) => applyVolatilesPatch(v, statusResult.defenderVolatilesPatch));
+        if (statusResult.attackerHpCost) {
+          damagePartyMember(attacker.caughtAt, statusResult.attackerHpCost);
         }
-        if (statusResult.defenderStatus) patchEnemy({ status: statusResult.defenderStatus });
         if (statusResult.attackerStatus) {
           setPartyMemberStatus(attacker.caughtAt, statusResult.attackerStatus);
           const max = maxHpForMon(attacker);
           useGameStore.getState().healPartyMember(attacker.caughtAt, max);
+          if (statusResult.attackerStatus.kind === 'sleep') {
+            setPlayerVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
+          }
         }
-        if (releaseMove.slug === 'recover' || releaseMove.slug === 'soft-boiled') {
+        if (statusResult.healFraction != null || HALF_HEAL_MOVES.has(releaseMove.slug)) {
           const max = maxHpForMon(attacker);
-          useGameStore.getState().healPartyMember(attacker.caughtAt, Math.max(1, Math.floor(max / 2)));
+          const frac = healFractionForMove(
+            releaseMove.slug,
+            battleField.weather,
+            statusResult.healFraction,
+          );
+          useGameStore.getState().healPartyMember(attacker.caughtAt, Math.max(1, Math.floor(max * frac)));
+        }
+        if (statusResult.sleepTalkMove) {
+          const { move: talked, powerMultiplier } = statusResult.sleepTalkMove;
+          const hpType = battleField.hiddenPowerTypes[attacker.caughtAt];
+          const talkDmg = calculateMoveDamage({
+            move: talked,
+            attacker,
+            defender: enemy,
+            defenderHp: enemyHp,
+            attackerVolatiles: playerVolatiles,
+            defenderVolatiles: enemyVolatiles,
+            attackerStages: playerStages,
+            defenderStages: enemyStages,
+            xAttackPhysical: xAttackPhysical || useMultiplayerStore.getState().xAttackAllActive,
+            xAttackSpecial: xAttackSpecial || useMultiplayerStore.getState().xAttackAllActive,
+            region: battleRegion,
+            weather: battleField.weather,
+            hiddenPowerType: talked.slug === 'hidden-power' ? hpType : undefined,
+            powerMultiplier,
+          });
+          const newHp = Math.max(0, enemyHp - talkDmg.damage);
+          setEnemyHp(newHp);
+          patchEnemy({ hp: newHp });
+          if (talkDmg.damage > 0) {
+            triggerShake();
+            playSfx('hit', muted);
+            showDamage(`-${talkDmg.damage}`, 'enemy');
+          }
+          say(`${attacker.displayName} used ${talked.name} in its sleep!`);
+          if (newHp <= 0) {
+            await delay(900);
+            await advanceAfterEnemyFaint();
+            return 'enemy_fainted';
+          }
         }
         if (statusResult.transform) {
           patchPartyMember(attacker.caughtAt, statusResult.transform.patch);
@@ -1141,6 +1472,7 @@ export function BattleArena({
                 defenderStages: enemyStages,
                 xAttackPhysical: xAttackPhysical || useMultiplayerStore.getState().xAttackAllActive,
                 xAttackSpecial: xAttackSpecial || useMultiplayerStore.getState().xAttackAllActive,
+                region: battleRegion,
               });
               const newHp = Math.max(0, enemyHp - metroDmg.damage);
               setEnemyHp(newHp);
@@ -1179,32 +1511,50 @@ export function BattleArena({
         if (defenderStatus !== enemy.status) patchEnemy({ status: defenderStatus });
       }
 
-      let totalDamage = 0;
-      let lastCrit = false;
-      let lastEffectiveness = 1;
-      const hits = getMultiHitCount(releaseMove.slug);
-      for (let h = 0; h < hits; h++) {
-        const { damage, crit, effectiveness } = calculateMoveDamage({
-          move: releaseMove,
-          attacker,
-          defender: { ...enemy, status: defenderStatus },
-          defenderHp: enemyHp,
-          attackerVolatiles: playerVolatiles,
-          defenderVolatiles: enemyVolatiles,
-          attackerStages: playerStages,
-          defenderStages: enemyStages,
-          xAttackPhysical: xPhys,
-          xAttackSpecial: xSpec,
-        });
-        totalDamage += damage;
-        lastCrit = crit;
-        lastEffectiveness = effectiveness;
+      const hpType = battleField.hiddenPowerTypes[attacker.caughtAt];
+
+      const dmgResult = resolveDamageHits({
+        move: releaseMove,
+        attacker,
+        defender: { ...enemy, status: defenderStatus },
+        defenderHp: enemyHp,
+        attackerVolatiles: playerVolatiles,
+        defenderVolatiles: enemyVolatiles,
+        attackerStages: playerStages,
+        defenderStages: enemyStages,
+        xAttackPhysical: xPhys,
+        xAttackSpecial: xSpec,
+        region: battleRegion,
+        weather: battleField.weather,
+        hiddenPowerType: releaseMove.slug === 'hidden-power' ? hpType : undefined,
+        hitAccuracy,
+      });
+
+      if (dmgResult.missed) {
+        say(`${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}! But it missed!`);
+        await delay(900);
+        return 'continue';
       }
+
+      if (dmgResult.presentHeal) {
+        const healed = Math.min(maxHpForMon(enemy), enemyHp + dmgResult.presentHeal);
+        setEnemyHp(healed);
+        patchEnemy({ hp: healed });
+        say(`${attacker.nickname ?? attacker.displayName} used Present! The foe recovered HP!`);
+        await delay(900);
+        return 'continue';
+      }
+
+      const totalDamage = dmgResult.totalDamage;
+      const lastCrit = dmgResult.lastCrit;
+      const lastEffectiveness = dmgResult.lastEffectiveness;
 
       const newEnemyHp = Math.max(0, enemyHp - totalDamage);
       setEnemyHp(newEnemyHp);
       patchEnemy({ hp: newEnemyHp });
       if (totalDamage > 0) {
+        const cat = releaseMove.category === 'physical' ? 'physical' : 'special';
+        setEnemyVolatiles((v) => accumulateCounterDamage(v, dmgResult.lastHitDamage, cat));
         triggerShake();
         playSfx('hit', muted);
         showDamage(`-${totalDamage}`, 'enemy');
@@ -1232,16 +1582,28 @@ export function BattleArena({
         attacker,
         defender: enemy,
         damageDealt: totalDamage,
+        connectingHits: dmgResult.hits,
         attackerVolatiles: playerVolatiles,
         defenderVolatiles: enemyVolatiles,
       });
       for (const msg of post.messages) say(msg);
-      if (post.defenderStatus) patchEnemy({ status: post.defenderStatus });
+      if (post.defenderStatus) {
+        patchEnemy({ status: post.defenderStatus });
+        if (post.defenderStatus.kind === 'sleep') {
+          setEnemyVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
+        }
+      }
       if (post.defenderVolatilesPatch) {
         setEnemyVolatiles((v) => applyVolatilesPatch(v, post.defenderVolatilesPatch));
       }
       if (post.attackerVolatilesPatch) {
         setPlayerVolatiles((v) => applyVolatilesPatch(v, post.attackerVolatilesPatch));
+      }
+      if (post.defenderStageDelta) {
+        setEnemyStages((s) => mergeStageDelta(s, post.defenderStageDelta));
+      }
+      if (post.attackerStageDelta) {
+        setPlayerStages((s) => mergeStageDelta(s, post.attackerStageDelta));
       }
       if (post.recoilDamage) {
         damagePartyMember(attacker.caughtAt, post.recoilDamage);
@@ -1250,12 +1612,16 @@ export function BattleArena({
       if (post.drainHeal) {
         useGameStore.getState().healPartyMember(attacker.caughtAt, post.drainHeal);
       }
+      if (post.clearSpikes) {
+        setBattleField((f) => ({ ...f, spikesActive: false }));
+      }
 
       if (releaseMove.slug === 'hyper-beam' && totalDamage > 0 && newEnemyHp > 0) {
         setPlayerPendingTurn({ kind: 'hyper-recharge', move: releaseMove });
       }
       if (post.selfFaint && totalDamage > 0) {
         useGameStore.getState().damagePartyMember(attacker.caughtAt, maxHpForMon(attacker));
+        revertActiveTransformIfNeeded();
         setPhase('forcedSwap');
       }
 
@@ -1317,6 +1683,17 @@ export function BattleArena({
 
       await tickEndOfTurnStatus();
       await runChaosIfNeeded(hostUsedAttack);
+
+      setPlayerVolatiles((v) =>
+        v.counterPending && !v.counterPending.releaseNextTurn
+          ? { ...v, counterPending: { ...v.counterPending, releaseNextTurn: true } }
+          : v,
+      );
+      setEnemyVolatiles((v) =>
+        v.counterPending && !v.counterPending.releaseNextTurn
+          ? { ...v, counterPending: { ...v.counterPending, releaseNextTurn: true } }
+          : v,
+      );
     },
     [enemy, enemyStages.spe, executeEnemyAttack, executePlayerAttack, playerStages.spe, runChaosIfNeeded, tickEndOfTurnStatus],
   );
@@ -1361,8 +1738,65 @@ export function BattleArena({
   onMoveClickRef.current = onMoveClick;
 
   useEffect(() => {
-    const lock = playerVolatiles.thrashLock;
+    const pending = playerVolatiles.counterPending;
+    if (
+      phase !== 'choose' ||
+      processing ||
+      loading ||
+      awaitingGuest ||
+      outcome ||
+      !pending?.releaseNextTurn ||
+      counterReleaseRef.current
+    ) {
+      return;
+    }
+    counterReleaseRef.current = true;
+
+    void (async () => {
+      setProcessing(true);
+      const counterDmg = counterReleaseDamage(pending);
+      if (counterDmg > 0 && enemy) {
+        const newHp = Math.max(0, enemyHp - counterDmg);
+        setEnemyHp(newHp);
+        patchEnemy({ hp: newHp });
+        triggerShake();
+        playSfx('hit', muted);
+        showDamage(`-${counterDmg}`, 'enemy');
+        say(`${activeMember?.nickname ?? activeMember?.displayName ?? 'Your Pokémon'} countered the attack!`);
+        await delay(900);
+        if (newHp <= 0) {
+          await advanceAfterEnemyFaint();
+        }
+      } else {
+        say('But it failed!');
+        await delay(600);
+      }
+      setPlayerVolatiles((v) => ({ ...v, counterPending: undefined }));
+      setProcessing(false);
+      counterReleaseRef.current = false;
+    })();
+  }, [
+    activeMember?.caughtAt,
+    activeMember?.displayName,
+    activeMember?.nickname,
+    advanceAfterEnemyFaint,
+    awaitingGuest,
+    enemy,
+    enemyHp,
+    loading,
+    muted,
+    outcome,
+    patchEnemy,
+    phase,
+    playerVolatiles.counterPending,
+    processing,
+    say,
+  ]);
+
+  useEffect(() => {
+    const lock = playerVolatiles.thrashLock ?? (playerVolatiles.rolloutLock ? { slug: 'rollout', turnsLeft: playerVolatiles.rolloutLock.turnsLeft } : null);
     if (!lock || phase !== 'choose' || processing || loading || awaitingGuest || outcome) return;
+    if (playerVolatiles.counterPending?.releaseNextTurn) return;
     const active = useGameStore.getState().party[0];
     if (!active || isFainted(active)) return;
     const thrashMove = active.moves.find((m) => m.slug === lock.slug);
@@ -1399,6 +1833,8 @@ export function BattleArena({
     processing,
     playerVolatiles.thrashLock?.slug,
     playerVolatiles.thrashLock?.turnsLeft,
+    playerVolatiles.rolloutLock?.turnsLeft,
+    playerVolatiles.counterPending?.releaseNextTurn,
   ]);
 
   useEffect(() => {
@@ -1577,7 +2013,8 @@ export function BattleArena({
   );
 
   const executePlayerSwitch = useCallback(
-    async (caughtAt: number) => {
+    async (caughtAt: number, options?: { afterFaint?: boolean }) => {
+      const afterFaint = options?.afterFaint ?? false;
       const member = useGameStore.getState().party.find((m) => m.caughtAt === caughtAt);
       if (!member || isFainted(member) || member.guestLocked) return;
       if (useGameStore.getState().party[0]?.caughtAt === caughtAt) return;
@@ -1588,6 +2025,18 @@ export function BattleArena({
       }
       if (!setActivePartyMember(caughtAt)) return;
 
+      const incoming = useGameStore.getState().party[0];
+      if (incoming && battleField.spikesActive && !incoming.types.includes('flying')) {
+        const max = maxHpForMon(incoming);
+        const chip = spikesChipDamage(max, incoming.types);
+        if (chip > 0) {
+          const hp = Math.max(1, (incoming.hp ?? max) - chip);
+          patchPartyMember(incoming.caughtAt, { hp });
+          say(`Spikes dug into ${incoming.displayName}!`);
+          await delay(600);
+        }
+      }
+
       setPlayerStages(ZERO_STAGES);
       setPlayerVolatiles(clearVolatiles());
       setPlayerPendingTurn(null);
@@ -1595,16 +2044,34 @@ export function BattleArena({
       playSfx('click', muted);
       await delay(900);
 
-      const wiped = await executeEnemyAttack();
-      if (!wiped) {
+      const finishTurn = async () => {
+        pendingEndOfTurnRef.current = false;
         await tickEndOfTurnStatus();
         await runChaosIfNeeded(false);
-        setPhase((p) =>
-          p === 'forcedSwap' || p === 'between' || p === 'result' || p === 'victory' ? p : 'choose',
-        );
+        const active = useGameStore.getState().party[0];
+        if (active && !isFainted(active)) {
+          setPhase((p) => (p === 'between' || p === 'result' || p === 'victory' ? p : 'choose'));
+        }
+      };
+
+      if (afterFaint) {
+        if (pendingEndOfTurnRef.current) {
+          await finishTurn();
+        } else {
+          const active = useGameStore.getState().party[0];
+          if (active && !isFainted(active)) {
+            setPhase((p) => (p === 'between' || p === 'result' || p === 'victory' ? p : 'choose'));
+          }
+        }
+      } else {
+        const wiped = await executeEnemyAttack();
+        if (!wiped) {
+          await finishTurn();
+        }
       }
     },
     [
+      battleField.spikesActive,
       executeEnemyAttack,
       muted,
       patchPartyMember,
@@ -1623,8 +2090,8 @@ export function BattleArena({
         say('You cannot switch while preparing or recharging a move!');
         return;
       }
-      if (isThrashLocked(playerVolatiles)) {
-        say('You cannot switch while thrashing!');
+      if (isThrashLocked(playerVolatiles) || isRolloutLocked(playerVolatiles)) {
+        say('You cannot switch while locked into a move!');
         return;
       }
       if (isTrapped(playerVolatiles)) {
@@ -1638,7 +2105,16 @@ export function BattleArena({
     [awaitingGuest, executePlayerSwitch, outcome, phase, playerPendingTurn, playerVolatiles, processing, say],
   );
 
-  executePlayerSwitchRef.current = handleBattleSendOut;
+  executePlayerSwitchRef.current = async (caughtAt: number) => {
+    if (processing || outcome) return;
+    if (phase === 'forcedSwap') {
+      setProcessing(true);
+      await executePlayerSwitch(caughtAt, { afterFaint: true });
+      setProcessing(false);
+      return;
+    }
+    await handleBattleSendOut(caughtAt);
+  };
 
   const applyXAttack = (move: BattleMove) => {
     const alreadyBoosted =
@@ -1659,10 +2135,11 @@ export function BattleArena({
   };
 
   const onForcedSwap = (caughtAt: number) => {
-    if (setActivePartyMember(caughtAt)) {
-      setPhase('choose');
-      say('Ready to battle!');
-    }
+    void (async () => {
+      setProcessing(true);
+      await executePlayerSwitch(caughtAt, { afterFaint: true });
+      setProcessing(false);
+    })();
   };
 
   if (loading) {
@@ -1783,6 +2260,14 @@ export function BattleArena({
           {message && phase !== 'prep' && (
             <p className="battle-message battle-message--turn">{message}</p>
           )}
+          {battleField.weather !== 'none' && phase !== 'prep' && phase !== 'result' && (
+            <p className="battle-message battle-message--weather">
+              {weatherLabel(battleField.weather)} ({battleField.weatherTurns} turns left)
+            </p>
+          )}
+          {battleField.spikesActive && phase !== 'prep' && phase !== 'result' && (
+            <p className="battle-message battle-message--weather">Spikes are scattered on the field!</p>
+          )}
 
           {phase === 'choose' && enemy && hasUsablePokemon && guestControlsActive && (
             <p className="battle-message">Friend is choosing a move…</p>
@@ -1796,7 +2281,11 @@ export function BattleArena({
                   const owner = party.find((m) => m.caughtAt === move.ownerCaughtAt);
                   const fainted = owner ? isFainted(owner) : true;
                   const locked = !!owner?.guestLocked;
-                  const mult = getTypeEffectiveness(move.type, enemy.types);
+                  const moveType =
+                    move.slug === 'hidden-power'
+                      ? (battleField.hiddenPowerTypes[move.ownerCaughtAt] ?? move.type)
+                      : move.type;
+                  const mult = getTypeEffectiveness(moveType, enemy.types, battleRegion);
                   const effChip =
                     move.category !== 'status' && !isFixedDamageMove(move.slug)
                       ? getEffectivenessChipLabel(mult)
@@ -1836,7 +2325,7 @@ export function BattleArena({
                       <button
                         type="button"
                         className={`battle-move-btn${fainted || ppDepleted || locked ? ' battle-move-btn--disabled' : ''}`}
-                        style={{ backgroundColor: TYPE_COLORS[move.type] ?? '#888' }}
+                        style={{ backgroundColor: TYPE_COLORS[moveType] ?? '#888' }}
                         disabled={fainted || ppDepleted || locked || inputBlocked}
                         onClick={() => onMoveClick(move)}
                       >

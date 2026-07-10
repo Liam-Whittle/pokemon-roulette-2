@@ -18,6 +18,7 @@ import type { BattleMove } from '../types/game';
 export function MpGuestScreen() {
   const muted = useGameStore((s) => s.muted);
   const setScreen = useGameStore((s) => s.setScreen);
+  const battleRegion = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const spectate = useMultiplayerStore((s) => s.spectate);
   const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
   const outcome = useMultiplayerStore((s) => s.outcome);
@@ -264,7 +265,7 @@ export function MpGuestScreen() {
               <p className="battle-move-select__title">Your Pokémon — choose a move</p>
               <div className="battle-move-grid">
                 {battle.moves.map((move) => {
-                  const mult = getTypeEffectiveness(move.type, battle.enemyTypes);
+                  const mult = getTypeEffectiveness(move.type, battle.enemyTypes, battleRegion);
                   const effChip =
                     move.fromActive &&
                     !isFixedDamageMove(move.slug) &&

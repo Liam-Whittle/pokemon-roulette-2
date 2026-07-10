@@ -4,12 +4,16 @@ import { useGameStore } from '../store/useGameStore';
 import { ItemIcon } from '../components/ItemIcon';
 import { GameIcon } from '../components/GameIcon';
 import { ItemDetailModal } from '../components/ItemDetailModal';
+import { resolveBadgeImage } from '../data/pools';
 import { playSfx } from '../utils/sound';
+import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import { imgFallback, remoteBadge } from '../utils/localAssets';
 import type { BagItem } from '../types/game';
 
 export function BagScreen() {
   const bag = useGameStore((s) => s.bag);
   const badges = useGameStore((s) => s.badges);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
   const [selectedItem, setSelectedItem] = useState<BagItem | null>(null);
@@ -61,17 +65,33 @@ export function BagScreen() {
           <p className="collection-empty">No badges yet. Challenge a Gym!</p>
         ) : (
           <div className="badges-row">
-            {badges.map((badge) => (
-              <div key={badge.id} className="badge-card">
-                {badge.image ? (
-                  <img src={badge.image} alt={badge.name} className="badge-card__img" />
-                ) : (
-                  <span className="badge-card__icon">🏅</span>
-                )}
-                <span className="badge-card__name">{badge.name}</span>
-                <span className="badge-card__type">{badge.type}</span>
-              </div>
-            ))}
+            {badges.map((badge) => {
+              const badgeSrc = resolveBadgeImage(badge, region);
+              return (
+                <div key={badge.id} className="badge-card">
+                  {badgeSrc ? (
+                    <img
+                      src={badgeSrc}
+                      alt={badge.name}
+                      className="badge-card__img"
+                      onError={(e) => {
+                        const match = badgeSrc.match(/badges\/(\d+)\.png/);
+                        const badgeNum = match ? Number(match[1]) : 0;
+                        imgFallback(
+                          e,
+                          badgeNum > 0 ? remoteBadge(badgeNum) : undefined,
+                          PLACEHOLDER_SPRITE,
+                        );
+                      }}
+                    />
+                  ) : (
+                    <span className="badge-card__icon">🏅</span>
+                  )}
+                  <span className="badge-card__name">{badge.name}</span>
+                  <span className="badge-card__type">{badge.type}</span>
+                </div>
+              );
+            })}
           </div>
         )}
       </section>

@@ -4,18 +4,19 @@ import { BattleArena } from '../components/BattleArena';
 import { PokeDollarAmount } from '../components/PokeDollar';
 import {
   TEAM_ROCKET_LEADER,
-  TEAM_ROCKET_POOL,
+  getRegionRocketPool,
 } from '../data/pools';
 import { getCachedSpecies } from '../data/speciesCache';
 import { useGameStore } from '../store/useGameStore';
-import { encounterLevelForBadges } from '../utils/xp';
+import { asset } from '../utils/asset';
+import { playClip } from '../utils/music';
 import { currentHp } from '../utils/stats';
 import type { GymLeader } from '../types/game';
+import type { RegionId } from '../data/pools';
 
-function buildRocketLeader(badgeCount: number): GymLeader {
-  const shuffled = [...TEAM_ROCKET_POOL].sort(() => Math.random() - 0.5);
+function buildRocketLeader(region: RegionId): GymLeader {
+  const shuffled = [...getRegionRocketPool(region)].sort(() => Math.random() - 0.5);
   const picked = shuffled.slice(0, 3);
-  const level = encounterLevelForBadges(badgeCount);
 
   return {
     ...TEAM_ROCKET_LEADER,
@@ -24,14 +25,15 @@ function buildRocketLeader(badgeCount: number): GymLeader {
       return {
         id,
         name: species?.name ?? `pokemon-${id}`,
-        level,
+        level: 1,
       };
     }),
   };
 }
 
 export function TeamRocketScreen() {
-  const badges = useGameStore((s) => s.badges);
+  const muted = useGameStore((s) => s.muted);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const party = useGameStore((s) => s.party);
   const setScreen = useGameStore((s) => s.setScreen);
   const addMoney = useGameStore((s) => s.addMoney);
@@ -40,7 +42,7 @@ export function TeamRocketScreen() {
   const stealRandomPartyPokemon = useGameStore((s) => s.stealRandomPartyPokemon);
   const setPendingHubNotice = useGameStore((s) => s.setPendingHubNotice);
 
-  const [leader] = useState(() => buildRocketLeader(badges.length));
+  const [leader] = useState(() => buildRocketLeader(region));
   const [victoryOpen, setVictoryOpen] = useState(false);
   // Freeze HP at fight start so mid-battle faints do not overwrite the restore map.
   const hpSnapshotRef = useRef<Record<number, number> | null>(null);
@@ -56,6 +58,11 @@ export function TeamRocketScreen() {
   useEffect(() => {
     if (party.length <= 1) setScreen('hub');
   }, [party.length, setScreen]);
+
+  useEffect(() => {
+    if (!victoryOpen || muted) return;
+    playClip(asset('sounds/gym_victory.mp3'));
+  }, [victoryOpen, muted]);
 
   const handleDefeat = useMemo(
     () => () => {

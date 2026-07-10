@@ -8,7 +8,7 @@ import { ItemIcon } from './ItemIcon';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import { useGameStore } from '../store/useGameStore';
 import { playClip, stopClip } from '../utils/music';
-import { REGION_CRY_STYLE } from '../data/pools';
+import { getCryStyleForRegion } from '../data/pools';
 import { MAGIKARP_ID, describeMove, formatMoveCategory, formatMovePowerDisplay } from '../data/moves';
 import {
   getBaseStatsForSpecies,
@@ -112,6 +112,7 @@ export function PokemonDetailModal({
   const [data, setData] = useState<PokemonData | null>(null);
   const [detail, setDetail] = useState<PokemonDetail | null>(null);
   const muted = useGameStore((s) => s.muted);
+  const cryStyle = useGameStore((s) => getCryStyleForRegion(s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const isMagichad = shiny && id === MAGIKARP_ID;
   const [introDone, setIntroDone] = useState(!shiny);
   const cryPlayedRef = useRef(false);
@@ -213,7 +214,7 @@ export function PokemonDetailModal({
       clip = playClip(asset('sounds/magikarp_detail.mp3'));
     } else if (data) {
       const crySrc =
-        (REGION_CRY_STYLE === 'legacy' ? data.cryLegacy : data.cryLatest) ??
+        (cryStyle === 'legacy' ? data.cryLegacy : data.cryLatest) ??
         data.cryLatest ??
         data.cryLegacy;
       if (crySrc) {
@@ -223,7 +224,7 @@ export function PokemonDetailModal({
     }
 
     return () => stopClip(clip);
-  }, [muted, introDone, data, isMagichad]);
+  }, [muted, introDone, data, isMagichad, cryStyle]);
 
   const art = isMagichad
     ? asset('img/magikarp_shiny.png')

@@ -9,8 +9,9 @@ import {
   ITEMS,
   PATHWAY_SEGMENTS,
   SPINS_PER_GYM,
-  STONE_ITEM_IDS,
-  TOTAL_GYMS,
+  getRegionCatchSegments,
+  getStoneItemIdsForRegion,
+  getRegionTotalGyms,
   UBER_EMPTY_BAG_ITEMS,
   UBER_SPIN_SEGMENTS,
   pickRandom,
@@ -25,6 +26,7 @@ import type { PathwayId, WheelSegment } from '../types/game';
 
 export function HubScreen() {
   const trainer = useGameStore((s) => s.trainer);
+  const region = trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
   const party = useGameStore((s) => s.party);
   const badges = useGameStore((s) => s.badges);
   const spinsCount = useGameStore((s) => s.spinsCount);
@@ -50,18 +52,23 @@ export function HubScreen() {
   const [notice, setNotice] = useState<string | null>(null);
   const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
 
+  const totalGyms = getRegionTotalGyms(region);
   const gymBadges = badges.length;
-  const allGymsDone = gymBadges >= TOTAL_GYMS;
+  const allGymsDone = gymBadges >= totalGyms;
   const spinsSinceGym = spinsCount - lastGymSpin;
   const spinsThreshold = allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM;
   const spinsUntilNext = Math.max(0, spinsThreshold - spinsSinceGym);
   const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || pokeCenterOpen;
 
-  const wheelSegments = activePathway ? PATHWAY_SEGMENTS[activePathway] : [];
+  const wheelSegments: WheelSegment[] = activePathway
+    ? activePathway === 'catch'
+      ? getRegionCatchSegments(region)
+      : PATHWAY_SEGMENTS[activePathway]
+    : [];
 
   const maybeTriggerGym = useCallback(() => {
     const state = useGameStore.getState();
-    const gymsDone = state.badges.length >= TOTAL_GYMS;
+    const gymsDone = state.badges.length >= getRegionTotalGyms(state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto');
     const spinsSince = state.spinsCount - state.lastGymSpin;
     if (!gymsDone) {
       if (spinsSince >= SPINS_PER_GYM) {
@@ -192,7 +199,7 @@ export function HubScreen() {
             itemId: 'xattack',
           });
         } else if (segment.activity === 'stone') {
-          const stoneId = pickRandom([...STONE_ITEM_IDS]);
+          const stoneId = pickRandom(getStoneItemIdsForRegion(region));
           const stone = ITEMS.find((item) => item.id === stoneId);
           addItem(stoneId, 1);
           const stoneName = stone?.name ?? 'Evolution Stone';
@@ -371,7 +378,7 @@ export function HubScreen() {
           <div>
             <h2 className="hub-header__name">{trainer?.name}</h2>
             <p className="hub-header__stats">
-              Party: {party.length}/5 · Badges: {gymBadges}/{TOTAL_GYMS} · Paths: {spinsCount} ·{' '}
+              Party: {party.length}/5 · Badges: {gymBadges}/{totalGyms} · Paths: {spinsCount} ·{' '}
               <PokeCenterVisits lives={lives} />
             </p>
           </div>
@@ -380,7 +387,7 @@ export function HubScreen() {
 
       {eliteCleared && (
         <div className="hub-champion-banner">
-          <GameIcon ui="champion" alt="" className="game-icon-img game-icon-img--inline" /> Kanto Champion!
+          <GameIcon ui="champion" alt="" className="game-icon-img game-icon-img--inline" /> {region} Champion!
         </div>
       )}
 

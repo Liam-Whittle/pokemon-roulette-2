@@ -12,6 +12,7 @@ export function ItemScreen() {
   const setLastResult = useGameStore((s) => s.setLastResult);
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
 
   const [phase, setPhase] = useState<'search' | 'found'>('search');
   const [foundItem, setFoundItem] = useState<(typeof ITEMS)[0] | null>(null);
@@ -19,7 +20,7 @@ export function ItemScreen() {
   useEffect(() => {
     playSfx('click', muted);
     const t = setTimeout(() => {
-      const itemId = pickFindItemId();
+      const itemId = pickFindItemId(region);
       const item = ITEMS.find((entry) => entry.id === itemId) ?? ITEMS[0];
       setFoundItem(item);
       addItem(item.id);
@@ -41,7 +42,7 @@ export function ItemScreen() {
       setPhase('found');
     }, 2000);
     return () => clearTimeout(t);
-  }, [addItem, setLastResult, muted]);
+  }, [addItem, setLastResult, muted, region]);
 
   return (
     <motion.div

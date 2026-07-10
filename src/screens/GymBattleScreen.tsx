@@ -1,22 +1,24 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
-import { GYM_LEADERS, pickRandom } from '../data/pools';
+import { getRegionGymLeaders, pickRandom } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 
 export function GymBattleScreen() {
   const badges = useGameStore((s) => s.badges);
   const setScreen = useGameStore((s) => s.setScreen);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
 
   const [leader] = useState(() => {
     const { debugGymId, setDebugGym } = useGameStore.getState();
+    const gymLeaders = getRegionGymLeaders(region);
     if (debugGymId) {
-      const forced = GYM_LEADERS.find((g) => g.id === debugGymId);
+      const forced = gymLeaders.find((g) => g.id === debugGymId);
       setDebugGym(null);
       if (forced) return forced;
     }
-    const unearned = GYM_LEADERS.filter((g) => !badges.some((b) => b.id === g.id));
-    return unearned.length > 0 ? unearned[0] : pickRandom(GYM_LEADERS);
+    const unearned = gymLeaders.filter((g) => !badges.some((b) => b.id === g.id));
+    return unearned.length > 0 ? unearned[0] : pickRandom(gymLeaders);
   });
 
   return (

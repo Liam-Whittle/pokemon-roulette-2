@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import {
-  ELITE_FOUR,
-  GYM_LEADERS,
   ITEMS,
   PATHWAY_SEGMENTS,
-  STONE_ITEM_IDS,
-  TOTAL_GYMS,
+  getRegionEliteFour,
+  getRegionGymLeaders,
+  getStoneItemIdsForRegion,
+  getRegionTotalGyms,
   pickRandom,
 } from '../data/pools';
 import { GameIcon } from './GameIcon';
@@ -13,7 +13,7 @@ import { ItemIcon } from './ItemIcon';
 import { SegmentIcon } from './SegmentIcon';
 import { PokeCenterModal } from './PokeCenterModal';
 import { useGameStore } from '../store/useGameStore';
-import { fetchGen1List, fetchPokemon, type PokemonListEntry } from '../api/pokeapi';
+import { fetchPokemon, fetchRegionList, type PokemonListEntry } from '../api/pokeapi';
 import type { WheelSegment } from '../types/game';
 
 function titleCase(name: string): string {
@@ -45,6 +45,10 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   const restoreLives = useGameStore((s) => s.restoreLives);
   const earnBadge = useGameStore((s) => s.earnBadge);
   const badges = useGameStore((s) => s.badges);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const gymLeaders = getRegionGymLeaders(region);
+  const eliteFour = getRegionEliteFour(region);
+  const totalGyms = getRegionTotalGyms(region);
 
   const [open, setOpen] = useState(false);
   const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
@@ -123,23 +127,23 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
   }
 
   function grantRandomStone() {
-    const stoneId = pickRandom([...STONE_ITEM_IDS]);
+    const stoneId = pickRandom(getStoneItemIdsForRegion(region));
     const stoneName = ITEMS.find((item) => item.id === stoneId)?.name ?? 'Stone';
     addItem(stoneId, 1);
     setNotice(`You received a ${stoneName}!`);
   }
 
   function grantAllStones() {
-    for (const stoneId of STONE_ITEM_IDS) addItem(stoneId, 1);
+    for (const stoneId of getStoneItemIdsForRegion(region)) addItem(stoneId, 1);
     setNotice('You received all evolution stones (+1 each).');
   }
 
   function grantNextBadge() {
-    if (badges.length >= TOTAL_GYMS) {
+    if (badges.length >= totalGyms) {
       setNotice('All gym badges already earned.');
       return;
     }
-    const next = GYM_LEADERS[badges.length];
+    const next = gymLeaders[badges.length];
     if (!next) return;
     earnBadge({
       id: next.id,
@@ -157,7 +161,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
     if (next && pokemonList.length === 0 && !loadingList) {
       setLoadingList(true);
       try {
-        setPokemonList(await fetchGen1List());
+        setPokemonList(await fetchRegionList(region));
       } catch {
         // network optional; list stays empty
       } finally {
@@ -254,7 +258,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
             <p className="debug-panel__label">Progression</p>
             <div className="debug-panel__grid">
               <button type="button" className="debug-panel__btn" onClick={grantNextBadge}>
-                🏅 Grant Next Badge ({badges.length}/{TOTAL_GYMS})
+                🏅 Grant Next Badge ({badges.length}/{totalGyms})
               </button>
               <button type="button" className="debug-panel__btn" onClick={grantRandomStone}>
                 <SegmentIcon id="stone" className="game-icon-img game-icon-img--btn" /> Grant Random Stone
@@ -273,7 +277,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
                 Make Random Party Pokémon Shiny
               </button>
               <button type="button" className="debug-panel__btn" onClick={togglePokemonList}>
-                {listOpen ? '▾' : '▸'} Add Gen 1 Pokémon
+                {listOpen ? '▾' : '▸'} Add Region Pokémon
               </button>
             </div>
 
@@ -331,7 +335,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
           <div className="debug-panel__section">
             <p className="debug-panel__label">Gym Battles</p>
             <div className="debug-panel__grid">
-              {GYM_LEADERS.map((leader) => (
+              {gymLeaders.map((leader) => (
                 <button
                   key={leader.id}
                   type="button"
@@ -351,7 +355,7 @@ export function DebugMenu({ onUberSpin }: DebugMenuProps) {
           <div className="debug-panel__section">
             <p className="debug-panel__label">Elite Four / Champion</p>
             <div className="debug-panel__grid">
-              {ELITE_FOUR.map((member, index) => (
+              {eliteFour.map((member, index) => (
                 <button
                   key={member.id}
                   type="button"

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
-import { ELITE_FOUR } from '../data/pools';
+import { getRegionEliteFour } from '../data/pools';
 import { Confetti } from '../components/Confetti';
 import { useGameStore } from '../store/useGameStore';
 
@@ -10,6 +10,8 @@ export function EliteFourScreen() {
   const setEliteCleared = useGameStore((s) => s.setEliteCleared);
   const recordChampion = useGameStore((s) => s.recordChampion);
   const eliteCleared = useGameStore((s) => s.eliteCleared);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const eliteFour = getRegionEliteFour(region);
 
   const [stage, setStage] = useState(() => {
     const { debugEliteStage, setDebugEliteStage, battleSnapshot } = useGameStore.getState();
@@ -21,13 +23,13 @@ export function EliteFourScreen() {
     return 0;
   });
 
-  const member = ELITE_FOUR[stage];
+  const member = eliteFour[stage];
   if (!member) {
     setScreen('hub');
     return null;
   }
 
-  const isChampionStage = stage >= ELITE_FOUR.length - 1;
+  const isChampionStage = stage >= eliteFour.length - 1;
 
   return (
     <motion.div
@@ -40,7 +42,7 @@ export function EliteFourScreen() {
 
       <h2 className="screen-title">👑 Elite Four</h2>
       <div className="elite-progress">
-        {ELITE_FOUR.map((entry, idx) => (
+        {eliteFour.map((entry, idx) => (
           <span
             key={entry.id}
             className={`elite-progress__dot${idx < stage ? ' elite-progress__dot--done' : ''}${idx === stage ? ' elite-progress__dot--active' : ''}`}

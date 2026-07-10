@@ -9,7 +9,7 @@ import { asset } from '../utils/asset';
 const DEFAULT_SUBTITLE = 'Pokemon Roulette but actually good';
 const SECRET_SUBTITLE = 'Johnson is a Jew';
 const SECRET_CLICKS = 5;
-const MULTIPLAYER_ENABLED = false;
+const MULTIPLAYER_ENABLED = import.meta.env.VITE_MULTIPLAYER_ENABLED === 'true';
 
 export function TitleScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
@@ -101,9 +101,16 @@ export function TitleScreen() {
                 onClick={() => {
                   playSfx('click', muted);
                   if (canContinue) {
+                    const savedScreen = useGameStore.getState().screen;
                     const ctx = battleSnapshot?.context;
                     const resumeScreen =
-                      ctx === 'teamrocket' ? 'teamrocket' : ctx === 'gym' || ctx === 'elite' ? ctx : 'hub';
+                      ctx === 'teamrocket'
+                        ? 'teamrocket'
+                        : ctx === 'gym' || ctx === 'elite'
+                          ? ctx
+                          : savedScreen && savedScreen !== 'title' && savedScreen !== 'setup'
+                            ? savedScreen
+                            : 'hub';
                     setScreen(resumeScreen);
                   } else {
                     beginNewGame();

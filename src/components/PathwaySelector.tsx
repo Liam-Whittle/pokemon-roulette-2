@@ -1,4 +1,6 @@
 import { getItemSprite, getPathwayHeroSprite, getSegmentSprite, getUISprite } from '../data/icons';
+import { getRegionCatchSegments } from '../data/pools';
+import { useGameStore } from '../store/useGameStore';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { imgFallback, remoteItemSprite, remotePokemonSprite } from '../utils/localAssets';
 import type { PathwayId } from '../types/game';
@@ -74,9 +76,20 @@ function PathwayHero({ pathId }: { pathId: PathwayId }) {
 }
 
 export function PathwaySelector({ onSelect, disabled }: PathwaySelectorProps) {
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const catchIcons = getRegionCatchSegments(region).map((segment) => segment.id);
+  const catchSubtitle =
+    region === 'Johto'
+      ? 'Grass, Fishing, Cave & Legendary'
+      : 'Grass, Fishing, Cave, Fossil & Legendary';
+
+  const pathways = PATHWAYS.map((path) =>
+    path.id === 'catch' ? { ...path, icons: catchIcons, subtitle: catchSubtitle } : path,
+  );
+
   return (
     <div className="pathway-hub">
-      {PATHWAYS.map((path) => (
+      {pathways.map((path) => (
         <button
           key={path.id}
           type="button"

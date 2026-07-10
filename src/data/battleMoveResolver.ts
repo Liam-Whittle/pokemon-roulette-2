@@ -1,22 +1,37 @@
 import type { CaughtPokemon, StatusCondition, StoredMove } from '../types/game';
+import type { BattleField } from './battleField';
 import type { BattleVolatiles } from './battleVolatiles';
 import {
   applyConfusionVolatile,
+  applyRolloutLock,
   applyThrashLock,
+  BATON_PASS_HEAL,
   buildTransformPatch,
+  COUNTER_MOVE_CATEGORY,
   DRAIN_MOVES,
+  getPostDamageStageDelta,
+  getSecondaryStatChance,
   getSecondaryStatusChance,
   getStatStageDelta,
   getVolatilePatchForStatusMove,
+  HALF_HEAL_MOVES,
   metronomePickSlug,
   OHKO_MOVES,
   RECOIL_MOVES,
   rollMultiHitCount,
+  storedMoveFromSlug,
   rollTriAttackStatus,
+  SLEEP_TALK_EXCLUDED_SLUGS,
   TRAP_MOVES,
+  TRAP_STATUS_MOVES,
+  WEATHER_HEAL_MOVES,
   type TransformSnapshot,
 } from './moveEffects';
-import { canApplyStatus, createStatus } from '../utils/status';
+import { canApplyStatus, createStatus, isAsleep } from '../utils/status';
+import { hasSafeguard } from './battleVolatiles';
+import { maxHpForMon } from '../utils/stats';
+import { setWeatherFromMove } from './battleWeather';
+import type { BattleWeather } from './battleField';
 
 export type StatStages = {
   atk: number;
@@ -37,6 +52,7 @@ export interface StatusMoveContext {
   defenderVolatiles: BattleVolatiles;
   transformTarget?: CaughtPokemon;
   defenderLastMoveSlug?: string | null;
+  weather?: BattleWeather;
 }
 
 export interface StatusMoveResult {
@@ -50,6 +66,14 @@ export interface StatusMoveResult {
   attackerStatus?: StatusCondition;
   transform?: { patch: Partial<CaughtPokemon>; snapshot: TransformSnapshot };
   metronomeSlug?: string;
+  clearAttackerStatus?: boolean;
+  attackerHpCost?: number;
+  fieldPatch?: Partial<BattleField>;
+  healFraction?: number;
+  clearTrap?: boolean;
+  sleepTalkPrimeOnly?: boolean;
+  sleepTalkMove?: { move: StoredMove; powerMultiplier: number };
+  clearSpikes?: boolean;
 }
 
 const ZERO_DELTA: StatStages = { atk: 0, def: 0, spa: 0, spd: 0, spe: 0, acc: 0, eva: 0 };
@@ -75,6 +99,14 @@ export function resolveStatusMove(ctx: StatusMoveContext): StatusMoveResult {
   let attackerStatus: StatusCondition | undefined;
   let transform: StatusMoveResult['transform'];
   let metronomeSlug: string | undefined;
+  let clearAttackerStatus = false;
+  let attackerHpCost: number | undefined;
+  let fieldPatch: Partial<BattleField> | undefined;
+  let healFraction: number | undefined;
+  let clearTrap = false;
+  let sleepTalkPrimeOnly = false;
+  let sleepTalkMove: StatusMoveResult['sleepTalkMove'];
+  let clearSpikes = false;
 
   const statDelta = getStatStageDelta(slug);
   if (statDelta?.self) {
@@ -115,29 +147,137 @@ export function resolveStatusMove(ctx: StatusMoveContext): StatusMoveResult {
   } else if (slug === 'metronome') {
     metronomeSlug = metronomePickSlug();
     messages.push(`${attacker.displayName} waggled a finger!`);
-  } else if (slug === 'disable' && ctx.defenderLastMoveSlug) {
+  } else if (slug === 'disable') {
+    if (!ctx.defenderLastMoveSlug) {
+      failed = true;
+      messages.push('But it failed!');
+    } else {
+      const disabledName = storedMoveFromSlug(ctx.defenderLastMoveSlug)?.name ?? ctx.defenderLastMoveSlug;
+      defenderVolatilesPatch = {
+        ...defenderVolatilesPatch,
+        disabledMoveSlug: ctx.defenderLastMoveSlug,
+        disableTurns: 4,
+      };
+      messages.push(`${defender.displayName}'s ${disabledName} was disabled!`);
+    }
+  } else if (slug === 'confuse-ray' || slug === 'supersonic' || slug === 'sweet-kiss') {
+    defenderVolatilesPatch = { ...defenderVolatilesPatch, ...applyConfusionVolatile() };
+    messages.push(`${defender.displayName} became confused!`);
+  } else if (slug === 'mind-reader') {
+    attackerVolatilesPatch = { ...attackerVolatilesPatch, mindReaderActive: true };
+    messages.push(`${attacker.displayName} learned ${defender.displayName}'s move pattern!`);
+  } else if (slug === 'safeguard') {
+    attackerVolatilesPatch = { ...attackerVolatilesPatch, safeguardTurns: 5 };
+    messages.push(`${attacker.displayName} cloaked itself in a mystical veil!`);
+  } else if (TRAP_STATUS_MOVES.has(slug)) {
+    defenderVolatilesPatch = { ...defenderVolatilesPatch, trappedTurns: 5 };
+    messages.push(`${defender.displayName} can no longer escape!`);
+  } else if (slug === 'encore' && ctx.defenderLastMoveSlug) {
     defenderVolatilesPatch = {
       ...defenderVolatilesPatch,
-      disabledMoveSlug: ctx.defenderLastMoveSlug,
-      disableTurns: 4,
+      encoreMoveSlug: ctx.defenderLastMoveSlug,
+      encoreTurns: 3,
     };
-    messages.push(`${defender.displayName}'s ${ctx.defenderLastMoveSlug} was disabled!`);
-  } else if (slug === 'confuse-ray' || slug === 'supersonic') {
-    defenderVolatilesPatch = { ...defenderVolatilesPatch, ...applyConfusionVolatile() };
-    messages.push(`${defender.displayName} became confused!`);
+    messages.push(`${defender.displayName} received an encore!`);
+  } else if (slug === 'heal-bell') {
+    clearAttackerStatus = true;
+    messages.push(`A bell chimed! ${attacker.displayName} was cured of its status!`);
+  } else if (slug === 'curse') {
+    if (attacker.types.includes('ghost')) {
+      const maxHp = maxHpForMon(attacker);
+      const curHp = attacker.hp ?? maxHp;
+      const sacrifice = Math.max(1, Math.floor(maxHp / 2));
+      if (curHp <= sacrifice) {
+        failed = true;
+        messages.push('But it failed!');
+      } else {
+        attackerHpCost = sacrifice;
+        defenderVolatilesPatch = { ...defenderVolatilesPatch, cursed: true, leechSeeded: false };
+        messages.push(`${defender.displayName} was cursed!`);
+      }
+    } else {
+      attackerStageDelta = applyStageDelta(attackerStageDelta, { atk: +1, def: +1, spe: -1 });
+      messages.push(`${attacker.displayName}'s Attack rose!`);
+      messages.push(`${attacker.displayName}'s Defense rose!`);
+      messages.push(`${attacker.displayName}'s Speed fell!`);
+    }
+  } else if (HALF_HEAL_MOVES.has(slug)) {
+    messages.push(`${attacker.displayName} regained health!`);
+    if (!WEATHER_HEAL_MOVES.has(slug)) {
+      healFraction = 0.5;
+    }
+  } else if (slug === 'baton-pass') {
+    clearTrap = true;
+    healFraction = BATON_PASS_HEAL;
+    attackerVolatilesPatch = { ...attackerVolatilesPatch, trappedTurns: 0 };
+    messages.push(`${attacker.displayName} passed its problems!`);
+  } else if (slug === 'spikes') {
+    fieldPatch = { spikesActive: true };
+    messages.push(`Spikes were scattered around the foe!`);
+  } else if (slug === 'whirlwind') {
+    const stats: (keyof StatStages)[] = ['atk', 'def', 'spa', 'spd', 'spe', 'acc', 'eva'];
+    const pick = stats[Math.floor(Math.random() * stats.length)]!;
+    defenderStageDelta = applyStageDelta(defenderStageDelta, { [pick]: -1 });
+    messages.push(stageMessage(defender.displayName, { [pick]: -1 }, false));
+  } else if (slug === 'sleep-talk') {
+    if (isAsleep(attacker.status)) {
+      if (!ctx.attackerVolatiles.sleepTalkEligible) {
+        failed = true;
+        messages.push('But it failed!');
+      } else {
+        const pool = attacker.moves.filter(
+          (m) =>
+            m.category !== 'status' &&
+            m.power > 0 &&
+            !SLEEP_TALK_EXCLUDED_SLUGS.has(m.slug),
+        );
+        if (pool.length === 0) {
+          failed = true;
+          messages.push('But it failed!');
+        } else {
+          const picked = pool[Math.floor(Math.random() * pool.length)]!;
+          sleepTalkMove = { move: picked, powerMultiplier: 0.5 };
+          attackerVolatilesPatch = { ...attackerVolatilesPatch, sleepTalkEligible: false };
+          messages.push(`${attacker.displayName} talked in its sleep!`);
+        }
+      }
+    } else {
+      sleepTalkPrimeOnly = true;
+      attackerVolatilesPatch = { ...attackerVolatilesPatch, sleepTalkPrimed: true };
+      messages.push(`${attacker.displayName} is ready to talk in its sleep!`);
+    }
   } else if (slug === 'swagger') {
-    defenderStageDelta = applyStageDelta(defenderStageDelta, { atk: +2 });
     defenderVolatilesPatch = { ...defenderVolatilesPatch, ...applyConfusionVolatile() };
-    messages.push(`${defender.displayName}'s Attack sharply rose!`);
     messages.push(`${defender.displayName} became confused!`);
-  } else if (ctx.move.statusEffect && canApplyStatus(defender, ctx.move.statusEffect)) {
-    defenderStatus = createStatus(ctx.move.statusEffect);
-    messages.push(`${defender.displayName} was inflicted with ${defenderStatus.kind}!`);
-  } else if (
+  } else {
+    const weatherSet = setWeatherFromMove(slug);
+    if (weatherSet) {
+      fieldPatch = { weather: weatherSet.weather, weatherTurns: weatherSet.turns };
+      if (slug === 'sunny-day') messages.push(`The sunlight turned harsh!`);
+      else messages.push(`It started to rain!`);
+    } else if (ctx.move.statusEffect && canApplyStatus(defender, ctx.move.statusEffect) && !hasSafeguard(ctx.defenderVolatiles)) {
+      defenderStatus = createStatus(ctx.move.statusEffect);
+      messages.push(`${defender.displayName} was inflicted with ${defenderStatus.kind}!`);
+    }
+  }
+
+  if (
     statDelta ||
     volatilePatch ||
-    ['rest', 'recover', 'soft-boiled', 'transform', 'metronome', 'disable', 'confuse-ray', 'supersonic', 'swagger'].includes(slug) ||
-    (ctx.move.statusEffect && canApplyStatus(defender, ctx.move.statusEffect))
+    HALF_HEAL_MOVES.has(slug) ||
+    TRAP_STATUS_MOVES.has(slug) ||
+    sleepTalkPrimeOnly ||
+    sleepTalkMove ||
+    fieldPatch ||
+  clearTrap ||
+    slug === 'baton-pass' ||
+    slug === 'spikes' ||
+    slug === 'whirlwind' ||
+    slug === 'sleep-talk' ||
+    slug === 'sunny-day' ||
+    slug === 'rain-dance' ||
+    ['rest', 'recover', 'soft-boiled', 'transform', 'metronome', 'disable', 'confuse-ray', 'supersonic', 'sweet-kiss', 'swagger', 'mind-reader', 'safeguard', 'encore', 'heal-bell', 'curse'].includes(slug) ||
+    (ctx.move.statusEffect && canApplyStatus(defender, ctx.move.statusEffect) && !hasSafeguard(ctx.defenderVolatiles))
   ) {
     // handled above
   } else if (ctx.move.statusEffect) {
@@ -159,6 +299,14 @@ export function resolveStatusMove(ctx: StatusMoveContext): StatusMoveResult {
     attackerStatus,
     transform,
     metronomeSlug,
+    clearAttackerStatus: clearAttackerStatus || undefined,
+    attackerHpCost,
+    fieldPatch,
+    healFraction,
+    clearTrap: clearTrap || undefined,
+    sleepTalkPrimeOnly: sleepTalkPrimeOnly || undefined,
+    sleepTalkMove,
+    clearSpikes: clearSpikes || undefined,
   };
 }
 
@@ -204,6 +352,7 @@ export interface PostDamageContext {
   attacker: CaughtPokemon;
   defender: CaughtPokemon;
   damageDealt: number;
+  connectingHits?: number;
   attackerVolatiles: BattleVolatiles;
   defenderVolatiles: BattleVolatiles;
 }
@@ -213,20 +362,40 @@ export interface PostDamageResult {
   defenderStatus?: StatusCondition;
   defenderVolatilesPatch?: Partial<BattleVolatiles>;
   attackerVolatilesPatch?: Partial<BattleVolatiles>;
+  attackerStageDelta?: StatStages;
+  defenderStageDelta?: StatStages;
   recoilDamage?: number;
   drainHeal?: number;
   selfFaint?: boolean;
+  clearMindReader?: boolean;
+  clearSpikes?: boolean;
+}
+
+/** Present: random damage (40/80/120) or heal target 25% max HP. */
+export function resolvePresent(
+  attackerLevel: number,
+): { kind: 'damage'; power: number } | { kind: 'heal'; fraction: number } {
+  const roll = Math.random();
+  if (roll < 0.4) return { kind: 'damage', power: 40 };
+  if (roll < 0.8) return { kind: 'damage', power: 80 };
+  if (roll < 0.9) return { kind: 'damage', power: 120 };
+  void attackerLevel;
+  return { kind: 'heal', fraction: 0.25 };
 }
 
 export function resolvePostDamage(ctx: PostDamageContext): PostDamageResult {
-  const { slug, move, attacker, defender, damageDealt, attackerVolatiles } = ctx;
+  const { slug, move, attacker, defender, damageDealt, connectingHits, attackerVolatiles, defenderVolatiles } = ctx;
   const messages: string[] = [];
   let defenderStatus: StatusCondition | undefined;
   let defenderVolatilesPatch: Partial<BattleVolatiles> | undefined;
   let attackerVolatilesPatch: Partial<BattleVolatiles> | undefined;
+  let attackerStageDelta: StatStages = { ...ZERO_DELTA };
+  let defenderStageDelta: StatStages = { ...ZERO_DELTA };
   let recoilDamage: number | undefined;
   let drainHeal: number | undefined;
   let selfFaint = false;
+  let clearMindReader = attackerVolatiles.mindReaderActive;
+  let clearSpikes = false;
 
   if (damageDealt > 0 && TRAP_MOVES.has(slug)) {
     const turns = 2 + Math.floor(Math.random() * 4);
@@ -241,25 +410,61 @@ export function resolvePostDamage(ctx: PostDamageContext): PostDamageResult {
     }
   }
 
+  if (damageDealt > 0 && slug === 'rollout') {
+    attackerVolatilesPatch = applyRolloutLock(attackerVolatiles);
+  }
+
+  if (damageDealt > 0 && slug === 'rapid-spin') {
+    attackerVolatilesPatch = {
+      ...attackerVolatilesPatch,
+      trappedTurns: 0,
+      leechSeeded: false,
+    };
+    clearSpikes = true;
+    messages.push(`${attacker.displayName} blew away the spikes!`);
+  }
+
   if (damageDealt > 0) {
     if (slug === 'tri-attack' && Math.random() < getSecondaryStatusChance(slug)) {
       const kind = rollTriAttackStatus();
-      if (canApplyStatus(defender, kind)) {
+      if (canApplyStatus(defender, kind) && !hasSafeguard(defenderVolatiles)) {
         defenderStatus = createStatus(kind);
         messages.push(`${defender.displayName} was inflicted with ${kind}!`);
       }
+    } else if (move.statusEffect && slug === 'twineedle' && connectingHits && connectingHits > 0) {
+      for (let i = 0; i < connectingHits; i++) {
+        if (defenderStatus) break;
+        if (Math.random() < getSecondaryStatusChance(slug)) {
+          if (canApplyStatus(defender, move.statusEffect) && !hasSafeguard(defenderVolatiles)) {
+            defenderStatus = createStatus(move.statusEffect);
+            messages.push(`${defender.displayName} was inflicted with ${move.statusEffect}!`);
+          }
+        }
+      }
     } else if (move.statusEffect && Math.random() < getSecondaryStatusChance(slug)) {
-      if (canApplyStatus(defender, move.statusEffect)) {
+      if (canApplyStatus(defender, move.statusEffect) && !hasSafeguard(defenderVolatiles)) {
         defenderStatus = createStatus(move.statusEffect);
         messages.push(`${defender.displayName} was inflicted with ${move.statusEffect}!`);
       }
     } else if (
-      (slug === 'confusion' || slug === 'psybeam') &&
+      (slug === 'confusion' || slug === 'psybeam' || slug === 'dynamic-punch') &&
       damageDealt > 0 &&
-      Math.random() < getSecondaryStatusChance(slug)
+      Math.random() < (slug === 'dynamic-punch' ? 1 : getSecondaryStatusChance(slug))
     ) {
       defenderVolatilesPatch = { ...defenderVolatilesPatch, ...applyConfusionVolatile() };
       messages.push(`${defender.displayName} became confused!`);
+    }
+  }
+
+  const postStat = getPostDamageStageDelta(slug);
+  if (damageDealt > 0 && postStat && Math.random() < getSecondaryStatChance(slug)) {
+    if (postStat.self) {
+      attackerStageDelta = applyStageDelta(attackerStageDelta, postStat.self);
+      messages.push(stageMessage(attacker.displayName, postStat.self, true));
+    }
+    if (postStat.foe) {
+      defenderStageDelta = applyStageDelta(defenderStageDelta, postStat.foe);
+      messages.push(stageMessage(defender.displayName, postStat.foe, false));
     }
   }
 
@@ -279,7 +484,23 @@ export function resolvePostDamage(ctx: PostDamageContext): PostDamageResult {
     selfFaint = true;
   }
 
-  return { messages, defenderStatus, defenderVolatilesPatch, attackerVolatilesPatch, recoilDamage, drainHeal, selfFaint };
+  if (clearMindReader) {
+    attackerVolatilesPatch = { ...attackerVolatilesPatch, mindReaderActive: false };
+  }
+
+  return {
+    messages,
+    defenderStatus,
+    defenderVolatilesPatch,
+    attackerVolatilesPatch,
+    attackerStageDelta: hasStageChange(attackerStageDelta) ? attackerStageDelta : undefined,
+    defenderStageDelta: hasStageChange(defenderStageDelta) ? defenderStageDelta : undefined,
+    recoilDamage,
+    drainHeal,
+    selfFaint,
+    clearMindReader,
+    clearSpikes: clearSpikes || undefined,
+  };
 }
 
 export function resolveOhko(attackerLevel: number, defenderLevel: number, slug: string): boolean {
@@ -301,7 +522,43 @@ export function applyVolatilesPatch(v: BattleVolatiles, patch?: Partial<BattleVo
   return { ...v, ...patch };
 }
 
-export function effectiveAccuracy(slug: string, accuracy: number): number {
-  if (slug === 'swift') return 100;
+export function effectiveAccuracy(
+  slug: string,
+  accuracy: number,
+  attackerVolatiles?: BattleVolatiles,
+  weather: BattleWeather = 'none',
+): number {
+  if (slug === 'swift' || slug === 'feint-attack') return 100;
+  if (slug === 'thunder' && weather === 'rain') return 100;
+  if (attackerVolatiles?.mindReaderActive) return 100;
   return accuracy;
+}
+
+/** Volatile patch when sleep is newly applied. */
+export function volatilesPatchOnSleep(volatiles: BattleVolatiles): Partial<BattleVolatiles> {
+  if (volatiles.sleepTalkPrimed) {
+    return { sleepTalkEligible: true, sleepTalkPrimed: false };
+  }
+  return { sleepTalkPrimed: false };
+}
+
+export function isCounterMove(slug: string): boolean {
+  return slug in COUNTER_MOVE_CATEGORY;
+}
+
+export function resolveCounterMove(
+  slug: string,
+  attackerName: string,
+  moveName: string,
+): { messages: string[]; attackerVolatilesPatch: Partial<BattleVolatiles> } {
+  const category = COUNTER_MOVE_CATEGORY[slug]!;
+  return {
+    messages: [`${attackerName} used ${moveName}!`],
+    attackerVolatilesPatch: { counterPending: { category, damage: 0 } },
+  };
+}
+
+export function counterReleaseDamage(pending: NonNullable<BattleVolatiles['counterPending']>): number {
+  if (pending.damage <= 0) return 0;
+  return pending.damage * 2;
 }

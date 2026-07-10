@@ -33,18 +33,20 @@ export function StatusBadge({ status, placement = 'party' }: StatusBadgeProps) {
   );
 }
 
-export type VolatileBadgeKind = 'confusion' | 'trapped' | 'leech-seed';
+export type VolatileBadgeKind = 'confusion' | 'trapped' | 'leech-seed' | 'cursed';
 
 const VOLATILE_LABELS: Record<VolatileBadgeKind, string> = {
   confusion: 'CON',
   trapped: 'TRP',
   'leech-seed': 'SED',
+  cursed: 'CRS',
 };
 
 const VOLATILE_TITLES: Record<VolatileBadgeKind, string> = {
   confusion: 'Confused',
   trapped: 'Trapped',
   'leech-seed': 'Leech Seed',
+  cursed: 'Cursed',
 };
 
 interface VolatileBadgeProps {
@@ -79,7 +81,8 @@ export function hasVisibleBattleEffects(
   return (
     volatiles.confusionTurns > 0 ||
     volatiles.trappedTurns > 0 ||
-    volatiles.leechSeeded
+    volatiles.leechSeeded ||
+    !!volatiles.cursed
   );
 }
 
@@ -100,6 +103,7 @@ export function BattleEffectBadges({
         <VolatileBadge kind="trapped" placement={placement} />
       )}
       {volatiles?.leechSeeded && <VolatileBadge kind="leech-seed" placement={placement} />}
+      {volatiles?.cursed && <VolatileBadge kind="cursed" placement={placement} />}
     </div>
   );
 }
