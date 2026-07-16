@@ -209,7 +209,15 @@ export function BattleArena({
   const [enemySpeciesById, setEnemySpeciesById] = useState<Record<number, PokemonData>>({});
   const [loading, setLoading] = useState(true);
   const [enemyIndex, setEnemyIndex] = useState(0);
-  const [enemyHp, setEnemyHp] = useState(0);
+  const [enemyHp, setEnemyHpRaw] = useState(0);
+  // Always-current mirror of enemyHp so effects that run within the same turn
+  // (attack -> enemy attack -> end-of-turn status tick) don't read a stale
+  // closure value and accidentally overwrite (heal) damage already dealt.
+  const enemyHpRef = useRef(0);
+  const commitEnemyHp = useCallback((hp: number) => {
+    enemyHpRef.current = hp;
+    setEnemyHpRaw(hp);
+  }, []);
   const [phase, setPhase] = useState<BattlePhase>('prep');
   const [message, setMessage] = useState('');
   const [log, setLog] = useState<string[]>([]);
@@ -352,7 +360,7 @@ export function BattleArena({
 
       const startFresh = () => {
         setEnemyIndex(0);
-        setEnemyHp(team[0] ? maxHpForMon(team[0]) : 0);
+        commitEnemyHp(team[0] ? maxHpForMon(team[0]) : 0);
         setXAttackPhysical(false);
         setXAttackSpecial(false);
         setPlayerPendingTurn(null);
@@ -386,7 +394,7 @@ export function BattleArena({
           startFresh();
         } else {
           setEnemyIndex(idx);
-          setEnemyHp(hp);
+          commitEnemyHp(hp);
           setLog(snap.log);
           setFullHealUsedInBattle(snap.fullHealUsed);
           setXAttackPhysical(!!snap.xAttackPhysical);
@@ -538,7 +546,7 @@ export function BattleArena({
         }
       }
       setEnemyIndex(index);
-      setEnemyHp(hp);
+      commitEnemyHp(hp);
       setXAttackPhysical(false);
       setXAttackSpecial(false);
       setEnemyPendingTurn(null);
@@ -753,15 +761,17 @@ export function BattleArena({
     }
 
     // Track the enemy's HP locally so each end-of-turn effect works off the
-    // running value rather than a stale closure (prevents DoT/recoil from being
-    // "undone" by a later heal such as Leech Seed).
-    let currentEnemyHp = enemyHp;
+    // running value rather than a stale closure. We seed from enemyHpRef (which
+    // is updated synchronously on every HP change) instead of the enemyHp state
+    // captured in this callback's closure, otherwise damage dealt earlier this
+    // turn would be "undone" when we re-apply status/DoT HP here.
+    let currentEnemyHp = enemyHpRef.current;
 
     if (enemy?.status) {
       const ticked = tickStatusDamage({ ...enemy, hp: currentEnemyHp });
       if (ticked.damage > 0) {
         currentEnemyHp = Math.max(0, currentEnemyHp - ticked.damage);
-        setEnemyHp(currentEnemyHp);
+        commitEnemyHp(currentEnemyHp);
         patchEnemy({ hp: currentEnemyHp, status: ticked.mon.status });
         say(ticked.message);
         showDamage(`-${ticked.damage}`, 'enemy');
@@ -791,7 +801,7 @@ export function BattleArena({
     if (enemy && enemyVolatiles.cursed && currentEnemyHp > 0) {
       const curseDmg = Math.max(1, Math.floor(maxHpForMon(enemy) / 4));
       currentEnemyHp = Math.max(0, currentEnemyHp - curseDmg);
-      setEnemyHp(currentEnemyHp);
+      commitEnemyHp(currentEnemyHp);
       patchEnemy({ hp: currentEnemyHp });
       say(`${enemy.displayName} is afflicted by the curse!`);
       showDamage(`-${curseDmg}`, 'enemy');
@@ -804,7 +814,7 @@ export function BattleArena({
       const drain = Math.max(1, Math.floor(maxHpForMon(playerAfter) / 8));
       damagePartyMember(playerAfter.caughtAt, drain);
       currentEnemyHp = Math.min(maxHpForMon(enemy), currentEnemyHp + drain);
-      setEnemyHp(currentEnemyHp);
+      commitEnemyHp(currentEnemyHp);
       patchEnemy({ hp: currentEnemyHp });
       say(`${playerAfter.displayName}'s health is sapped by Leech Seed!`);
       showDamage(`-${drain}`, 'player');
@@ -813,7 +823,7 @@ export function BattleArena({
     if (enemy && enemyVolatiles.leechSeeded && playerAfter && !isFainted(playerAfter) && currentEnemyHp > 0) {
       const drain = Math.max(1, Math.floor(maxHpForMon(enemy) / 8));
       currentEnemyHp = Math.max(0, currentEnemyHp - drain);
-      setEnemyHp(currentEnemyHp);
+      commitEnemyHp(currentEnemyHp);
       patchEnemy({ hp: currentEnemyHp });
       useGameStore.getState().healPartyMember(playerAfter.caughtAt, drain);
       say(`Leech Seed sapped ${enemy.displayName}!`);
@@ -875,8 +885,8 @@ export function BattleArena({
             damagePartyMember(mon.caughtAt, selfDmg);
             showDamage(`-${selfDmg}`, 'player');
           } else {
-            const newHp = Math.max(0, enemyHp - selfDmg);
-            setEnemyHp(newHp);
+            const newHp = Math.max(0, enemyHpRef.current - selfDmg);
+            commitEnemyHp(newHp);
             patchEnemy({ hp: newHp });
             showDamage(`-${selfDmg}`, 'enemy');
           }
@@ -1010,8 +1020,8 @@ export function BattleArena({
           battleField.weather,
           statusResult.healFraction,
         );
-        const healed = Math.min(maxHpForMon(enemy), enemyHp + Math.max(1, Math.floor(maxHpForMon(enemy) * frac)));
-        setEnemyHp(healed);
+        const healed = Math.min(maxHpForMon(enemy), enemyHpRef.current + Math.max(1, Math.floor(maxHpForMon(enemy) * frac)));
+        commitEnemyHp(healed);
         patchEnemy({ hp: healed });
       }
       if (statusResult.sleepTalkMove) {
@@ -1037,19 +1047,19 @@ export function BattleArena({
       }
       if (statusResult.attackerStatus) {
         patchEnemy({ status: statusResult.attackerStatus, hp: maxHpForMon(enemy) });
-        setEnemyHp(maxHpForMon(enemy));
+        commitEnemyHp(maxHpForMon(enemy));
       }
       if (statusResult.clearAttackerStatus) {
         patchEnemy({ status: undefined });
       }
       if (statusResult.attackerHpCost) {
-        const newHp = Math.max(1, enemyHp - statusResult.attackerHpCost);
-        setEnemyHp(newHp);
+        const newHp = Math.max(1, enemyHpRef.current - statusResult.attackerHpCost);
+        commitEnemyHp(newHp);
         patchEnemy({ hp: newHp });
       }
       if (HALF_HEAL_MOVES.has(stored.slug) && statusResult.healFraction == null && !WEATHER_HEAL_MOVES.has(stored.slug)) {
-        const healed = Math.min(maxHpForMon(enemy), enemyHp + Math.max(1, Math.floor(maxHpForMon(enemy) / 2)));
-        setEnemyHp(healed);
+        const healed = Math.min(maxHpForMon(enemy), enemyHpRef.current + Math.max(1, Math.floor(maxHpForMon(enemy) / 2)));
+        commitEnemyHp(healed);
         patchEnemy({ hp: healed });
       }
       await delay(900);
@@ -1137,14 +1147,14 @@ export function BattleArena({
       setEnemyStages((s) => mergeStageDelta(s, post.attackerStageDelta));
     }
     if (post.recoilDamage) {
-      const newHp = Math.max(0, enemyHp - post.recoilDamage);
-      setEnemyHp(newHp);
+      const newHp = Math.max(0, enemyHpRef.current - post.recoilDamage);
+      commitEnemyHp(newHp);
       patchEnemy({ hp: newHp });
       showDamage(`-${post.recoilDamage}`, 'enemy');
     }
     if (post.drainHeal) {
-      const healed = Math.min(maxHpForMon(enemy), enemyHp + post.drainHeal);
-      setEnemyHp(healed);
+      const healed = Math.min(maxHpForMon(enemy), enemyHpRef.current + post.drainHeal);
+      commitEnemyHp(healed);
       patchEnemy({ hp: healed });
     }
     if (post.clearSpikes) {
@@ -1157,7 +1167,7 @@ export function BattleArena({
     }
     if (post.selfFaint && totalDamage > 0) {
       patchEnemy({ hp: 0 });
-      setEnemyHp(0);
+      commitEnemyHp(0);
       await advanceAfterEnemyFaint();
       return false;
     }
@@ -1440,7 +1450,7 @@ export function BattleArena({
             move: talked,
             attacker,
             defender: enemy,
-            defenderHp: enemyHp,
+            defenderHp: enemyHpRef.current,
             attackerVolatiles: playerVolatiles,
             defenderVolatiles: enemyVolatiles,
             attackerStages: playerStages,
@@ -1452,8 +1462,8 @@ export function BattleArena({
             hiddenPowerType: talked.slug === 'hidden-power' ? hpType : undefined,
             powerMultiplier,
           });
-          const newHp = Math.max(0, enemyHp - talkDmg.damage);
-          setEnemyHp(newHp);
+          const newHp = Math.max(0, enemyHpRef.current - talkDmg.damage);
+          commitEnemyHp(newHp);
           patchEnemy({ hp: newHp });
           if (talkDmg.damage > 0) {
             triggerShake();
@@ -1494,7 +1504,7 @@ export function BattleArena({
                 move: mimicked,
                 attacker: useGameStore.getState().party[0] ?? attacker,
                 defender: enemy,
-                defenderHp: enemyHp,
+                defenderHp: enemyHpRef.current,
                 attackerVolatiles: playerVolatiles,
                 defenderVolatiles: enemyVolatiles,
                 attackerStages: playerStages,
@@ -1503,8 +1513,8 @@ export function BattleArena({
                 xAttackSpecial: xAttackSpecial || useMultiplayerStore.getState().xAttackAllActive,
                 region: battleRegion,
               });
-              const newHp = Math.max(0, enemyHp - metroDmg.damage);
-              setEnemyHp(newHp);
+              const newHp = Math.max(0, enemyHpRef.current - metroDmg.damage);
+              commitEnemyHp(newHp);
               patchEnemy({ hp: newHp });
               if (metroDmg.damage > 0) {
                 triggerShake();
@@ -1546,7 +1556,7 @@ export function BattleArena({
         move: releaseMove,
         attacker,
         defender: { ...enemy, status: defenderStatus },
-        defenderHp: enemyHp,
+        defenderHp: enemyHpRef.current,
         attackerVolatiles: playerVolatiles,
         defenderVolatiles: enemyVolatiles,
         attackerStages: playerStages,
@@ -1566,8 +1576,8 @@ export function BattleArena({
       }
 
       if (dmgResult.presentHeal) {
-        const healed = Math.min(maxHpForMon(enemy), enemyHp + dmgResult.presentHeal);
-        setEnemyHp(healed);
+        const healed = Math.min(maxHpForMon(enemy), enemyHpRef.current + dmgResult.presentHeal);
+        commitEnemyHp(healed);
         patchEnemy({ hp: healed });
         say(`${attacker.nickname ?? attacker.displayName} used Present! The foe recovered HP!`);
         await delay(900);
@@ -1578,8 +1588,8 @@ export function BattleArena({
       const lastCrit = dmgResult.lastCrit;
       const lastEffectiveness = dmgResult.lastEffectiveness;
 
-      const newEnemyHp = Math.max(0, enemyHp - totalDamage);
-      setEnemyHp(newEnemyHp);
+      const newEnemyHp = Math.max(0, enemyHpRef.current - totalDamage);
+      commitEnemyHp(newEnemyHp);
       patchEnemy({ hp: newEnemyHp });
       if (totalDamage > 0) {
         const cat = releaseMove.category === 'physical' ? 'physical' : 'special';
@@ -1785,8 +1795,8 @@ export function BattleArena({
       setProcessing(true);
       const counterDmg = counterReleaseDamage(pending);
       if (counterDmg > 0 && enemy) {
-        const newHp = Math.max(0, enemyHp - counterDmg);
-        setEnemyHp(newHp);
+        const newHp = Math.max(0, enemyHpRef.current - counterDmg);
+        commitEnemyHp(newHp);
         patchEnemy({ hp: newHp });
         triggerShake();
         playSfx('hit', muted);
@@ -2193,7 +2203,7 @@ export function BattleArena({
   const displayPower = (move: BattleMove, level: number, boosted: boolean) =>
     formatMovePowerDisplay(move, level, boosted, {
       defenderSpeciesId: enemy.id,
-      defenderHp: enemyHp,
+      defenderHp: enemyHpRef.current,
     });
 
   return (
