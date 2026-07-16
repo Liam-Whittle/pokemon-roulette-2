@@ -9,6 +9,7 @@ import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import { useGameStore } from '../store/useGameStore';
 import { playClip, stopClip } from '../utils/music';
 import { getCryStyleForRegion } from '../data/pools';
+import { applyRegionMoveType } from '../data/gen2MoveTypes';
 import { MAGIKARP_ID, describeMove, formatMoveCategory, formatMovePowerDisplay } from '../data/moves';
 import {
   getBaseStatsForSpecies,
@@ -112,6 +113,7 @@ export function PokemonDetailModal({
   const [data, setData] = useState<PokemonData | null>(null);
   const [detail, setDetail] = useState<PokemonDetail | null>(null);
   const muted = useGameStore((s) => s.muted);
+  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const cryStyle = useGameStore((s) => getCryStyleForRegion(s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const isMagichad = shiny && id === MAGIKARP_ID;
   const [introDone, setIntroDone] = useState(!shiny);
@@ -465,7 +467,7 @@ export function PokemonDetailModal({
                       <article key={move.slug} className="mon-detail-side__move-card">
                         <div className="mon-detail-side__move-head">
                           <h5 className="mon-detail-side__move-name">{move.name}</h5>
-                          <TypeBadge type={move.type} size="sm" />
+                          <TypeBadge type={applyRegionMoveType(move.slug, move.type, region)} size="sm" />
                         </div>
                         <div className="mon-detail-side__move-meta">
                           <span className="mon-detail-side__move-tag">{formatMoveCategory(move.category)}</span>

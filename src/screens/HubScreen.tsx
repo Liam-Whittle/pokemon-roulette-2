@@ -46,11 +46,14 @@ export function HubScreen() {
   const pendingHubNotice = useGameStore((s) => s.pendingHubNotice);
   const setPendingHubNotice = useGameStore((s) => s.setPendingHubNotice);
 
+  const setPendingGymAfterShop = useGameStore((s) => s.setPendingGymAfterShop);
+
   const [activePathway, setActivePathway] = useState<PathwayId | null>(null);
   const [wheelLocked, setWheelLocked] = useState(false);
   const [uberSpinOpen, setUberSpinOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
+  const [martPrompt, setMartPrompt] = useState<'gym' | 'elite' | null>(null);
 
   const totalGyms = getRegionTotalGyms(region);
   const gymBadges = badges.length;
@@ -58,7 +61,7 @@ export function HubScreen() {
   const spinsSinceGym = spinsCount - lastGymSpin;
   const spinsThreshold = allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM;
   const spinsUntilNext = Math.max(0, spinsThreshold - spinsSinceGym);
-  const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || pokeCenterOpen;
+  const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || pokeCenterOpen || !!martPrompt;
 
   const wheelSegments: WheelSegment[] = activePathway
     ? activePathway === 'catch'
@@ -73,16 +76,16 @@ export function HubScreen() {
     if (!gymsDone) {
       if (spinsSince >= SPINS_PER_GYM) {
         setLastGymSpin(state.spinsCount);
-        setScreen('gym');
+        setMartPrompt('gym');
         return true;
       }
     } else if (!state.eliteCleared && spinsSince >= ELITE_PREP_SPINS) {
       setLastGymSpin(state.spinsCount);
-      setScreen('elite');
+      setMartPrompt('elite');
       return true;
     }
     return false;
-  }, [setLastGymSpin, setScreen]);
+  }, [setLastGymSpin]);
 
   const returnToPathHub = useCallback(() => {
     setActivePathway(null);
@@ -154,17 +157,6 @@ export function HubScreen() {
           const msg = 'You received a Potion!';
           setNotice(msg);
           publishHostActivity({ kind: 'notice', title: 'Potion!', message: msg, success: true, itemId: 'potion' });
-        } else if (segment.activity === 'elixir') {
-          addItem('maxelixer', 1);
-          const msg = 'You received a Max Elixir!';
-          setNotice(msg);
-          publishHostActivity({
-            kind: 'notice',
-            title: 'Max Elixir!',
-            message: msg,
-            success: true,
-            itemId: 'maxelixer',
-          });
         } else if (segment.activity === 'rarecandy') {
           addItem('rarecandy', 1);
           const msg = 'You received a Rare Candy!';
@@ -175,17 +167,6 @@ export function HubScreen() {
             message: msg,
             success: true,
             itemId: 'rarecandy',
-          });
-        } else if (segment.activity === 'healpowder') {
-          addItem('healpowder', 1);
-          const msg = 'You received Heal Powder!';
-          setNotice(msg);
-          publishHostActivity({
-            kind: 'notice',
-            title: 'Heal Powder!',
-            message: msg,
-            success: true,
-            itemId: 'healpowder',
           });
         } else if (segment.activity === 'xattack') {
           addItem('xattack', 1);
@@ -453,6 +434,43 @@ export function HubScreen() {
             <button type="button" className="btn btn--primary" onClick={dismissNotice}>
               Continue
             </button>
+          </div>
+        </div>
+      )}
+
+      {martPrompt && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal hub-notice-modal">
+            <p className="hub-notice-modal__text">
+              {martPrompt === 'elite'
+                ? 'The Elite Four await! Stock up at the Poké Mart before the gauntlet?'
+                : 'A Gym Leader is ready! Stock up at the Poké Mart before the battle?'}
+            </p>
+            <div className="battle-modal__actions">
+              <button
+                type="button"
+                className="btn btn--primary"
+                onClick={() => {
+                  const target = martPrompt;
+                  setMartPrompt(null);
+                  setPendingGymAfterShop(target);
+                  setScreen('shop');
+                }}
+              >
+                Visit Poké Mart
+              </button>
+              <button
+                type="button"
+                className="btn btn--ghost"
+                onClick={() => {
+                  const target = martPrompt;
+                  setMartPrompt(null);
+                  setScreen(target);
+                }}
+              >
+                Continue to battle
+              </button>
+            </div>
           </div>
         </div>
       )}

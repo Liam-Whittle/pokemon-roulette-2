@@ -53,8 +53,9 @@ import {
 } from '../data/battleVolatiles';
 import { healFractionForMove, mergeFieldPatch } from '../utils/battleStatusApply';
 import { getTypeEffectiveness, getEffectivenessChipLabel, buildHitBattleMessage, TYPE_COLORS } from '../data/typeChart';
+import { applyRegionMoveType } from '../data/gen2MoveTypes';
 import { SidePanel } from './SidePanel';
-import { BattleEffectBadges, hasVisibleBattleEffects } from './StatusBadge';
+import { BattleEffectBadges, hasVisibleBattleEffects, StageBadges, hasVisibleStageChanges } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { ItemIcon } from './ItemIcon';
 import { MagikarpSplashModal } from './MagikarpSplashModal';
@@ -509,6 +510,20 @@ export function BattleArena({
     if (el) el.scrollTop = el.scrollHeight;
   }, [log]);
 
+  // When the player reorders their party during prep/between (a plain slot swap
+  // rather than a battle send-out), the incoming active Pokémon must not inherit
+  // the previous mon's volatiles (confusion/leech/trap) or stat stages.
+  const activeCaughtAtRef = useRef<number | null>(party[0]?.caughtAt ?? null);
+  useEffect(() => {
+    const activeCaughtAt = party[0]?.caughtAt ?? null;
+    if (activeCaughtAt === activeCaughtAtRef.current) return;
+    activeCaughtAtRef.current = activeCaughtAt;
+    if (phase === 'prep' || phase === 'between') {
+      setPlayerStages(ZERO_STAGES);
+      setPlayerVolatiles(clearVolatiles());
+    }
+  }, [party, phase]);
+
   const sendOutNextEnemy = useCallback(
     (index: number, team: CaughtPokemon[]) => {
       const mon = team[index];
@@ -641,9 +656,11 @@ export function BattleArena({
     }
     clearBattleSnapshot();
     if (battleContext === 'gym') {
-      grantXpAllPartyAndPc(50);
+      grantXpAllPartyAndPc(300);
     } else if (battleContext === 'elite') {
       grantXpAllPartyAndPc(350);
+    } else if (battleContext === 'teamrocket') {
+      grantXpAllPartyAndPc(100);
     }
     if (battleContext === 'gym' && winBadge) {
       useGameStore.setState((s) => ({ party: clearAllStatuses(s.party) }));
@@ -735,16 +752,21 @@ export function BattleArena({
       }
     }
 
+    // Track the enemy's HP locally so each end-of-turn effect works off the
+    // running value rather than a stale closure (prevents DoT/recoil from being
+    // "undone" by a later heal such as Leech Seed).
+    let currentEnemyHp = enemyHp;
+
     if (enemy?.status) {
-      const ticked = tickStatusDamage({ ...enemy, hp: enemyHp });
+      const ticked = tickStatusDamage({ ...enemy, hp: currentEnemyHp });
       if (ticked.damage > 0) {
-        const newHp = Math.max(0, enemyHp - ticked.damage);
-        setEnemyHp(newHp);
-        patchEnemy({ hp: newHp, status: ticked.mon.status });
+        currentEnemyHp = Math.max(0, currentEnemyHp - ticked.damage);
+        setEnemyHp(currentEnemyHp);
+        patchEnemy({ hp: currentEnemyHp, status: ticked.mon.status });
         say(ticked.message);
         showDamage(`-${ticked.damage}`, 'enemy');
         await delay(900);
-        if (newHp <= 0) {
+        if (currentEnemyHp <= 0) {
           await advanceAfterEnemyFaint();
         }
       }
@@ -766,37 +788,38 @@ export function BattleArena({
       showDamage(`-${curseDmg}`, 'player');
       await delay(700);
     }
-    if (enemy && enemyVolatiles.cursed && enemyHp > 0) {
+    if (enemy && enemyVolatiles.cursed && currentEnemyHp > 0) {
       const curseDmg = Math.max(1, Math.floor(maxHpForMon(enemy) / 4));
-      const newHp = Math.max(0, enemyHp - curseDmg);
-      setEnemyHp(newHp);
-      patchEnemy({ hp: newHp });
+      currentEnemyHp = Math.max(0, currentEnemyHp - curseDmg);
+      setEnemyHp(currentEnemyHp);
+      patchEnemy({ hp: currentEnemyHp });
       say(`${enemy.displayName} is afflicted by the curse!`);
       showDamage(`-${curseDmg}`, 'enemy');
       await delay(700);
-      if (newHp <= 0) await advanceAfterEnemyFaint();
+      if (currentEnemyHp <= 0) await advanceAfterEnemyFaint();
     }
 
     const playerAfter = useGameStore.getState().party[0];
-    if (playerAfter && playerVolatiles.leechSeeded && enemy && enemyHp > 0) {
+    if (playerAfter && playerVolatiles.leechSeeded && enemy && currentEnemyHp > 0) {
       const drain = Math.max(1, Math.floor(maxHpForMon(playerAfter) / 8));
       damagePartyMember(playerAfter.caughtAt, drain);
-      const healed = Math.min(maxHpForMon(enemy), enemyHp + drain);
-      setEnemyHp(healed);
-      patchEnemy({ hp: healed });
+      currentEnemyHp = Math.min(maxHpForMon(enemy), currentEnemyHp + drain);
+      setEnemyHp(currentEnemyHp);
+      patchEnemy({ hp: currentEnemyHp });
       say(`${playerAfter.displayName}'s health is sapped by Leech Seed!`);
       showDamage(`-${drain}`, 'player');
       await delay(700);
     }
-    if (enemy && enemyVolatiles.leechSeeded && playerAfter && !isFainted(playerAfter)) {
+    if (enemy && enemyVolatiles.leechSeeded && playerAfter && !isFainted(playerAfter) && currentEnemyHp > 0) {
       const drain = Math.max(1, Math.floor(maxHpForMon(enemy) / 8));
-      const newEnemyHp = Math.max(0, enemyHp - drain);
-      setEnemyHp(newEnemyHp);
-      patchEnemy({ hp: newEnemyHp });
+      currentEnemyHp = Math.max(0, currentEnemyHp - drain);
+      setEnemyHp(currentEnemyHp);
+      patchEnemy({ hp: currentEnemyHp });
       useGameStore.getState().healPartyMember(playerAfter.caughtAt, drain);
       say(`Leech Seed sapped ${enemy.displayName}!`);
       showDamage(`-${drain}`, 'enemy');
       await delay(700);
+      if (currentEnemyHp <= 0) await advanceAfterEnemyFaint();
     }
     pendingEndOfTurnRef.current = false;
   }, [advanceAfterEnemyFaint, battleField.weatherTurns, damagePartyMember, enemy, enemyHp, enemyVolatiles, handlePartyWipe, muted, patchEnemy, playerVolatiles.cursed, playerVolatiles.leechSeeded, say]);
@@ -812,9 +835,11 @@ export function BattleArena({
         const after = tickSleep(mon.status!);
         if (side === 'player') setPartyMemberStatus(mon.caughtAt, after);
         else patchEnemy({ status: after });
+        // Whether still asleep or just waking this turn, the Pokémon cannot act.
+        // (Waking no longer grants a free attack on the same turn.)
         return after
           ? { canAct: false, message: `${mon.displayName} is fast asleep!`, statusAfter: after }
-          : { canAct: true, message: `${mon.displayName} woke up!`, statusAfter: undefined };
+          : { canAct: false, message: `${mon.displayName} woke up!`, statusAfter: undefined };
       }
       if (isFrozen(mon.status)) {
         const thawed = tryThaw(mon.status);
@@ -1210,6 +1235,10 @@ export function BattleArena({
           } else {
             const pick = pickRandom(candidates);
             game.setActivePartyMember(pick.caughtAt);
+            // New Pokémon enters clean — don't inherit the previous mon's
+            // confusion/leech/trap or stat stage changes.
+            setPlayerStages(ZERO_STAGES);
+            setPlayerVolatiles(clearVolatiles());
           }
           break;
         }
@@ -2241,6 +2270,11 @@ export function BattleArena({
                     />
                   </div>
                 )}
+                {hasVisibleStageChanges(enemyStages) && (
+                  <div className="gym-enemy__status-row">
+                    <StageBadges stages={enemyStages} placement="battle-row" />
+                  </div>
+                )}
                 <HpBar current={enemyHp} max={enemyMaxHp} />
                 <span className="gym-enemy__power">Lv. {enemy.level}</span>
                 <div className="gym-enemy__types">
@@ -2284,7 +2318,7 @@ export function BattleArena({
                   const moveType =
                     move.slug === 'hidden-power'
                       ? (battleField.hiddenPowerTypes[move.ownerCaughtAt] ?? move.type)
-                      : move.type;
+                      : applyRegionMoveType(move.slug, move.type, battleRegion);
                   const mult = getTypeEffectiveness(moveType, enemy.types, battleRegion);
                   const effChip =
                     move.category !== 'status' && !isFixedDamageMove(move.slug)
@@ -2428,6 +2462,7 @@ export function BattleArena({
             }
             highlightActive={phase !== 'prep'}
             activeBattlerVolatiles={playerVolatiles}
+            activeBattlerStages={playerStages}
             inBattle
             onPotionUsed={() => spendItemTurn('You used a Potion!')}
             onElixirUsed={() => spendItemTurn('You used a Max Elixir!')}

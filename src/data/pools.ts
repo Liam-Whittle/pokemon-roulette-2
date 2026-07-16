@@ -36,10 +36,8 @@ export const PATH_CATCH_SEGMENTS: WheelSegment[] = [
 export const PATH_ITEMS_SEGMENTS: WheelSegment[] = [
   { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
   { id: 'stone', label: 'Stone', activity: 'stone', color: '#a78bfa', icon: '🪨' },
-  { id: 'elixir', label: 'Elixir', activity: 'elixir', color: '#38bdf8', icon: '🧪' },
   { id: 'potion', label: 'Potion', activity: 'potion', color: '#fb923c', icon: '💊' },
   { id: 'rarecandy', label: 'Rare Candy', activity: 'rarecandy', color: '#f472b6', icon: '🍬' },
-  { id: 'healpowder', label: 'Heal Powder', activity: 'healpowder', color: '#86efac', icon: '🌿' },
   { id: 'xattack', label: 'X-Attack', activity: 'xattack', color: '#ef4444', icon: '⚔️' },
 ];
 
@@ -702,7 +700,7 @@ export const JOHTO_ELITE_FOUR: GymLeader[] = [
       { id: 149, name: 'dragonite', level: 47 },
       { id: 142, name: 'aerodactyl', level: 46 },
       { id: 149, name: 'dragonite', level: 50 },
-      { id: 245, name: 'suicune', level: 50 },
+      { id: 6, name: 'charizard', level: 50 },
     ],
   },
 ];

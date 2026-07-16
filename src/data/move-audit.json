@@ -257,7 +257,7 @@
     "inCuratedCount": 15,
     "category": "status",
     "power": 0,
-    "accuracy": 100,
+    "accuracy": 75,
     "statusEffect": null,
     "battleStatus": "implemented",
     "descriptionStatus": "accurate",

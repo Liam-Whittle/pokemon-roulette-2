@@ -10,6 +10,7 @@ import { useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { getTypeEffectiveness, getEffectivenessChipLabel, TYPE_COLORS } from '../data/typeChart';
+import { applyRegionMoveType } from '../data/gen2MoveTypes';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { battleGifOnError, imgFallback, localBattleGif, localPokemonSprite } from '../utils/localAssets';
 import { formatMovePowerDisplay, isFixedDamageMove } from '../data/moves';
@@ -265,7 +266,8 @@ export function MpGuestScreen() {
               <p className="battle-move-select__title">Your Pokémon — choose a move</p>
               <div className="battle-move-grid">
                 {battle.moves.map((move) => {
-                  const mult = getTypeEffectiveness(move.type, battle.enemyTypes, battleRegion);
+                  const moveType = applyRegionMoveType(move.slug, move.type, battleRegion);
+                  const mult = getTypeEffectiveness(moveType, battle.enemyTypes, battleRegion);
                   const effChip =
                     move.fromActive &&
                     !isFixedDamageMove(move.slug) &&
@@ -279,7 +281,7 @@ export function MpGuestScreen() {
                       key={key}
                       type="button"
                       className={`battle-move-btn${!move.fromActive ? ' battle-move-btn--switch' : ''}${ppDepleted ? ' battle-move-btn--disabled' : ''}`}
-                      style={{ backgroundColor: TYPE_COLORS[move.type] ?? '#888' }}
+                      style={{ backgroundColor: TYPE_COLORS[moveType] ?? '#888' }}
                       disabled={ppDepleted || battle.processing}
                       onClick={() => {
                         playSfx('click', muted);

@@ -4,11 +4,8 @@ import { CatchChance } from '../components/CatchChance';
 import { CatchCombo } from '../components/CatchCombo';
 import { SpriteCard } from '../components/SpriteCard';
 import { Confetti } from '../components/Confetti';
-import { Wheel } from '../components/Wheel';
 import { ITEM_SPRITES } from '../data/icons';
-import { SHINY_WHEEL_CHARM_SEGMENTS, SHINY_WHEEL_SEGMENTS } from '../data/pools';
-import { publishHostActivity, publishHostWheelSpin } from '../multiplayer/publish';
-import { isHostConnected, useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
+import { publishHostActivity } from '../multiplayer/publish';
 import { useGameStore } from '../store/useGameStore';
 import { resolveEncounterPokemon, resetEncounterSession } from '../utils/encounterSession';
 import { playSfx } from '../utils/sound';
@@ -18,7 +15,7 @@ import { getSpeciesCatchRate, encounterLevelForBadges } from '../utils/xp';
 import { catchProbability, formatCatchPercent } from '../utils/catchChance';
 import type { ActivityType, PokemonData } from '../types/game';
 
-type CatchPhase = 'ball' | 'catch' | 'chance' | 'caught' | 'shiny' | 'done';
+type CatchPhase = 'ball' | 'catch' | 'chance' | 'caught' | 'done';
 type BallId = 'pokeball' | 'greatball' | 'ultraball' | 'masterball';
 
 const BALL_OPTIONS: { id: BallId; label: string; sprite: string }[] = [
@@ -54,8 +51,6 @@ function encounterFlavor(activity: ActivityType | null, isLegendary: boolean): s
 export function CatchScreen() {
   const currentActivity = useGameStore((s) => s.currentActivity);
   const bag = useGameStore((s) => s.bag);
-  const lastCaughtAt = useGameStore((s) => s.lastCaughtAt);
-  const lastCaughtId = useGameStore((s) => s.lastCaughtId);
   const catchGamemode = useGameStore((s) => s.catchGamemode) ?? 'skill';
   const catchPokemon = useGameStore((s) => s.catchPokemon);
   const consumeItem = useGameStore((s) => s.consumeItem);
@@ -64,7 +59,6 @@ export function CatchScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const badges = useGameStore((s) => s.badges);
   const muted = useGameStore((s) => s.muted);
-  const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
 
   const [pokemon, setPokemon] = useState<PokemonData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -104,40 +98,6 @@ export function CatchScreen() {
     }
   }, [loading, pokemon, muted]);
 
-  useEffect(() => {
-    if (!isHostConnected()) return;
-    const applyShiny = (shiny: boolean) => {
-      const game = useGameStore.getState();
-      if (shiny && (game.lastCaughtAt != null || game.lastCaughtId != null)) {
-        setShinyOnCatch(game.lastCaughtAt ?? 0);
-        setShinyResult('shiny');
-        if (!muted) playClip(asset('sounds/pokemon_caught.mp3'));
-        setShowConfetti(true);
-      }
-      useMultiplayerStore.getState().setOutcome(
-        shiny ? 'Your friend rolled a shiny!' : "Friend's shiny roll: not shiny.",
-      );
-      useMultiplayerStore.getState().setAwaitingGuest(null);
-      const mon = pokemon;
-      if (mon) {
-        publishHostActivity({
-          kind: 'catch',
-          title: shiny ? 'Shiny Caught!' : 'Caught!',
-          message: shiny
-            ? `✨ Friend rolled shiny — ${mon.displayName} is shiny!`
-            : `${mon.displayName} joined the party.`,
-          success: true,
-          pokemonName: mon.displayName,
-          pokemonSprite: shiny && mon.shinySprite ? mon.shinySprite : mon.sprite,
-          shiny,
-        });
-      }
-      setPhase('done');
-    };
-    useMultiplayerStore.getState().setShinyApplyHandler(applyShiny);
-    return () => useMultiplayerStore.getState().setShinyApplyHandler(null);
-  }, [muted, setShinyOnCatch, pokemon]);
-
   function resultActivityType(): ActivityType {
     if (currentActivity === 'fishing') return 'fishing';
     if (currentActivity === 'tallgrass') return 'tallgrass';
@@ -155,7 +115,35 @@ export function CatchScreen() {
     setPokemonAbsorbed(false);
     catchPokemon(pokemon, undefined, ballId);
     setResolved(true);
-    setPhase('shiny');
+
+    // Shiny is rolled at catch time (like the starter): 1/40 normally, 1/15 with
+    // a Shiny Charm in the bag. No separate spin.
+    const shinyOdds = hasShinyCharm ? 1 / 15 : 1 / 40;
+    const isShiny = Math.random() < shinyOdds;
+    setShinyResult(isShiny ? 'shiny' : 'normal');
+
+    if (isShiny) {
+      const game = useGameStore.getState();
+      if (game.lastCaughtAt != null || game.lastCaughtId != null) {
+        setShinyOnCatch(game.lastCaughtAt ?? 0);
+      }
+      if (!muted) playClip(asset('sounds/pokemon_caught.mp3'));
+      setShowConfetti(true);
+    }
+
+    publishHostActivity({
+      kind: 'catch',
+      title: isShiny ? 'Shiny Caught!' : 'Caught!',
+      message: isShiny
+        ? `✨ ${pokemon.displayName} joined the party as a shiny!`
+        : `${pokemon.displayName} joined the party.`,
+      success: true,
+      pokemonName: pokemon.displayName,
+      pokemonSprite: isShiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite,
+      shiny: isShiny,
+    });
+
+    setPhase('done');
   }
 
   function startThrow(ballId: BallId) {
@@ -234,51 +222,6 @@ export function CatchScreen() {
     setPhase('ball');
   }
 
-  function handleShinyLand(segment: { id: string }) {
-    const isShiny = segment.id === 'shiny';
-    const shinySegments = hasShinyCharm ? SHINY_WHEEL_CHARM_SEGMENTS : SHINY_WHEEL_SEGMENTS;
-    publishHostWheelSpin({
-      kind: 'shiny',
-      title: 'Shiny Check',
-      segments: shinySegments,
-      result: { id: segment.id, label: segment.id === 'shiny' ? 'Shiny' : 'Normal' },
-    });
-
-    setShinyResult(isShiny ? 'shiny' : 'normal');
-    // Party catches use lastCaughtAt; PC-only duplicate power-boosts use lastCaughtId.
-    if (isShiny && (lastCaughtAt != null || lastCaughtId != null)) {
-      setShinyOnCatch(lastCaughtAt ?? 0);
-    }
-    if (!muted) playClip(asset('sounds/pokemon_caught.mp3'));
-    setShowConfetti(true);
-
-    // Guest gets an extra shiny roll only when the catch is not already shiny.
-    if (!isShiny && isHostConnected()) {
-      const game = useGameStore.getState();
-      useMultiplayerStore
-        .getState()
-        .requestShinyRoll(hasShinyCharm, game.lastCaughtAt, game.lastCaughtId);
-      return;
-    }
-
-    if (pokemon) {
-      publishHostActivity({
-        kind: 'catch',
-        title: isShiny ? 'Shiny Caught!' : 'Caught!',
-        message: isShiny
-          ? `✨ ${pokemon.displayName} joined the party as a shiny!`
-          : `${pokemon.displayName} joined the party.`,
-        success: true,
-        pokemonName: pokemon.displayName,
-        pokemonSprite:
-          isShiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite,
-        shiny: isShiny,
-      });
-    }
-
-    setPhase('done');
-  }
-
   if (loading) {
     return (
       <div className="screen catch-screen">
@@ -300,7 +243,6 @@ export function CatchScreen() {
 
   const catchRate = getSpeciesCatchRate(pokemon.id);
   const encounterLevel = encounterLevelForBadges(badges.length);
-  const shinyWheelSegments = hasShinyCharm ? SHINY_WHEEL_CHARM_SEGMENTS : SHINY_WHEEL_SEGMENTS;
   const sceneVariant =
     currentActivity === 'fishing'
       ? 'catch-scene--water'
@@ -432,19 +374,6 @@ export function CatchScreen() {
           })()}
         </motion.div>
       </div>
-
-      {phase === 'shiny' && awaitingGuest !== 'shinyRoll' && (
-        <div className="battle-modal__backdrop">
-          <div className="battle-modal shiny-wheel-modal">
-            <h2 className="battle-modal__title">Shiny Check!</h2>
-            <p className="battle-modal__subtitle">
-              Spin to see if {pokemon.displayName} becomes shiny
-              {hasShinyCharm ? ' (Shiny Charm active — 1 in 15!)' : ' (1 in 40)'}.
-            </p>
-            <Wheel segments={shinyWheelSegments} onLand={handleShinyLand} />
-          </div>
-        </div>
-      )}
 
       {confirmMasterBall && (
         <div className="battle-modal__backdrop">

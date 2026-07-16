@@ -3,7 +3,9 @@ import { maxHpForMon } from './stats';
 
 export function createStatus(kind: StatusAilment): StatusCondition {
   if (kind === 'sleep') {
-    return { kind, turnsLeft: 1 + Math.floor(Math.random() * 3) };
+    // 2-3 turns of guaranteed sleep. The wake turn itself also skips the action
+    // (handled in canAct), so the target never attacks the turn it dozes off.
+    return { kind, turnsLeft: 2 + Math.floor(Math.random() * 2) };
   }
   if (kind === 'toxic') {
     return { kind, toxicCounter: 1 };

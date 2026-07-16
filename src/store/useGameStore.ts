@@ -85,6 +85,8 @@ interface GameState {
   catchGamemode: CatchGamemode;
   /** One-shot notice shown when the hub screen next mounts (e.g. after Team Rocket). */
   pendingHubNotice: string | null;
+  /** When set, leaving the Poké Mart routes to this battle instead of the hub. */
+  pendingGymAfterShop: 'gym' | 'elite' | null;
   /** Wall-clock start of the current run; null before trainer setup. */
   runStartedAt: number | null;
   itemsUsed: number;
@@ -94,6 +96,7 @@ interface GameState {
   shiniesCaught: number;
 
   setScreen: (screen: Screen) => void;
+  setPendingGymAfterShop: (target: 'gym' | 'elite' | null) => void;
   setDebugGym: (id: string | null) => void;
   setDebugEliteStage: (stage: number | null) => void;
   setTrainer: (trainer: Trainer) => void;
@@ -345,6 +348,7 @@ export const useGameStore = create<GameState>()(
       battleSnapshot: null,
       catchGamemode: 'skill' as CatchGamemode,
       pendingHubNotice: null,
+      pendingGymAfterShop: null,
       runStartedAt: null,
       itemsUsed: 0,
       livesUsed: 0,
@@ -353,6 +357,7 @@ export const useGameStore = create<GameState>()(
       shiniesCaught: 0,
 
       setScreen: (screen) => set({ screen }),
+      setPendingGymAfterShop: (pendingGymAfterShop) => set({ pendingGymAfterShop }),
       setPendingHubNotice: (pendingHubNotice) => set({ pendingHubNotice }),
       setDebugGym: (debugGymId) => set({ debugGymId }),
       setDebugEliteStage: (debugEliteStage) => set({ debugEliteStage }),
@@ -681,6 +686,8 @@ export const useGameStore = create<GameState>()(
                   types: cached.types,
                   sprite: entry.sprite,
                   artwork: entry.sprite,
+                  shinySprite: entry.shinySprite,
+                  shinyArtwork: entry.shinySprite,
                   catchRate: cached.catchRate,
                   isLegendary: cached.isLegendary,
                   baseStats: cached.baseStats,
@@ -1125,6 +1132,7 @@ export const useGameStore = create<GameState>()(
           battleSnapshot: null,
           catchGamemode: 'chance',
           pendingHubNotice: null,
+          pendingGymAfterShop: null,
           runStartedAt: null,
           itemsUsed: 0,
           livesUsed: 0,

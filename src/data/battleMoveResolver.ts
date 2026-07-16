@@ -505,7 +505,9 @@ export function resolvePostDamage(ctx: PostDamageContext): PostDamageResult {
 
 export function resolveOhko(attackerLevel: number, defenderLevel: number, slug: string): boolean {
   if (!OHKO_MOVES.has(slug)) return false;
-  return defenderLevel <= attackerLevel && Math.random() < 0.3 + (attackerLevel - defenderLevel) * 0.01;
+  // The move's own accuracy already gated the hit; a connecting OHKO always
+  // faints the target as long as it isn't higher level than the attacker.
+  return defenderLevel <= attackerLevel;
 }
 
 export function getMultiHitCount(slug: string): number {

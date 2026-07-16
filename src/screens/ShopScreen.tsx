@@ -1,7 +1,9 @@
+import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { SHOP_CATALOG } from '../data/pools';
 import { PokeDollarAmount } from '../components/PokeDollar';
 import { ItemIcon } from '../components/ItemIcon';
+import { ItemDetailModal } from '../components/ItemDetailModal';
 import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
@@ -13,11 +15,25 @@ export function ShopScreen() {
   const setScreen = useGameStore((s) => s.setScreen);
   const spendMoney = useGameStore((s) => s.spendMoney);
   const addItem = useGameStore((s) => s.addItem);
+  const pendingGymAfterShop = useGameStore((s) => s.pendingGymAfterShop);
+  const setPendingGymAfterShop = useGameStore((s) => s.setPendingGymAfterShop);
+
+  const [detail, setDetail] = useState<{ id: string; name: string; icon: string } | null>(null);
 
   function buyItem(itemId: string, price: number) {
     if (!spendMoney(price)) return;
     addItem(itemId);
     playSfx('item', muted);
+  }
+
+  function leaveShop() {
+    if (pendingGymAfterShop) {
+      const target = pendingGymAfterShop;
+      setPendingGymAfterShop(null);
+      setScreen(target);
+      return;
+    }
+    setScreen('hub');
   }
 
   return (
@@ -28,8 +44,8 @@ export function ShopScreen() {
       exit={{ opacity: 0 }}
     >
       <header className="shop-header">
-        <button type="button" className="btn btn--ghost btn--sm" onClick={() => setScreen('hub')}>
-          ← Back to Hub
+        <button type="button" className="btn btn--ghost btn--sm" onClick={leaveShop}>
+          {pendingGymAfterShop ? '→ To Battle' : '← Back to Hub'}
         </button>
         <h2 className="screen-title">
           <GameIcon ui="shop" alt="" className="game-icon-img game-icon-img--title" /> Poké Mart
@@ -45,8 +61,15 @@ export function ShopScreen() {
           const canAfford = money >= item.price;
           return (
             <div key={item.id} className="shop-card">
-              <ItemIcon id={item.id} icon={item.icon} name={item.name} className="shop-card__icon" />
-              <h3 className="shop-card__name">{item.name}</h3>
+              <button
+                type="button"
+                className="shop-card__info"
+                onClick={() => setDetail({ id: item.id, name: item.name, icon: item.icon })}
+                aria-label={`View ${item.name} details`}
+              >
+                <ItemIcon id={item.id} icon={item.icon} name={item.name} className="shop-card__icon" />
+                <h3 className="shop-card__name">{item.name}</h3>
+              </button>
               <p className="shop-card__owned">Owned: ×{owned}</p>
               <p className="shop-card__price">
                 <PokeDollarAmount amount={item.price} />
@@ -63,6 +86,15 @@ export function ShopScreen() {
           );
         })}
       </div>
+
+      {detail && (
+        <ItemDetailModal
+          id={detail.id}
+          name={detail.name}
+          icon={detail.icon}
+          onClose={() => setDetail(null)}
+        />
+      )}
     </motion.div>
   );
 }

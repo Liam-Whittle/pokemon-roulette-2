@@ -7,7 +7,7 @@ import { EvolutionModal } from './EvolutionModal';
 import { EvolutionPickerModal, type EvolutionPickerOption } from './EvolutionPickerModal';
 import { PokemonDetailModal } from './PokemonDetailModal';
 import { ItemDetailModal } from './ItemDetailModal';
-import { BattleEffectBadges } from './StatusBadge';
+import { BattleEffectBadges, StageBadges, type StatStageValues } from './StatusBadge';
 import type { BattleVolatiles } from '../data/battleVolatiles';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { currentHp, maxHpForMon, isFainted, MAX_LEVEL } from '../utils/stats';
@@ -60,6 +60,8 @@ interface SidePanelProps {
   onBattleSendOut?: (caughtAt: number) => void;
   /** Battle-only volatiles on the active battler (confusion, trap, etc.). */
   activeBattlerVolatiles?: BattleVolatiles;
+  /** Battle-only stat stage changes on the active battler (Atk/Def/etc.). */
+  activeBattlerStages?: StatStageValues;
 }
 
 function PartyHpBar({ current, max }: { current: number; max: number }) {
@@ -90,6 +92,7 @@ export function SidePanel({
   battleSendOutOnly = false,
   onBattleSendOut,
   activeBattlerVolatiles,
+  activeBattlerStages,
 }: SidePanelProps) {
   const party = useGameStore((state) => state.party);
   const pokedex = useGameStore((state) => state.pokedex);
@@ -303,6 +306,9 @@ export function SidePanel({
                       volatiles={inBattle && isActive ? activeBattlerVolatiles : undefined}
                       placement="party"
                     />
+                    {inBattle && isActive && (
+                      <StageBadges stages={activeBattlerStages} placement="party" />
+                    )}
                     <img
                       src={
                         pokemon.shiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite

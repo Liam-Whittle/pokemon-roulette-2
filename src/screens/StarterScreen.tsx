@@ -17,8 +17,11 @@ export function StarterScreen() {
   const [starter, setStarter] = useState<PokemonData | null>(null);
   const [revealed, setRevealed] = useState(false);
 
+  const hasShinyCharm = useGameStore(
+    (state) => (state.bag.find((item) => item.id === 'shinycharm')?.quantity ?? 0) > 0,
+  );
   const starterId = useMemo(() => pickRandom(getRegionStarters(region)), [region]);
-  const isShiny = useMemo(() => Math.random() < 1 / 40, []);
+  const isShiny = useMemo(() => Math.random() < (hasShinyCharm ? 1 / 15 : 1 / 40), [hasShinyCharm]);
 
   useEffect(() => {
     fetchPokemon(starterId).then(setStarter);

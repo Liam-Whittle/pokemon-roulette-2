@@ -7,6 +7,7 @@ import {
   type MovePowerContext,
 } from './moves';
 import { getTypeEffectiveness } from './typeChart';
+import { applyRegionMoveType } from './gen2MoveTypes';
 import {
   physicalDamageReduction,
   physicalDefenseMultiplier,
@@ -17,7 +18,7 @@ import { weatherTypeMultiplier } from './battleWeather';
 import { physicalDamageMultiplier } from '../utils/status';
 import { resolveOhko } from './battleMoveResolver';
 import { maxHpForMon } from '../utils/stats';
-import { getCritStageBonus, getRolloutPower, rollMultiHitCount } from './moveEffects';
+import { getCritStageBonus, getRolloutPower, rollMultiHitCount, OHKO_MOVES } from './moveEffects';
 import { resolvePresent } from './battleMoveResolver';
 import { rollHit } from './moves';
 
@@ -172,13 +173,20 @@ export function calculateMoveDamage(input: DamageCalcInput): DamageCalcResult {
   } = input;
 
   const moveType =
-    move.slug === 'hidden-power' && hiddenPowerType ? hiddenPowerType : move.type;
+    move.slug === 'hidden-power' && hiddenPowerType
+      ? hiddenPowerType
+      : applyRegionMoveType(move.slug, move.type, region);
   const effectiveness = getTypeEffectiveness(moveType, defender.types, region);
   const critBonus = getCritStageBonus(attackerVolatiles);
   const crit = rollCrit(move.slug, critBonus);
 
-  if (resolveOhko(attacker.level, defender.level, move.slug) && effectiveness > 0) {
-    return { damage: defenderHp, crit: false, effectiveness, ohko: true };
+  if (OHKO_MOVES.has(move.slug)) {
+    // OHKO moves never use the normal damage formula. A connecting hit either
+    // faints the target outright or fails outright (immune / higher level).
+    if (effectiveness > 0 && resolveOhko(attacker.level, defender.level, move.slug)) {
+      return { damage: defenderHp, crit: false, effectiveness, ohko: true };
+    }
+    return { damage: 0, crit: false, effectiveness, ohko: false };
   }
 
   const fixedDamage = getFixedDamage(move, attacker.level, defenderHp);

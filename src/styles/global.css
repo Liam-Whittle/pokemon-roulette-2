@@ -4110,6 +4110,23 @@ body {
   font-size: 2rem;
 }
 
+.shop-card__info {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.5rem;
+  background: none;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+}
+
+.shop-card__info:hover .shop-card__name {
+  text-decoration: underline;
+}
+
 .shop-card__name {
   font-size: 1rem;
   font-weight: 800;
@@ -4425,6 +4442,13 @@ body {
   font-size: 1.05rem;
   font-weight: 700;
   margin-bottom: 1rem;
+}
+
+.battle-modal__actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  align-items: stretch;
 }
 
 /* ── Battle prep gym type & effectiveness ── */
@@ -5910,6 +5934,53 @@ body {
 
 .battle-effect-badges--battle-row {
   gap: 0.25rem;
+}
+
+.stage-badges {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.2rem;
+}
+
+.stage-badges--party {
+  position: absolute;
+  bottom: -0.55rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 2;
+  max-width: 150%;
+}
+
+.stage-badges--battle-row {
+  margin-top: 0.2rem;
+  gap: 0.25rem;
+}
+
+.stage-badge {
+  display: inline-block;
+  padding: 0.1rem 0.4rem;
+  border-radius: 999px;
+  font-size: 0.58rem;
+  font-weight: 800;
+  letter-spacing: 0.03em;
+  white-space: nowrap;
+  color: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.35);
+}
+
+.stage-badges--battle-row .stage-badge {
+  font-size: 0.66rem;
+  padding: 0.14rem 0.5rem;
+}
+
+.stage-badge--up {
+  background: rgba(34, 197, 94, 0.92);
+}
+
+.stage-badge--down {
+  background: rgba(239, 68, 68, 0.92);
 }
 
 .status-badge--battle {

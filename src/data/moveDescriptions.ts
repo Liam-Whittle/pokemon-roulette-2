@@ -6,7 +6,7 @@ export const CURATED_MOVE_DESCRIPTIONS: Record<string, string | ((level: number)
   'barrage': 'Strikes with a Normal-type physical attack (power 15). Hits 2–5 times.',
   'barrier': 'Creates a barrier that raises Defense by 20% against physical hits until swapped out. Does not stack with Reflect.',
   'bind': 'Strikes with a Normal-type physical attack (power 15). Traps the target for 2–5 turns.',
-  'bite': 'Strikes with a Dark-type physical attack (power 60).',
+  'bite': 'Bites with vicious fangs for a physical attack (power 60).',
   'blizzard': 'Strikes with an Ice-type special attack (power 110). May freeze the target.',
   'body-slam': 'Strikes with a Normal-type physical attack (power 85). May paralyze the target.',
   'bone-club': 'Strikes with a Ground-type physical attack (power 65). May cause flinching.',

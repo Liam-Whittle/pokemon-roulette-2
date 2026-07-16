@@ -66,6 +66,59 @@ export function VolatileBadge({ kind, placement = 'party' }: VolatileBadgeProps)
   );
 }
 
+export interface StatStageValues {
+  atk: number;
+  def: number;
+  spa: number;
+  spd: number;
+  spe: number;
+  acc: number;
+  eva: number;
+}
+
+const STAGE_LABELS: { key: keyof StatStageValues; label: string; title: string }[] = [
+  { key: 'atk', label: 'ATK', title: 'Attack' },
+  { key: 'def', label: 'DEF', title: 'Defense' },
+  { key: 'spa', label: 'SP.ATK', title: 'Special Attack' },
+  { key: 'spd', label: 'SP.DEF', title: 'Special Defense' },
+  { key: 'spe', label: 'SPD', title: 'Speed' },
+  { key: 'acc', label: 'ACC', title: 'Accuracy' },
+  { key: 'eva', label: 'EVA', title: 'Evasion' },
+];
+
+export function hasVisibleStageChanges(stages?: StatStageValues | null): boolean {
+  if (!stages) return false;
+  return STAGE_LABELS.some(({ key }) => stages[key] !== 0);
+}
+
+interface StageBadgesProps {
+  stages?: StatStageValues | null;
+  placement?: EffectBadgePlacement;
+}
+
+export function StageBadges({ stages, placement = 'battle-row' }: StageBadgesProps) {
+  if (!hasVisibleStageChanges(stages)) return null;
+  return (
+    <div className={`stage-badges stage-badges--${placement}`}>
+      {STAGE_LABELS.map(({ key, label, title }) => {
+        const value = stages![key];
+        if (value === 0) return null;
+        const sign = value > 0 ? '+' : '';
+        return (
+          <span
+            key={key}
+            className={`stage-badge stage-badge--${value > 0 ? 'up' : 'down'}`}
+            title={`${title} ${sign}${value}`}
+            aria-label={`${title} ${sign}${value}`}
+          >
+            {label} {sign}{value}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 interface BattleEffectBadgesProps {
   status?: StatusCondition;
   volatiles?: BattleVolatiles | null;

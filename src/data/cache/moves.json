@@ -301,7 +301,7 @@
     "name": "Confuse Ray",
     "type": "ghost",
     "power": 0,
-    "accuracy": 100,
+    "accuracy": 75,
     "category": "status",
     "pp": 10,
     "statusEffect": null,
