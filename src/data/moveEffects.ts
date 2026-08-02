@@ -29,6 +29,20 @@ export const CHARGE_MOVE_SLUGS = new Set([
   'sky-attack',
 ]);
 
+/** Two-turn moves that make the user untargetable until they strike. */
+export const SEMI_INVULNERABLE_MOVE_SLUGS = new Set(['fly', 'dig']);
+
+export function isSemiInvulnerableMove(slug: string): boolean {
+  return SEMI_INVULNERABLE_MOVE_SLUGS.has(slug);
+}
+
+export function chargeMoveMessage(displayName: string, slug: string, moveName: string): string {
+  if (slug === 'fly') return `${displayName} flew up high!`;
+  if (slug === 'dig') return `${displayName} dug underground!`;
+  if (slug === 'solar-beam') return `${displayName} is taking in sunlight!`;
+  return `${displayName} is charging ${moveName}!`;
+}
+
 export const RECHARGE_MOVE_SLUGS = new Set(['hyper-beam']);
 
 export const MULTI_HIT_MOVES: Record<string, { min: number; max: number }> = {

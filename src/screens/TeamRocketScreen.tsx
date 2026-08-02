@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
+import { ItemIcon } from '../components/ItemIcon';
 import { PokeDollarAmount } from '../components/PokeDollar';
 import {
   TEAM_ROCKET_LEADER,
@@ -10,6 +11,7 @@ import { getCachedSpecies } from '../data/speciesCache';
 import { useGameStore } from '../store/useGameStore';
 import { asset } from '../utils/asset';
 import { playClip } from '../utils/music';
+import { playSfx } from '../utils/sound';
 import { currentHp } from '../utils/stats';
 import type { GymLeader } from '../types/game';
 import type { RegionId } from '../data/pools';
@@ -54,6 +56,8 @@ export function TeamRocketScreen() {
     (s) => (s.bag.find((i) => i.id === 'secretkey')?.quantity ?? 0) > 0,
   );
   const [victoryOpen, setVictoryOpen] = useState(false);
+  const [doorwayOpen, setDoorwayOpen] = useState(false);
+  const [fadingToGiovanni, setFadingToGiovanni] = useState(false);
   // Freeze HP at fight start so mid-battle faints do not overwrite the restore map.
   const hpSnapshotRef = useRef<Record<number, number> | null>(null);
   if (hpSnapshotRef.current === null) {
@@ -75,6 +79,14 @@ export function TeamRocketScreen() {
     playClip(asset('sounds/gym_victory.mp3'), 0.4);
   }, [victoryOpen, muted]);
 
+  useEffect(() => {
+    if (!fadingToGiovanni) return;
+    const id = window.setTimeout(() => {
+      setScreen('giovanni');
+    }, 1100);
+    return () => window.clearTimeout(id);
+  }, [fadingToGiovanni, setScreen]);
+
   const handleDefeat = useMemo(
     () => () => {
       restorePartyHpSnapshot(hpSnapshotRef.current ?? {});
@@ -94,6 +106,18 @@ export function TeamRocketScreen() {
   function dismissVictory() {
     setVictoryOpen(false);
     setScreen('hub');
+  }
+
+  function leaveDoorway() {
+    playSfx('click', muted);
+    setDoorwayOpen(false);
+    setScreen('hub');
+  }
+
+  function useSecretKey() {
+    playSfx('click', muted);
+    setDoorwayOpen(false);
+    setFadingToGiovanni(true);
   }
 
   if (!hasParty) return null;
@@ -121,7 +145,7 @@ export function TeamRocketScreen() {
             setLuckyEggActive(false);
           }
           if (hasSecretKey) {
-            setScreen('giovanni');
+            setDoorwayOpen(true);
             return;
           }
           setVictoryOpen(true);
@@ -159,6 +183,42 @@ export function TeamRocketScreen() {
           </div>
         </div>
       )}
+
+      {doorwayOpen && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal rocket-doorway-modal">
+            <div className="rocket-doorway-modal__icon" aria-hidden>
+              <ItemIcon id="secretkey" icon="🔑" name="Secret Key" className="rocket-doorway-modal__key" />
+            </div>
+            <p className="gym-victory__eyebrow">Team Rocket defeated!</p>
+            <h3 className="battle-modal__title">A hidden doorway…</h3>
+            <p className="rocket-doorway-modal__text">
+              There&apos;s a doorway with a keyhole that is suspiciously shaped like the Secret Key.
+            </p>
+            <div className="battle-modal__actions">
+              <button type="button" className="btn btn--primary" onClick={useSecretKey}>
+                Use Secret Key?
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={leaveDoorway}>
+                Leave
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <AnimatePresence>
+        {fadingToGiovanni && (
+          <motion.div
+            className="rocket-giovanni-fade"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.85, ease: 'easeInOut' }}
+            aria-hidden
+          />
+        )}
+      </AnimatePresence>
     </motion.div>
   );
 }

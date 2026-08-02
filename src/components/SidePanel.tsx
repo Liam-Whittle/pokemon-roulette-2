@@ -350,6 +350,10 @@ export function SidePanel({
                       className={`side-panel__sprite side-panel__sprite--clickable${
                         pokemon.id === MISSINGNO_ID ? ' side-panel__sprite--missingno' : ''
                       }${
+                        pokemon.id === MISSINGNO_ID && pokemon.shiny
+                          ? ' side-panel__sprite--missingno-shiny'
+                          : ''
+                      }${
                         inBattle && isActive && activeHitFx?.mode === 'damage'
                           ? ' side-panel__sprite--hit-damage'
                           : ''

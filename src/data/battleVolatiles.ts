@@ -19,6 +19,8 @@ export type BattleVolatiles = {
   sleepTalkPrimed?: boolean;
   sleepTalkEligible?: boolean;
   cursed?: boolean;
+  /** Set while charging Fly/Dig — attacks against this battler miss. */
+  semiInvulnerable?: string;
 };
 
 export const EMPTY_VOLATILES: BattleVolatiles = {
@@ -89,6 +91,10 @@ export function isTrapped(volatiles: BattleVolatiles): boolean {
 
 export function isThrashLocked(volatiles: BattleVolatiles): boolean {
   return (volatiles.thrashLock?.turnsLeft ?? 0) > 0;
+}
+
+export function isSemiInvulnerable(volatiles: BattleVolatiles): boolean {
+  return !!volatiles.semiInvulnerable;
 }
 
 /** End multi-turn locks when the current foe faints (new opponent = fresh move choice). */

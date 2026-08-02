@@ -44,7 +44,7 @@ export function PartyScreen() {
               <img
                 src={mon.shiny && mon.shinySprite ? mon.shinySprite : mon.sprite}
                 alt={mon.displayName}
-                className={`party-slot__sprite${mon.id === MISSINGNO_ID ? ' party-slot__sprite--missingno' : ''}`}
+                className={`party-slot__sprite${mon.id === MISSINGNO_ID ? ' party-slot__sprite--missingno' : ''}${mon.id === MISSINGNO_ID && mon.shiny ? ' party-slot__sprite--missingno-shiny' : ''}`}
                 onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
               />
               <div className="party-slot__info">

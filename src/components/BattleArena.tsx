@@ -31,11 +31,13 @@ import {
 import { isSunny, tickWeather, weatherLabel } from '../data/battleWeather';
 import {
   CHARGE_MOVE_SLUGS,
+  chargeMoveMessage,
   confusionSelfDamagePower,
   getMovePriority,
   HALF_HEAL_MOVES,
   isConfused,
   isRolloutLocked,
+  isSemiInvulnerableMove,
   pickRandomTransformTarget,
   revertTransform,
   rollConfusionSelfHit,
@@ -48,6 +50,7 @@ import {
   clearMoveLocks,
   clearVolatiles,
   EMPTY_VOLATILES,
+  isSemiInvulnerable,
   isThrashLocked,
   isTrapped,
   tickVolatileTurns,
@@ -1092,15 +1095,19 @@ export function BattleArena({
 
     if (enemyPendingTurn?.kind === 'solar-charge' || enemyPendingTurn?.kind === 'charge') {
       setEnemyPendingTurn(null);
+      setEnemyVolatiles((v) => ({ ...v, semiInvulnerable: undefined }));
       say(`${leader.name}'s ${enemy.displayName} unleashed ${stored.name}!`);
     } else if (stored.slug === 'solar-beam' && !isSunny(battleField.weather)) {
       setEnemyPendingTurn({ kind: 'solar-charge', move: stored });
-      say(`${leader.name}'s ${enemy.displayName} is taking in sunlight!`);
+      say(chargeMoveMessage(`${leader.name}'s ${enemy.displayName}`, stored.slug, stored.name));
       await delay(900);
       return false;
     } else if (CHARGE_MOVE_SLUGS.has(stored.slug)) {
       setEnemyPendingTurn({ kind: 'charge', move: stored });
-      say(`${leader.name}'s ${enemy.displayName} is charging ${stored.name}!`);
+      if (isSemiInvulnerableMove(stored.slug)) {
+        setEnemyVolatiles((v) => ({ ...v, semiInvulnerable: stored.slug }));
+      }
+      say(chargeMoveMessage(`${leader.name}'s ${enemy.displayName}`, stored.slug, stored.name));
       await delay(900);
       return false;
     }
@@ -1111,6 +1118,16 @@ export function BattleArena({
       const counterResult = resolveCounterMove(stored.slug, `${leader.name}'s ${enemy.displayName}`, stored.name);
       for (const msg of counterResult.messages) say(msg);
       setEnemyVolatiles((v) => applyVolatilesPatch(v, counterResult.attackerVolatilesPatch));
+      await delay(900);
+      return false;
+    }
+
+    // Fly / Dig charge turn: attacks against the user can't connect.
+    if (isSemiInvulnerable(playerVolatiles) && !isSelfStatusMove(stored.slug)) {
+      say(
+        `${leader.name}'s ${enemy.displayName} used ${stored.name}! ${target.nickname ?? target.displayName} avoided the attack!`,
+      );
+      playSfx('fail', muted);
       await delay(900);
       return false;
     }
@@ -1498,6 +1515,7 @@ export function BattleArena({
           currentPp: move.currentPp ?? pending.move.currentPp,
         };
         setPlayerPendingTurn(null);
+        setPlayerVolatiles((v) => ({ ...v, semiInvulnerable: undefined }));
         say(`${attacker.nickname ?? attacker.displayName} unleashed ${releaseMove.name}!`);
       } else if (forcedStored) {
         releaseMove = {
@@ -1518,7 +1536,7 @@ export function BattleArena({
       if (!isChargeRelease && !playerPendingTurn) {
         if (releaseMove.slug === 'solar-beam' && !isSunny(battleField.weather)) {
           setPlayerPendingTurn({ kind: 'solar-charge', move: releaseMove });
-          say(`${attacker.nickname ?? attacker.displayName} is taking in sunlight!`);
+          say(chargeMoveMessage(attacker.nickname ?? attacker.displayName, releaseMove.slug, releaseMove.name));
           await delay(900);
           return 'continue';
         }
@@ -1526,7 +1544,10 @@ export function BattleArena({
           // instant in sun
         } else if (CHARGE_MOVE_SLUGS.has(releaseMove.slug) && releaseMove.slug !== 'solar-beam') {
           setPlayerPendingTurn({ kind: 'charge', move: releaseMove });
-          say(`${attacker.nickname ?? attacker.displayName} is charging ${releaseMove.name}!`);
+          if (isSemiInvulnerableMove(releaseMove.slug)) {
+            setPlayerVolatiles((v) => ({ ...v, semiInvulnerable: releaseMove.slug }));
+          }
+          say(chargeMoveMessage(attacker.nickname ?? attacker.displayName, releaseMove.slug, releaseMove.name));
           await delay(900);
           return 'continue';
         }
@@ -1534,6 +1555,16 @@ export function BattleArena({
 
       if (playerVolatiles.disabledMoveSlug === releaseMove.slug) {
         say(`${releaseMove.name} is disabled!`);
+        await delay(900);
+        return 'continue';
+      }
+
+      // Fly / Dig charge turn: foe is untargetable until they come down / up.
+      if (isSemiInvulnerable(enemyVolatiles) && !isSelfStatusMove(releaseMove.slug)) {
+        say(
+          `${attacker.nickname ?? attacker.displayName} used ${releaseMove.name}! ${enemy.displayName} avoided the attack!`,
+        );
+        playSfx('fail', muted);
         await delay(900);
         return 'continue';
       }
