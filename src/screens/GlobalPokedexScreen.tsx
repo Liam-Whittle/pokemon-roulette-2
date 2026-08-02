@@ -17,7 +17,7 @@ const cardVariants = {
   show: (i: number) => ({
     opacity: 1,
     y: 0,
-    transition: { delay: Math.min(i, 24) * 0.03, duration: 0.3, ease: 'easeOut' },
+    transition: { delay: Math.min(i, 24) * 0.03, duration: 0.3, ease: 'easeOut' as const },
   }),
 };
 
