@@ -10,7 +10,7 @@ export interface LevelEvolution {
 
 export interface AvailableEvolution {
   toId: number;
-  stoneId?: StoneItemId;
+  stoneId?: StoneItemId | 'omnistone';
 }
 
 const STONE_EVOLUTIONS: Record<number, Array<{ toId: number; stoneId: StoneItemId }>> = {
@@ -137,12 +137,17 @@ export function getAvailableEvolutions(
   }
   const bagCounts = new Map(bag.map((item) => [item.id, item.quantity]));
   const allowedStones = new Set(getStoneItemIdsForRegion(ctx.region));
+  const hasOmnistone = (bagCounts.get('omnistone') ?? 0) > 0;
   for (const evo of getStoneEvolutions(speciesId)) {
     if (!allowedStones.has(evo.stoneId)) continue;
     if (ctx.region !== 'Johto' && isJohtoOnlyEvolution(speciesId, evo.toId)) continue;
-    if ((bagCounts.get(evo.stoneId) ?? 0) <= 0) continue;
+    const hasStone = (bagCounts.get(evo.stoneId) ?? 0) > 0;
+    if (!hasStone && !hasOmnistone) continue;
     if (!available.some((entry) => entry.toId === evo.toId)) {
-      available.push({ toId: evo.toId, stoneId: evo.stoneId });
+      available.push({
+        toId: evo.toId,
+        stoneId: hasStone ? evo.stoneId : 'omnistone',
+      });
     }
   }
   return available;

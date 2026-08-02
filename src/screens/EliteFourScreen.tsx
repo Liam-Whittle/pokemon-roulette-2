@@ -11,6 +11,7 @@ export function EliteFourScreen() {
   const recordChampion = useGameStore((s) => s.recordChampion);
   const eliteCleared = useGameStore((s) => s.eliteCleared);
   const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const biggerBetter = useGameStore((s) => s.isUnlockActive('biggerBetter'));
   const eliteFour = getRegionEliteFour(region);
 
   const [stage, setStage] = useState(() => {
@@ -57,6 +58,7 @@ export function EliteFourScreen() {
         battleContext="elite"
         eliteStage={stage}
         leader={member}
+        appendExtraEnemy={biggerBetter}
         finalVictory={isChampionStage}
         onWin={() => {
           if (!isChampionStage) {

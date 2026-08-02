@@ -9,6 +9,23 @@ import { formatRunTime, sortChampions } from '../utils/hallOfFame';
 
 const FAME_RESET_CLICKS = 15;
 
+const listVariants = {
+  hidden: {},
+  show: {
+    transition: { staggerChildren: 0.12, delayChildren: 0.2 },
+  },
+};
+
+const cardVariants = {
+  hidden: { opacity: 0, y: 36, scale: 0.96 },
+  show: {
+    opacity: 1,
+    y: 0,
+    scale: 1,
+    transition: { type: 'spring', stiffness: 280, damping: 22 },
+  },
+};
+
 export function HallOfChampionsScreen() {
   const hallOfChampions = useGameStore((s) => s.hallOfChampions);
   const clearHallOfFame = useGameStore((s) => s.clearHallOfFame);
@@ -37,33 +54,58 @@ export function HallOfChampionsScreen() {
       exit={{ opacity: 0 }}
     >
       <header className="hall-header">
-        <button
+        <motion.button
           type="button"
           className="btn btn--ghost btn--sm"
           onClick={() => {
             playSfx('click', muted);
             setScreen('title');
           }}
+          initial={{ opacity: 0, x: -12 }}
+          animate={{ opacity: 1, x: 0 }}
+          transition={{ delay: 0.05 }}
         >
           ← Back
-        </button>
+        </motion.button>
         <div className="hall-header__titles">
-          <h2 className="screen-title hall-title">
+          <motion.h2
+            className="screen-title hall-title"
+            initial={{ opacity: 0, y: 18, scale: 0.92 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            transition={{ type: 'spring', stiffness: 320, damping: 18, delay: 0.08 }}
+          >
             <GameIcon ui="hall" alt="" className="game-icon-img game-icon-img--title" /> Hall of{' '}
             <button type="button" className="hall-title__fame" onClick={handleFameClick}>
               Fame
             </button>
-          </h2>
-          <p className="hall-subtitle">
+          </motion.h2>
+          <motion.p
+            className="hall-subtitle"
+            initial={{ opacity: 0, y: 8 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.22 }}
+          >
             Ranked by fastest clear, then fewest resources used
-          </p>
+          </motion.p>
         </div>
       </header>
 
       {ranked.length === 0 ? (
-        <p className="collection-empty">No champions yet. Beat the Elite Four and become Champion!</p>
+        <motion.p
+          className="collection-empty"
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.25 }}
+        >
+          No champions yet. Beat the Elite Four and become Champion!
+        </motion.p>
       ) : (
-        <div className="hall-list">
+        <motion.div
+          className="hall-list"
+          variants={listVariants}
+          initial="hidden"
+          animate="show"
+        >
           {ranked.map((record, index) => {
             const rank = index + 1;
             const rankClass =
@@ -78,8 +120,7 @@ export function HallOfChampionsScreen() {
               <motion.div
                 key={record.id}
                 className={`hall-card ${rankClass}`.trim()}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
+                variants={cardVariants}
               >
                 <div className="hall-card__trainer">
                   <span className={`hall-card__rank${rank <= 3 ? ` hall-card__rank--top` : ''}`}>
@@ -130,8 +171,19 @@ export function HallOfChampionsScreen() {
                 </div>
 
                 <div className="hall-card__party">
-                  {record.party.map((member) => (
-                    <div key={`${member.id}-${member.caughtAt}`} className="hall-mon">
+                  {record.party.map((member, monIndex) => (
+                    <motion.div
+                      key={`${member.id}-${member.caughtAt}`}
+                      className="hall-mon"
+                      initial={{ opacity: 0, y: 10, scale: 0.9 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      transition={{
+                        delay: 0.35 + index * 0.12 + monIndex * 0.05,
+                        type: 'spring',
+                        stiffness: 340,
+                        damping: 20,
+                      }}
+                    >
                       <img
                         src={member.shiny && member.shinySprite ? member.shinySprite : member.sprite}
                         alt={member.displayName}
@@ -150,13 +202,13 @@ export function HallOfChampionsScreen() {
                           <TypeBadge key={type} type={type} size="sm" />
                         ))}
                       </div>
-                    </div>
+                    </motion.div>
                   ))}
                 </div>
               </motion.div>
             );
           })}
-        </div>
+        </motion.div>
       )}
 
       {notice && (

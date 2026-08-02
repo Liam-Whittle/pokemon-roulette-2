@@ -91,6 +91,12 @@ export function isThrashLocked(volatiles: BattleVolatiles): boolean {
   return (volatiles.thrashLock?.turnsLeft ?? 0) > 0;
 }
 
+/** End multi-turn locks when the current foe faints (new opponent = fresh move choice). */
+export function clearMoveLocks(volatiles: BattleVolatiles): BattleVolatiles {
+  if (!volatiles.thrashLock && !volatiles.rolloutLock) return volatiles;
+  return { ...volatiles, thrashLock: undefined, rolloutLock: undefined };
+}
+
 export function hasCounterPending(volatiles: BattleVolatiles): boolean {
   return volatiles.counterPending != null;
 }

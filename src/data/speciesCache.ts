@@ -50,6 +50,23 @@ export function getAllCachedSpecies(): CachedSpecies[] {
   return Object.values(speciesMap);
 }
 
+/** Sample up to `count` distinct moves from the curated move cache. */
+export function getRandomCachedMoves(count: number): StoredMove[] {
+  const slugs = Object.keys(movesMap);
+  for (let i = slugs.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [slugs[i], slugs[j]] = [slugs[j]!, slugs[i]!];
+  }
+  const out: StoredMove[] = [];
+  for (const slug of slugs) {
+    const move = cachedMoveToStored(slug);
+    if (!move) continue;
+    out.push(move);
+    if (out.length >= count) break;
+  }
+  return out;
+}
+
 export function cachedMoveToStored(slug: string): StoredMove | null {
   const m = movesMap[slug];
   if (!m) return null;

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { motion } from 'framer-motion';
 import { CatchChance } from '../components/CatchChance';
 import { CatchCombo } from '../components/CatchCombo';
@@ -12,8 +13,30 @@ import { playSfx } from '../utils/sound';
 import { playClip, stopClips } from '../utils/music';
 import { asset } from '../utils/asset';
 import { getSpeciesCatchRate, encounterLevelForBadges } from '../utils/xp';
-import { catchProbability, formatCatchPercent } from '../utils/catchChance';
+import {
+  THROW_CHAIN_BONUS,
+  catchProbability,
+  formatCatchPercent,
+} from '../utils/catchChance';
 import type { ActivityType, PokemonData } from '../types/game';
+
+const RUN_BTN_W = 140;
+const RUN_BTN_H = 48;
+const RUN_PAD = 12;
+const RUN_GAP = 20;
+
+function rectsOverlap(
+  a: { left: number; top: number; right: number; bottom: number },
+  b: DOMRect,
+  gap: number,
+): boolean {
+  return !(
+    a.right + gap < b.left ||
+    a.left - gap > b.right ||
+    a.bottom + gap < b.top ||
+    a.top - gap > b.bottom
+  );
+}
 
 type CatchPhase = 'ball' | 'catch' | 'chance' | 'caught' | 'done';
 type BallId = 'pokeball' | 'greatball' | 'ultraball' | 'masterball';
@@ -48,7 +71,13 @@ function encounterFlavor(activity: ActivityType | null, isLegendary: boolean): s
   return 'A wild Pokémon appeared!';
 }
 
-export function CatchScreen() {
+interface CatchScreenProps {
+  /** MissingNo. encounter — purple glitch reskin + dedicated music/bg from parent. */
+  variant?: 'default' | 'missingno';
+}
+
+export function CatchScreen({ variant = 'default' }: CatchScreenProps) {
+  const isGlitch = variant === 'missingno';
   const currentActivity = useGameStore((s) => s.currentActivity);
   const bag = useGameStore((s) => s.bag);
   const catchGamemode = useGameStore((s) => s.catchGamemode) ?? 'skill';
@@ -70,13 +99,19 @@ export function CatchScreen() {
   const [confirmMasterBall, setConfirmMasterBall] = useState(false);
   const [pokemonAbsorbed, setPokemonAbsorbed] = useState(false);
   const [throwKey, setThrowKey] = useState(0);
+  /** Failed throws this encounter — each adds +1% catch chance to every ball. */
+  const [failedThrows, setFailedThrows] = useState(0);
   const [chanceStatus, setChanceStatus] = useState('Throwing...');
+  const [runPos, setRunPos] = useState<{ x: number; y: number } | null>(null);
+  const spriteAreaRef = useRef<HTMLDivElement | null>(null);
+  const ballGridRef = useRef<HTMLDivElement | null>(null);
 
   const isChanceMode = catchGamemode === 'chance';
   const hasShinyCharm = (bag.find((item) => item.id === 'shinycharm')?.quantity ?? 0) > 0;
   const ownedBalls = BALL_OPTIONS.filter(
     (ball) => (bag.find((item) => item.id === ball.id)?.quantity ?? 0) > 0,
   );
+  const outOfBalls = ownedBalls.length === 0;
 
   useEffect(() => {
     let cancelled = false;
@@ -94,9 +129,9 @@ export function CatchScreen() {
   useEffect(() => {
     if (!loading && pokemon) {
       useGameStore.getState().markSeen(pokemon);
-      playSfx('battle', muted);
+      if (!isGlitch) playSfx('battle', muted);
     }
-  }, [loading, pokemon, muted]);
+  }, [loading, pokemon, muted, isGlitch]);
 
   function resultActivityType(): ActivityType {
     if (currentActivity === 'fishing') return 'fishing';
@@ -107,7 +142,69 @@ export function CatchScreen() {
   function goHub() {
     stopClips();
     resetEncounterSession();
+    const state = useGameStore.getState();
+    if (
+      state.activeUnlocks.includes('hardcore') &&
+      !state.starterClaimed &&
+      state.party.length < state.getMaxParty()
+    ) {
+      setScreen('hardcore-draft');
+      return;
+    }
     setScreen('hub');
+  }
+
+  function teleportRunAway() {
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const forbidden: DOMRect[] = [];
+    if (spriteAreaRef.current) forbidden.push(spriteAreaRef.current.getBoundingClientRect());
+    if (ballGridRef.current) forbidden.push(ballGridRef.current.getBoundingClientRect());
+    // Keep clear of top-right app controls.
+    forbidden.push(new DOMRect(vw - 220, 0, 220, 72));
+
+    for (let attempt = 0; attempt < 60; attempt += 1) {
+      const x = RUN_PAD + Math.random() * Math.max(0, vw - RUN_BTN_W - RUN_PAD * 2);
+      const y = RUN_PAD + Math.random() * Math.max(0, vh - RUN_BTN_H - RUN_PAD * 2);
+      const candidate = { left: x, top: y, right: x + RUN_BTN_W, bottom: y + RUN_BTN_H };
+      if (forbidden.every((zone) => !rectsOverlap(candidate, zone, RUN_GAP))) {
+        setRunPos({ x, y });
+        return;
+      }
+    }
+    // Fallback corners if random sampling fails.
+    const corners = [
+      { x: RUN_PAD, y: RUN_PAD },
+      { x: Math.max(RUN_PAD, vw - RUN_BTN_W - RUN_PAD), y: RUN_PAD },
+      { x: RUN_PAD, y: Math.max(RUN_PAD, vh - RUN_BTN_H - RUN_PAD) },
+      {
+        x: Math.max(RUN_PAD, vw - RUN_BTN_W - RUN_PAD),
+        y: Math.max(RUN_PAD, vh - RUN_BTN_H - RUN_PAD),
+      },
+    ];
+    for (const corner of corners) {
+      const candidate = {
+        left: corner.x,
+        top: corner.y,
+        right: corner.x + RUN_BTN_W,
+        bottom: corner.y + RUN_BTN_H,
+      };
+      if (forbidden.every((zone) => !rectsOverlap(candidate, zone, RUN_GAP))) {
+        setRunPos(corner);
+        return;
+      }
+    }
+    setRunPos(corners[0]!);
+  }
+
+  function handleRunAway() {
+    playSfx('click', muted);
+    // MissingNo. taunts you until you catch it or run out of balls.
+    if (isGlitch && !outOfBalls) {
+      teleportRunAway();
+      return;
+    }
+    goHub();
   }
 
   function beginCatchSuccess(ballId: BallId) {
@@ -118,7 +215,8 @@ export function CatchScreen() {
 
     // Shiny is rolled at catch time (like the starter): 1/40 normally, 1/15 with
     // a Shiny Charm in the bag. No separate spin.
-    const shinyOdds = hasShinyCharm ? 1 / 15 : 1 / 40;
+    const shinyPlus = useGameStore.getState().activeUnlocks.includes('shinyCharmPlus');
+    const shinyOdds = shinyPlus ? 1 / 5 : hasShinyCharm ? 1 / 15 : 1 / 40;
     const isShiny = Math.random() < shinyOdds;
     setShinyResult(isShiny ? 'shiny' : 'normal');
 
@@ -208,7 +306,8 @@ export function CatchScreen() {
       beginCatchSuccess(selectedBall);
       return;
     }
-    // Pokémon escapes the ball — try another throw.
+    // Pokémon escapes the ball — try another throw (chain bonus +1% each fail).
+    setFailedThrows((n) => n + 1);
     publishHostActivity({
       kind: 'catch',
       title: 'Ball broke free',
@@ -224,15 +323,15 @@ export function CatchScreen() {
 
   if (loading) {
     return (
-      <div className="screen catch-screen">
-        <div className="loading">A wild Pokémon appeared...</div>
+      <div className={`screen catch-screen${isGlitch ? ' catch-screen--missingno' : ''}`}>
+        <div className="loading">{isGlitch ? 'ERROR…' : 'A wild Pokémon appeared...'}</div>
       </div>
     );
   }
 
   if (!pokemon) {
     return (
-      <div className="screen catch-screen">
+      <div className={`screen catch-screen${isGlitch ? ' catch-screen--missingno' : ''}`}>
         <p>Failed to load Pokémon.</p>
         <button type="button" className="btn btn--primary" onClick={goHub}>
           Back to Hub
@@ -243,8 +342,10 @@ export function CatchScreen() {
 
   const catchRate = getSpeciesCatchRate(pokemon.id);
   const encounterLevel = encounterLevelForBadges(badges.length);
-  const sceneVariant =
-    currentActivity === 'fishing'
+  const throwChainBonus = failedThrows * THROW_CHAIN_BONUS;
+  const sceneVariant = isGlitch
+    ? 'catch-scene--glitch'
+    : currentActivity === 'fishing'
       ? 'catch-scene--water'
       : currentActivity === 'cave' || currentActivity === 'fossil'
         ? 'catch-scene--cave'
@@ -252,20 +353,35 @@ export function CatchScreen() {
 
   return (
     <motion.div
-      className="screen catch-screen"
+      className={`screen catch-screen${isGlitch ? ' catch-screen--missingno' : ''}`}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
     >
+      {isGlitch && (
+        <div className="catch-screen__missingno-bg" aria-hidden>
+          <div className="app-bg__missingno-grid" />
+          <div className="app-bg__missingno-blobs" />
+          <div className="app-bg__missingno-scan" />
+          <div className="app-bg__missingno-tear" />
+          <div className="app-bg__missingno-blocks" />
+          <div className="app-bg__missingno-vignette" />
+        </div>
+      )}
       <Confetti active={showConfetti} />
 
       <div className={`catch-scene ${sceneVariant}`}>
         <div className="catch-scene__grass" />
+        {isGlitch && <div className="catch-scene__glitch-scan" aria-hidden />}
         <motion.div className="catch-scene__content" initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-          <p className={`catch-flavor ${pokemon.isLegendary ? 'catch-flavor--legendary' : ''}`}>
-            {encounterFlavor(currentActivity, pokemon.isLegendary)}
+          <p
+            className={`catch-flavor${pokemon.isLegendary ? ' catch-flavor--legendary' : ''}${
+              isGlitch ? ' catch-flavor--glitch' : ''
+            }`}
+          >
+            {isGlitch ? 'A wild ßÑŒκéმΘή appeared!' : encounterFlavor(currentActivity, pokemon.isLegendary)}
           </p>
-          <div className="catch-scene__sprite-area">
+          <div className="catch-scene__sprite-area" ref={spriteAreaRef}>
             <motion.div
               className="catch-scene__sprite-wrap"
               animate={{
@@ -285,6 +401,7 @@ export function CatchScreen() {
                 ballId={selectedBall}
                 ballSprite={ITEM_SPRITES[selectedBall]}
                 catchRate={catchRate}
+                chanceBonus={throwChainBonus}
                 muted={muted}
                 onAbsorb={() => setPokemonAbsorbed(true)}
                 onResult={handleChanceResult}
@@ -297,19 +414,27 @@ export function CatchScreen() {
               ? `Catch rate ${catchRate} at Lv. ${encounterLevel}`
               : `Timing difficulty from catch rate ${catchRate} at Lv. ${encounterLevel}`}
             {pokemon.isLegendary ? ' — Legendary!' : ''}.
+            {isChanceMode && throwChainBonus > 0
+              ? ` Throw chain +${Math.round(throwChainBonus * 100)}%!`
+              : ''}
           </p>
 
           {phase === 'ball' && (
             <div className="ball-picker">
               <p className="ball-picker__title">Choose a ball to throw</p>
-              {ownedBalls.length === 0 ? (
-                <p className="ball-picker__empty">You have no Poké Balls left.</p>
+              {outOfBalls ? (
+                <>
+                  <p className="ball-picker__empty">You have no Poké Balls left.</p>
+                  <button type="button" className="btn btn--primary" onClick={goHub}>
+                    {isGlitch ? 'Leave' : 'Back to Hub'}
+                  </button>
+                </>
               ) : (
-                <div className="ball-picker__grid">
+                <div className="ball-picker__grid" ref={ballGridRef}>
                   {ownedBalls.map((ball) => {
                     const qty = bag.find((item) => item.id === ball.id)?.quantity ?? 0;
                     const estChance = isChanceMode
-                      ? formatCatchPercent(catchProbability(catchRate, ball.id))
+                      ? formatCatchPercent(catchProbability(catchRate, ball.id, throwChainBonus))
                       : null;
                     return (
                       <button
@@ -327,9 +452,12 @@ export function CatchScreen() {
                   })}
                 </div>
               )}
-              <button type="button" className="btn btn--ghost" onClick={goHub}>
-                Run Away
-              </button>
+              {/* MissingNo: docked until first click, then portaled so it can flee the layout. */}
+              {!(isGlitch && runPos) && !outOfBalls && (
+                <button type="button" className="btn btn--ghost" onClick={handleRunAway}>
+                  Run Away
+                </button>
+              )}
             </div>
           )}
 
@@ -392,6 +520,22 @@ export function CatchScreen() {
           </div>
         </div>
       )}
+
+      {isGlitch &&
+        phase === 'ball' &&
+        runPos &&
+        !outOfBalls &&
+        createPortal(
+          <button
+            type="button"
+            className="btn btn--ghost missingno-run-btn"
+            style={{ left: runPos.x, top: runPos.y }}
+            onClick={handleRunAway}
+          >
+            Run Away
+          </button>,
+          document.body,
+        )}
     </motion.div>
   );
 }

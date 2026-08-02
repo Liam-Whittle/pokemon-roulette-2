@@ -1,4 +1,5 @@
 import type { BaseStats, CaughtPokemon, IVs, NatureId, StatKey } from '../types/game';
+import { MISSINGNO_DATA, MISSINGNO_ID } from '../data/missingno';
 import { getCachedSpecies } from '../data/speciesCache';
 
 export const MAX_LEVEL = 100;
@@ -51,6 +52,10 @@ export function randomIVs(): IVs {
     specialDefense: roll(),
     speed: roll(),
   };
+}
+
+export function perfectIVs(): IVs {
+  return { hp: 31, attack: 31, defense: 31, specialAttack: 31, specialDefense: 31, speed: 31 };
 }
 
 export function zeroEVs(): IVs {
@@ -112,6 +117,7 @@ export function applyNature(stats: BaseStats, nature: NatureId): BaseStats {
 }
 
 export function getBaseStatsForSpecies(id: number): BaseStats {
+  if (id === MISSINGNO_ID) return { ...MISSINGNO_DATA.baseStats };
   const sp = getCachedSpecies(id);
   return sp?.baseStats ?? { hp: 50, attack: 50, defense: 50, specialAttack: 50, specialDefense: 50, speed: 50 };
 }

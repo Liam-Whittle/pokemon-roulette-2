@@ -64,7 +64,7 @@ export interface SpectateWheelSegment {
 /** Host wheel spin the guest should animate and display. */
 export interface SpectateWheelEvent {
   id: number;
-  kind: 'hub' | 'uber' | 'shiny' | 'encounter' | 'chaos' | 'catch' | 'items' | 'mystery';
+  kind: 'hub' | 'uber' | 'shiny' | 'encounter' | 'chaos' | 'catch' | 'items' | 'mystery' | 'explore' | 'mischief';
   title: string;
   segments: SpectateWheelSegment[];
   resultSegmentId: string;

@@ -1,5 +1,5 @@
 import { asset } from '../utils/asset';
-import { localItemSprite, localPokemonSprite } from '../utils/localAssets';
+import { localItemSprite, localPokemonSprite, localTrainerSprite } from '../utils/localAssets';
 
 function itemSprite(filename: string): string {
   return localItemSprite(filename);
@@ -35,6 +35,10 @@ export const ITEM_SPRITES: Record<string, string> = {
   ejectbutton: itemSprite('eject-button.png'),
   electricgem: itemSprite('electric-gem.png'),
   mysteryegg: itemSprite('mystery-egg.png'),
+  mysterygift: itemSprite('parcel.png'),
+  omnistone: itemSprite('intriguing-stone.png'),
+  secretkey: itemSprite('secret-key.png'),
+  maxrepel: itemSprite('max-repel.png'),
 };
 
 /** Wheel segment sprites keyed by segment id. */
@@ -61,6 +65,14 @@ export const SEGMENT_SPRITES: Record<string, string> = {
   healpowder: itemSprite('heal-powder.png'),
   xattack: itemSprite('x-attack.png'),
   stone: itemSprite('moon-stone.png'),
+  trainer: localTrainerSprite('red-gen3.png'),
+  rival: localTrainerSprite('blue.png'),
+  wondertrade: itemSprite('sachet.png'),
+  benchwarmers: itemSprite('exp-share.png'),
+  luckyegg: itemSprite('lucky-egg.png'),
+  picnic: itemSprite('apricorn-box.png'),
+  carepackage: itemSprite('parcel.png'),
+  mewtoll: itemSprite('coin-case.png'),
   'bonus-all-items': itemSprite('nugget.png'),
   'bonus-xp': itemSprite('rare-candy.png'),
   'bonus-money': itemSprite('amulet-coin.png'),
@@ -75,18 +87,24 @@ export const UI_SPRITES = {
   comingSoonFallback: itemSprite('dubious-disc.png'),
   bag: itemSprite('dowsing-machine.png'),
   shop: asset('img/shop.png'),
+  gamecorner: itemSprite('amulet-coin.png'),
+  mysterygift: itemSprite('parcel.png'),
+  cinnabar: itemSprite('hm02.png'),
   fishing: itemSprite('super-rod.png'),
   fossil: itemSprite('helix-fossil.png'),
   cave: itemSprite('explorer-kit.png'),
   life: itemSprite('heart-scale.png'),
+  wild: localPokemonSprite(16),
 } as const;
 
 export type UISpriteKey = keyof typeof UI_SPRITES;
 
 /** Large hero icons for hub pathway cards. */
-export const PATHWAY_HERO_SPRITES: Record<'catch' | 'items' | 'mystery', string> = {
+export const PATHWAY_HERO_SPRITES: Record<'catch' | 'explore' | 'mischief' | 'items' | 'mystery', string> = {
   catch: localPokemonSprite(133),
-  items: itemSprite('electric-gem.png'),
+  explore: itemSprite('bike.png'),
+  mischief: localPokemonSprite(151),
+  items: itemSprite('bike.png'),
   mystery: itemSprite('mystery-egg.png'),
 };
 
@@ -102,7 +120,9 @@ export function getUISprite(key: UISpriteKey): string {
   return UI_SPRITES[key];
 }
 
-export function getPathwayHeroSprite(pathway: 'catch' | 'items' | 'mystery'): string {
+export function getPathwayHeroSprite(
+  pathway: 'catch' | 'explore' | 'mischief' | 'items' | 'mystery',
+): string {
   return PATHWAY_HERO_SPRITES[pathway];
 }
 

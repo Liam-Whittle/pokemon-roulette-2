@@ -20,6 +20,14 @@ interface EncounterWheelProps {
   pool: number[];
   /** Maximum number of wedges to show (a random sample of the pool). */
   maxWedges?: number;
+  hideWedgeLabels?: boolean;
+  /**
+   * When true, landing grants the Pokémon straight to the party (no catch minigame).
+   * Used by Hardcore draft.
+   */
+  instantGrant?: boolean;
+  /** Called after an instant grant (e.g. remount draft for the next spin). */
+  onGranted?: (pokemon: PokemonData) => void;
 }
 
 /** Fisher–Yates sample of up to `n` distinct entries. */
@@ -32,29 +40,51 @@ function sample<T>(arr: T[], n: number): T[] {
   return copy.slice(0, Math.min(n, copy.length));
 }
 
-export function EncounterWheel({ title, uiKey, subtitle, pool, maxWedges = 8 }: EncounterWheelProps) {
+export function EncounterWheel({
+  title,
+  uiKey,
+  subtitle,
+  pool,
+  maxWedges = 8,
+  hideWedgeLabels = false,
+  instantGrant = false,
+  onGranted,
+}: EncounterWheelProps) {
   const setScreen = useGameStore((s) => s.setScreen);
   const setCurrentPokemon = useGameStore((s) => s.setCurrentPokemon);
+  const debugAddToParty = useGameStore((s) => s.debugAddToParty);
   const badges = useGameStore((s) => s.badges);
+  const maxRepelSpinsLeft = useGameStore((s) => s.maxRepelSpinsLeft);
+  const setMaxRepelSpins = useGameStore((s) => s.setMaxRepelSpins);
+  const hardcoreDrafting = useGameStore(
+    (s) => s.activeUnlocks.includes('hardcore') && !s.starterClaimed,
+  );
 
   const ids = useMemo(() => {
     const encounterLevel = encounterLevelForBadges(badges.length);
-    const filtered = filterEncounterPoolByEvolutionLevel(pool, encounterLevel);
+    let filtered = filterEncounterPoolByEvolutionLevel(pool, encounterLevel);
+    // Max Repel BST filtering happens after species fetch below.
     return sample(Array.from(new Set(filtered)), maxWedges);
-  }, [pool, maxWedges, badges.length]);
+  }, [pool, maxWedges, badges.length, maxRepelSpinsLeft]);
   const [mons, setMons] = useState<PokemonData[] | null>(null);
   const [locked, setLocked] = useState(false);
+  const [passName, setPassName] = useState('');
 
   useEffect(() => {
     let cancelled = false;
     Promise.all(ids.map((id) => fetchPokemon(id).catch(() => null))).then((results) => {
       if (cancelled) return;
-      setMons(results.filter((p): p is PokemonData => p !== null));
+      let list = results.filter((p): p is PokemonData => p !== null);
+      if (maxRepelSpinsLeft > 0) {
+        const high = list.filter((p) => p.baseStatTotal > 400);
+        if (high.length >= 3) list = high;
+      }
+      setMons(list);
     });
     return () => {
       cancelled = true;
     };
-  }, [ids]);
+  }, [ids, maxRepelSpinsLeft]);
 
   const segments: SpinnerSegment[] = useMemo(
     () =>
@@ -73,12 +103,30 @@ export function EncounterWheel({ title, uiKey, subtitle, pool, maxWedges = 8 }: 
     const chosen = (mons ?? []).find((p) => String(p.id) === seg.id);
     if (!chosen) return;
     setLocked(true);
+    if (maxRepelSpinsLeft > 0) setMaxRepelSpins(maxRepelSpinsLeft - 1);
     publishHostWheelSpin({
       kind: 'encounter',
       title,
       segments,
       result: seg,
     });
+
+    if (instantGrant) {
+      publishHostActivity({
+        kind: 'notice',
+        title: 'Draft pick!',
+        message: `${chosen.displayName} joined your team!`,
+        success: true,
+        pokemonName: chosen.displayName,
+        pokemonSprite: chosen.sprite,
+      });
+      debugAddToParty(chosen);
+      window.setTimeout(() => {
+        onGranted?.(chosen);
+      }, 500);
+      return;
+    }
+
     publishHostActivity({
       kind: 'notice',
       title: 'Encounter!',
@@ -102,18 +150,35 @@ export function EncounterWheel({ title, uiKey, subtitle, pool, maxWedges = 8 }: 
         <GameIcon ui={uiKey} alt="" className="game-icon-img game-icon-img--title" /> {title}
       </h2>
       <p className="encounter-wheel__subtitle">{subtitle}</p>
+      {hideWedgeLabels && (
+        <p className="wheel-pass-name" aria-live="polite">
+          {passName || '—'}
+        </p>
+      )}
 
       {mons === null ? (
         <p className="loading">Preparing the wheel…</p>
       ) : segments.length === 0 ? (
         <p className="loading">Nothing turned up. Head back and try again.</p>
       ) : (
-        <Wheel segments={segments} onLand={handleLand} disabled={locked} />
+        <Wheel
+          segments={segments}
+          onLand={handleLand}
+          disabled={locked}
+          hideLabels={hideWedgeLabels}
+          onPassSegment={(seg) => setPassName(seg.label)}
+        />
       )}
 
-      <button type="button" className="btn btn--ghost" onClick={() => setScreen('hub')}>
-        Back to Hub
-      </button>
+      {!instantGrant && (
+        <button
+          type="button"
+          className="wheel-back-btn"
+          onClick={() => setScreen(hardcoreDrafting ? 'hardcore-draft' : 'hub')}
+        >
+          ← Back
+        </button>
+      )}
     </motion.div>
   );
 }

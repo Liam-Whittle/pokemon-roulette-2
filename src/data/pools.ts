@@ -1,4 +1,5 @@
 import type { GymLeader, WheelSegment } from '../types/game';
+import { getCachedSpecies } from './speciesCache';
 import { localBadge, localTrainerSprite } from '../utils/localAssets';
 
 /** Small slice weight for rare wheel outcomes (Legendary, Uber Spin). */
@@ -32,7 +33,30 @@ export const PATH_CATCH_SEGMENTS: WheelSegment[] = [
   },
 ];
 
-/** Hunt Items pathway wheel segments. */
+/** Explore World pathway — 9 equal wedges. */
+export const PATH_EXPLORE_SEGMENTS: WheelSegment[] = [
+  { id: 'uberspin', label: 'Uber Spin', activity: 'uber', color: '#c084fc', icon: '🌀' },
+  { id: 'teamrocket', label: 'Team Rocket', activity: 'teamrocket', color: '#1e293b', icon: '🚀' },
+  { id: 'money100', label: '+¥100', activity: 'money100', color: '#fde047', icon: '💰' },
+  { id: 'trainer', label: 'Trainer', activity: 'trainer', color: '#38bdf8', icon: '🧢' },
+  { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
+  { id: 'fullheal', label: 'Full Heal', activity: 'fullheal', color: '#f472b6', icon: '💗' },
+  { id: 'rival', label: 'Rival', activity: 'rival', color: '#f97316', icon: '🔥' },
+  { id: 'stone', label: 'Stone', activity: 'stone', color: '#a78bfa', icon: '🪨' },
+  { id: 'rarecandy', label: 'Rare Candy', activity: 'rarecandy', color: '#f472b6', icon: '🍬' },
+];
+
+/** Mew's Mischief third-path wheel. */
+export const PATH_MISCHIEF_SEGMENTS: WheelSegment[] = [
+  { id: 'wondertrade', label: 'Wonder Trade', activity: 'wondertrade', color: '#a78bfa', icon: '🔁' },
+  { id: 'benchwarmers', label: 'Bench Warmers', activity: 'benchwarmers', color: '#4ade80', icon: '📈' },
+  { id: 'luckyegg', label: 'Lucky Egg', activity: 'luckyegg', color: '#fde047', icon: '🥚' },
+  { id: 'picnic', label: 'Picnic', activity: 'picnic', color: '#fb923c', icon: '🧺' },
+  { id: 'carepackage', label: 'Care Package', activity: 'carepackage', color: '#38bdf8', icon: '📦' },
+  { id: 'mewtoll', label: "Mew's Toll", activity: 'mewtoll', color: '#f472b6', icon: '💸' },
+];
+
+/** @deprecated Legacy hunt-items segments (kept for debug/migration). */
 export const PATH_ITEMS_SEGMENTS: WheelSegment[] = [
   { id: 'item', label: 'Find Item', activity: 'item', color: '#fbbf24', icon: '🎒' },
   { id: 'stone', label: 'Stone', activity: 'stone', color: '#a78bfa', icon: '🪨' },
@@ -41,7 +65,7 @@ export const PATH_ITEMS_SEGMENTS: WheelSegment[] = [
   { id: 'xattack', label: 'X-Attack', activity: 'xattack', color: '#ef4444', icon: '⚔️' },
 ];
 
-/** Mystery pathway wheel segments. */
+/** @deprecated Legacy mystery segments. */
 export const PATH_MYSTERY_SEGMENTS: WheelSegment[] = [
   {
     id: 'uberspin',
@@ -63,10 +87,10 @@ export const PATH_MYSTERY_SEGMENTS: WheelSegment[] = [
   { id: 'money100', label: '+¥100', activity: 'money100', color: '#fde047', icon: '💰' },
 ];
 
-export const PATHWAY_SEGMENTS: Record<'catch' | 'items' | 'mystery', WheelSegment[]> = {
+export const PATHWAY_SEGMENTS: Record<'catch' | 'explore' | 'mischief', WheelSegment[]> = {
   catch: PATH_CATCH_SEGMENTS,
-  items: PATH_ITEMS_SEGMENTS,
-  mystery: PATH_MYSTERY_SEGMENTS,
+  explore: PATH_EXPLORE_SEGMENTS,
+  mischief: PATH_MISCHIEF_SEGMENTS,
 };
 
 /** Catch-path wheel segments; Johto has no fossil revival activity. */
@@ -88,6 +112,57 @@ export const TEAM_ROCKET_LEADER: GymLeader = {
   sprite: localTrainerSprite('rocketgrunt.png'),
   pokemon: [],
 };
+
+export const TRAINER_BATTLE_LEADER: GymLeader = {
+  id: 'wild-trainer',
+  name: 'Trainer',
+  type: 'normal',
+  badgeName: '',
+  sprite: localTrainerSprite('red-gen3.png'),
+  pokemon: [],
+};
+
+export const KANTO_RIVAL_LEADER: GymLeader = {
+  id: 'rival-blue',
+  name: 'Blue',
+  type: 'normal',
+  badgeName: '',
+  sprite: localTrainerSprite('blue.png'),
+  pokemon: [],
+};
+
+export const JOHTO_RIVAL_LEADER: GymLeader = {
+  id: 'rival-silver',
+  name: 'Silver',
+  type: 'normal',
+  badgeName: '',
+  sprite: localTrainerSprite('silver.png'),
+  pokemon: [],
+};
+
+export const GIOVANNI_LEADER: GymLeader = {
+  id: 'giovanni',
+  name: 'Giovanni',
+  type: 'ground',
+  badgeName: '',
+  sprite: localTrainerSprite('giovanni.png'),
+  pokemon: [],
+};
+
+export function getRegionRivalLeader(region: RegionId): GymLeader {
+  return region === 'Johto' ? JOHTO_RIVAL_LEADER : KANTO_RIVAL_LEADER;
+}
+
+/** Explore World wedges with region-correct trainer / rival sprites. */
+export function getRegionExploreSegments(region: RegionId): WheelSegment[] {
+  const rivalSprite = getRegionRivalLeader(region).sprite;
+  const trainerSprite = TRAINER_BATTLE_LEADER.sprite;
+  return PATH_EXPLORE_SEGMENTS.map((seg) => {
+    if (seg.id === 'trainer') return { ...seg, image: trainerSprite };
+    if (seg.id === 'rival') return { ...seg, image: rivalSprite };
+    return seg;
+  });
+}
 
 export const UBER_SPIN_SEGMENTS = [
   { id: 'masterball', label: 'Master Ball', color: '#a855f7', icon: '🔮', weight: 1 },
@@ -129,6 +204,11 @@ export const ITEMS = [
   { id: 'dragonscale', name: 'Dragon Scale', icon: '🐉' },
   { id: 'sunstone', name: 'Sun Stone', icon: '☀️' },
   { id: 'tradestone', name: 'Trade Stone', icon: '🔁' },
+  { id: 'mysterygift', name: 'Mystery Gift', icon: '🎁' },
+  { id: 'omnistone', name: 'Omnistone', icon: '💎' },
+  { id: 'secretkey', name: 'Secret Key', icon: '🔑' },
+  { id: 'mysteryegg', name: 'Mystery Egg', icon: '🥚' },
+  { id: 'maxrepel', name: 'Max Repel', icon: '🛡️' },
 ];
 
 export const STONE_ITEM_IDS = [
@@ -181,6 +261,13 @@ export const ITEM_DESCRIPTIONS: Record<string, string> = {
   dragonscale: 'Use on Seadra in Johto to trigger Dragon Scale evolution.',
   sunstone: 'Use on Gloom or Sunkern in Johto to trigger Sun Stone evolution.',
   tradestone: 'Use on trade-evolution Pokémon from your Party to evolve without trading.',
+  mysterygift: 'Open for a random unique item: Omnistone, Secret Key, Mystery Egg, or Max Repel.',
+  omnistone: 'One-time use. Evolves any stone-evolution Pokémon as if you had the correct stone.',
+  secretkey: 'Hmm... I wonder what it opens?',
+  mysteryegg:
+    'Hold through 4 gym battles to hatch a max-IV regional Pokémon at your party average level.',
+  maxrepel:
+    'Next 3 New Pokémon Wheel spins only include Pokémon with Base Stat Total higher than 400.',
 };
 
 export const CHANCE_BALL_DESCRIPTIONS: Record<string, string> = {
@@ -209,17 +296,41 @@ export const BALL_SPRITES: Record<string, string> = {
   masterball: localItemSprite('master-ball.png'),
 };
 
-export const SHOP_CATALOG = [
+export interface ShopCatalogEntry {
+  id: string;
+  name: string;
+  icon: string;
+  price: number;
+  /** Max purchases per run; omit/undefined = infinite. */
+  stock?: number;
+}
+
+export const SHOP_CATALOG: ShopCatalogEntry[] = [
   { id: 'potion', name: 'Potion', icon: '💊', price: 50 },
   { id: 'healpowder', name: 'Heal Powder', icon: '🌿', price: 50 },
   { id: 'xattack', name: 'X-Attack', icon: '⚔️', price: 50 },
   { id: 'maxelixer', name: 'Max Elixir', icon: '🧪', price: 50 },
-  { id: 'fullheal', name: 'Full Heal', icon: '💚', price: 200 },
-  { id: 'shinycharm', name: 'Shiny Charm', icon: '✨', price: 300 },
+  { id: 'fullheal', name: 'Full Heal', icon: '💚', price: 250, stock: 3 },
+  { id: 'shinycharm', name: 'Shiny Charm', icon: '✨', price: 300, stock: 1 },
   { id: 'pokeball', name: 'Poké Ball', icon: '🔴', price: 20 },
   { id: 'greatball', name: 'Great Ball', icon: '🔵', price: 30 },
   { id: 'ultraball', name: 'Ultra Ball', icon: '🟡', price: 50 },
 ];
+
+export const HIDDEN_STOCK_RARE_CANDY: ShopCatalogEntry = {
+  id: 'rarecandy',
+  name: 'Rare Candy',
+  icon: '🍬',
+  price: 100,
+};
+
+export const HIDDEN_STOCK_MASTERBALL: ShopCatalogEntry = {
+  id: 'masterball',
+  name: 'Master Ball',
+  icon: '🟣',
+  price: 1000,
+  stock: 1,
+};
 
 interface WeightedLootEntry {
   id: string;
@@ -273,6 +384,11 @@ export const GEN1_CAVE: number[] = [27, 41, 42, 50, 66, 74, 75, 81, 95, 104];
 export const FOSSIL_POKEMON: number[] = [138, 140, 142];
 export const STARTER_IDS = [1, 4, 7];
 export const MAX_PARTY = 5;
+export const MAX_PARTY_BIGGER = 6;
+
+export function getMaxPartySize(biggerBetter: boolean): number {
+  return biggerBetter ? MAX_PARTY_BIGGER : MAX_PARTY;
+}
 
 export const GEN1_LEGENDARY: number[] = [144, 145, 146, 150, 151];
 
@@ -751,6 +867,22 @@ export function getRegionLegendaryPool(region: RegionId): number[] {
 
 export function getRegionRocketPool(region: RegionId): number[] {
   return region === 'Johto' ? JOHTO_TEAM_ROCKET_POOL : TEAM_ROCKET_POOL;
+}
+
+/** Full regional dex ID list for the New Pokémon Wheel / random battles. */
+export function getRegionAllPokemonPool(region: RegionId): number[] {
+  if (region === 'Johto') {
+    return Array.from({ length: 100 }, (_, i) => i + 152);
+  }
+  return Array.from({ length: 151 }, (_, i) => i + 1);
+}
+
+/** High-BST pool for Arceus's Blessing (uses cached species when available). */
+export function filterPoolByMinBst(pool: number[], minBst: number): number[] {
+  return pool.filter((id) => {
+    const species = getCachedSpecies(id);
+    return species ? species.baseStatTotal >= minBst : false;
+  });
 }
 
 export function getStoneItemIdsForRegion(region: RegionId): StoneItemId[] {

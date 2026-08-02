@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { fetchPokemonBatch } from '../api/pokeapi';
 import {
   buildActiveMoves,
@@ -36,6 +36,7 @@ import {
   HALF_HEAL_MOVES,
   isConfused,
   isRolloutLocked,
+  pickRandomTransformTarget,
   revertTransform,
   rollConfusionSelfHit,
   storedMoveFromSlug,
@@ -44,6 +45,7 @@ import {
 } from '../data/moveEffects';
 import {
   accumulateCounterDamage,
+  clearMoveLocks,
   clearVolatiles,
   EMPTY_VOLATILES,
   isThrashLocked,
@@ -55,6 +57,7 @@ import { healFractionForMove, mergeFieldPatch } from '../utils/battleStatusApply
 import { getTypeEffectiveness, getEffectivenessChipLabel, buildHitBattleMessage, TYPE_COLORS } from '../data/typeChart';
 import { applyRegionMoveType } from '../data/gen2MoveTypes';
 import { SidePanel } from './SidePanel';
+import { isSelfStatusMove } from '../data/statusMoveTarget';
 import { BattleEffectBadges, hasVisibleBattleEffects, StageBadges, hasVisibleStageChanges } from './StatusBadge';
 import { TypeBadge } from './TypeBadge';
 import { ItemIcon } from './ItemIcon';
@@ -62,7 +65,7 @@ import { MagikarpSplashModal } from './MagikarpSplashModal';
 import { HollowPurpleCinematic } from './HollowPurpleCinematic';
 import { PokemonDetailModal } from './PokemonDetailModal';
 import { useGameStore } from '../store/useGameStore';
-import { playSfx } from '../utils/sound';
+import { playHitSfx, playSfx } from '../utils/sound';
 import { playClip, stopClips } from '../utils/music';
 import { PokeCenterVisits } from './PokeDollar';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
@@ -99,16 +102,32 @@ interface BattleArenaProps {
   winBadge?: Badge;
   finalVictory?: boolean;
   /** Which battle flow this is, for resume-after-refresh snapshots. */
-  battleContext: 'gym' | 'elite' | 'teamrocket';
+  battleContext: import('../types/game').BattleContext;
   /** Elite Four stage index (0 for a Gym battle). */
   eliteStage?: number;
+  /** Extra levels added on top of avg party scaling (e.g. Rival +2). */
+  levelBonus?: number;
+  /** Append one random regional enemy (Bigger = Better). Not used for Team Rocket. */
+  appendExtraEnemy?: boolean;
   /** When false, defeat does not cost a life (Team Rocket). Default true. */
   loseLifeOnDefeat?: boolean;
   /** When false, defeat does not full-heal the party (Team Rocket). Default true. */
   healAllOnDefeat?: boolean;
   /** Called on defeat before returning to hub (e.g. restore HP snapshot, steal Pokémon). */
   onBeforeDefeatExit?: () => void;
+  /**
+   * Called when the player pays to flee (trainer / rival / Team Rocket).
+   * Restore HP here; do not apply defeat penalties (e.g. Team Rocket steal).
+   */
+  onFlee?: () => void;
 }
+
+const PAID_FLEE_CONTEXTS = new Set<import('../types/game').BattleContext>([
+  'trainer',
+  'rival',
+  'teamrocket',
+]);
+const FLEE_COST = 50;
 
 type BattlePhase =
   | 'prep'
@@ -162,6 +181,11 @@ function pickEnemyMove(enemyMon: CaughtPokemon, volatiles: BattleVolatiles): Sto
     if (rollout) return rollout;
   }
   const pool = enemyMon.moves.filter((m) => m.slug !== volatiles.disabledMoveSlug);
+  // Untransformed Ditto should open with Transform
+  if (enemyMon.id === 132) {
+    const transform = pool.find((m) => m.slug === 'transform');
+    if (transform) return transform;
+  }
   const damaging = pool.filter((m) => m.category !== 'status' && m.power > 0);
   const picks = damaging.length > 0 ? damaging : pool;
   if (picks.length === 0) return null;
@@ -177,16 +201,21 @@ export function BattleArena({
   finalVictory = false,
   battleContext,
   eliteStage = 0,
+  levelBonus = 0,
+  appendExtraEnemy = false,
   loseLifeOnDefeat = true,
   healAllOnDefeat = true,
   onBeforeDefeatExit,
+  onFlee,
 }: BattleArenaProps) {
   const muted = useGameStore((s) => s.muted);
   const showTypeEffectiveness = useGameStore((s) => s.showTypeEffectiveness);
   const lives = useGameStore((s) => s.lives);
+  const money = useGameStore((s) => s.money);
   const party = useGameStore((s) => s.party);
   const bag = useGameStore((s) => s.bag);
   const consumeItem = useGameStore((s) => s.consumeItem);
+  const spendMoney = useGameStore((s) => s.spendMoney);
   const loseLife = useGameStore((s) => s.loseLife);
   const earnBadge = useGameStore((s) => s.earnBadge);
   const addMoney = useGameStore((s) => s.addMoney);
@@ -227,6 +256,13 @@ export function BattleArena({
   const [xAttackSpecial, setXAttackSpecial] = useState(false);
   const [shake, setShake] = useState(false);
   const [critFlash, setCritFlash] = useState(false);
+  const [hitFx, setHitFx] = useState<{
+    side: 'player' | 'enemy';
+    mode: 'damage' | 'status' | 'buff';
+    type: string;
+    id: number;
+  } | null>(null);
+  const hitFxIdRef = useRef(0);
   const [damagePopup, setDamagePopup] = useState<{ text: string; side: 'player' | 'enemy' } | null>(
     null,
   );
@@ -239,6 +275,7 @@ export function BattleArena({
   const [playerVolatiles, setPlayerVolatiles] = useState<BattleVolatiles>(EMPTY_VOLATILES);
   const [enemyVolatiles, setEnemyVolatiles] = useState<BattleVolatiles>(EMPTY_VOLATILES);
   const [transformSnapshot, setTransformSnapshot] = useState<TransformSnapshot | null>(null);
+  const [enemyTransformPhase, setEnemyTransformPhase] = useState<'out' | 'in' | null>(null);
   const [playerLastMoveSlug, setPlayerLastMoveSlug] = useState<string | null>(null);
   const [enemyLastMoveSlug, setEnemyLastMoveSlug] = useState<string | null>(null);
   const [battleField, setBattleField] = useState<BattleField>(EMPTY_BATTLE_FIELD);
@@ -253,6 +290,10 @@ export function BattleArena({
   const counterReleaseRef = useRef(false);
   /** True when a faint ended the turn before end-of-turn effects ran (Gen V+ forced swap). */
   const pendingEndOfTurnRef = useRef(false);
+  /** Set immediately on paid flee so in-flight turns cannot still hit the player. */
+  const fledRef = useRef(false);
+  const phaseRef = useRef<BattlePhase>(phase);
+  phaseRef.current = phase;
 
   const mpConnected = useMultiplayerStore((s) => s.role === 'host' && s.connectionStatus === 'connected');
   const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
@@ -333,22 +374,34 @@ export function BattleArena({
           )
         : null;
     const eliteBonus = leader.id === 'champion' ? 5 : 2;
+    const contextBonus =
+      (battleContext === 'elite' ? eliteBonus : 0) +
+      (battleContext === 'rival' ? 2 : 0) +
+      levelBonus;
     const scaledLevel =
       avgPartyLevel == null
         ? null
-        : Math.max(1, Math.min(100, avgPartyLevel + (battleContext === 'elite' ? eliteBonus : 0)));
-    const levels =
-      scaledLevel == null
-        ? leader.pokemon.map((p) => p.level)
-        : leader.pokemon.map(() => scaledLevel);
-    fetchPokemonBatch(enemyIds).then((speciesData) => {
+        : Math.max(1, Math.min(100, avgPartyLevel + contextBonus));
+    const load = async () => {
+      let ids = [...enemyIds];
+      if (appendExtraEnemy && battleContext !== 'teamrocket') {
+        const { getRegionAllPokemonPool } = await import('../data/pools');
+        const pool = getRegionAllPokemonPool(battleRegion);
+        const extra = pool[Math.floor(Math.random() * pool.length)];
+        if (extra != null) ids = [...ids, extra];
+      }
+      const speciesData = await fetchPokemonBatch(ids);
       if (!active) return;
       const speciesMap: Record<number, PokemonData> = {};
       for (const species of speciesData) {
         speciesMap[species.id] = species;
       }
       setEnemySpeciesById(speciesMap);
-      const team = buildEnemyTeam(speciesData, levels);
+      const teamLevels =
+        scaledLevel == null
+          ? ids.map((_, i) => leader.pokemon[i]?.level ?? 10)
+          : ids.map(() => scaledLevel);
+      const team = buildEnemyTeam(speciesData, teamLevels);
       setEnemyTeam(team);
 
       const snap = useGameStore.getState().battleSnapshot;
@@ -450,11 +503,23 @@ export function BattleArena({
         startFresh();
       }
       setLoading(false);
-    });
+    };
+    void load();
     return () => {
       active = false;
     };
-  }, [leader, battleContext, eliteStage, resetFullHealBattle, setFullHealUsedInBattle, markSeen]);
+  }, [
+    leader,
+    battleContext,
+    eliteStage,
+    levelBonus,
+    appendExtraEnemy,
+    battleRegion,
+    resetFullHealBattle,
+    setFullHealUsedInBattle,
+    markSeen,
+    commitEnemyHp,
+  ]);
 
   useEffect(() => {
     if (loading || phase === 'victory' || phase === 'result') return;
@@ -545,6 +610,9 @@ export function BattleArena({
           say(`Spikes dug into ${mon.displayName}!`);
         }
       }
+
+      const finalMon: CaughtPokemon = { ...mon, status: undefined, hp };
+
       setEnemyIndex(index);
       commitEnemyHp(hp);
       setXAttackPhysical(false);
@@ -553,10 +621,9 @@ export function BattleArena({
       setEnemyStages(ZERO_STAGES);
       setEnemyVolatiles(clearVolatiles());
       setEnemyLastMoveSlug(null);
-      setEnemyTeam((prev) =>
-        prev.map((m, i) => (i === index ? { ...m, status: undefined, hp } : m)),
-      );
-      const species = enemySpeciesById[mon.id];
+      setEnemyTransformPhase(null);
+      setEnemyTeam((prev) => prev.map((m, i) => (i === index ? finalMon : m)));
+      const species = enemySpeciesById[finalMon.id] ?? enemySpeciesById[mon.id];
       if (species) markSeen(species);
       say(`${leader.name} sent out ${mon.displayName}!`);
       playSfx('battle', muted);
@@ -569,10 +636,31 @@ export function BattleArena({
     window.setTimeout(() => setShake(false), 400);
   };
 
+  const triggerHitFx = useCallback(
+    (side: 'player' | 'enemy', mode: 'damage' | 'status' | 'buff', type: string) => {
+      const id = ++hitFxIdRef.current;
+      setHitFx({ side, mode, type: type.toLowerCase(), id });
+      window.setTimeout(() => {
+        setHitFx((cur) => (cur?.id === id ? null : cur));
+      }, mode === 'buff' ? 720 : mode === 'status' ? 700 : 520);
+    },
+    [],
+  );
+
   const showDamage = (text: string, side: 'player' | 'enemy') => {
     setDamagePopup({ text, side });
     window.setTimeout(() => setDamagePopup(null), 900);
   };
+
+  const moveTypeForFx = useCallback(
+    (move: { slug: string; type: string }, ownerCaughtAt?: number) => {
+      if (move.slug === 'hidden-power' && ownerCaughtAt != null) {
+        return battleField.hiddenPowerTypes[ownerCaughtAt] ?? move.type;
+      }
+      return applyRegionMoveType(move.slug, move.type, battleRegion);
+    },
+    [battleField.hiddenPowerTypes, battleRegion],
+  );
 
   const handlePartyWipe = useCallback(async () => {
     clearBattleSnapshot();
@@ -650,6 +738,53 @@ export function BattleArena({
     say,
   ]);
 
+  const allowPaidFlee = PAID_FLEE_CONTEXTS.has(battleContext);
+  const canAffordFlee = money >= FLEE_COST;
+
+  const handleFlee = useCallback(async () => {
+    if (!allowPaidFlee || processing || fledRef.current) return;
+    if (money < FLEE_COST) {
+      say(`You need ¥${FLEE_COST} to run away!`);
+      return;
+    }
+    // Lock combat out before any await so a pending enemy turn cannot land.
+    fledRef.current = true;
+    setProcessing(true);
+    setPhase('result');
+    setDamagePopup(null);
+    setShake(false);
+    if (!spendMoney(FLEE_COST)) {
+      fledRef.current = false;
+      setProcessing(false);
+      setPhase('choose');
+      say(`You need ¥${FLEE_COST} to run away!`);
+      return;
+    }
+    clearBattleSnapshot();
+    say(`You paid ¥${FLEE_COST} and ran away!`);
+    playSfx('fail', muted);
+    onFlee?.();
+    setLastResult({
+      type: 'gym',
+      success: false,
+      message: `You paid ¥${FLEE_COST} and fled from ${leader.name}.`,
+    });
+    await delay(1400);
+    onLose();
+  }, [
+    allowPaidFlee,
+    clearBattleSnapshot,
+    leader.name,
+    money,
+    muted,
+    onFlee,
+    onLose,
+    processing,
+    say,
+    setLastResult,
+    spendMoney,
+  ]);
+
   useEffect(() => {
     if (phase !== 'choose' || processing) return;
     if (!hasUsablePokemon || hasAnyPpMove || hasBenchSwitch) return;
@@ -687,17 +822,28 @@ export function BattleArena({
     });
 
     if (winBadge && !finalVictory) {
-      playClip(asset('sounds/gym_victory.mp3'));
+      playClip(asset('sounds/gym_victory.mp3'), 0.4);
       setPhase('victory');
       say(`You won the ${leader.badgeName}!`);
       return;
     }
 
-    if (battleContext !== 'teamrocket') {
+    // Modal battles play their own victory music — skip the short win SFX.
+    if (
+      battleContext !== 'teamrocket' &&
+      battleContext !== 'trainer' &&
+      battleContext !== 'rival' &&
+      battleContext !== 'giovanni'
+    ) {
       playSfx('win', muted);
     }
     setPhase('result');
-    say(finalVictory ? 'Champion victory!' : `${leader.badgeName} earned!`);
+    const victoryMessage = finalVictory
+      ? 'Champion victory!'
+      : leader.badgeName
+        ? `${leader.badgeName} earned!`
+        : `You defeated ${leader.name}!`;
+    say(victoryMessage);
     await delay(1400);
     onWin();
   }, [
@@ -720,6 +866,9 @@ export function BattleArena({
 
   const advanceAfterEnemyFaint = useCallback(async () => {
     playSfx('win', muted);
+    // Petal Dance / Thrash / Rollout must not auto-continue into the next opponent.
+    setPlayerVolatiles((v) => clearMoveLocks(v));
+    thrashAutoRunRef.current = null;
     const nextIndex = enemyIndex + 1;
     if (nextIndex >= enemyTeam.length) {
       await handleVictory();
@@ -900,6 +1049,9 @@ export function BattleArena({
   );
 
   const executeEnemyAttack = useCallback(async (): Promise<boolean> => {
+    if (fledRef.current || phaseRef.current === 'result' || phaseRef.current === 'victory') {
+      return false;
+    }
     if (!enemy) return false;
     const target = useGameStore.getState().party[0];
     if (!target || isFainted(target)) return false;
@@ -910,7 +1062,7 @@ export function BattleArena({
       if (counterDmg > 0) {
         damagePartyMember(target.caughtAt, counterDmg);
         triggerShake();
-        playSfx('hit', muted);
+        playHitSfx('physical', muted);
         showDamage(`-${counterDmg}`, 'player');
         say(`${leader.name}'s ${enemy.displayName} countered the attack!`);
         await delay(900);
@@ -979,6 +1131,10 @@ export function BattleArena({
         return false;
       }
       say(`${leader.name}'s ${enemy.displayName} used ${stored.name}!`);
+      const transformTarget =
+        stored.slug === 'transform'
+          ? pickRandomTransformTarget(useGameStore.getState().party) ?? target
+          : undefined;
       const statusResult = resolveStatusMove({
         slug: stored.slug,
         move: stored,
@@ -987,11 +1143,22 @@ export function BattleArena({
         attackerVolatiles: enemyVolatiles,
         defenderVolatiles: playerVolatiles,
         defenderLastMoveSlug: playerLastMoveSlug,
+        transformTarget,
       });
       for (const msg of statusResult.messages) say(msg);
       if (statusResult.failed) {
         await delay(900);
         return false;
+      }
+      {
+        const moveType = moveTypeForFx(stored);
+        if (isSelfStatusMove(stored.slug)) {
+          playSfx('buff', muted);
+          triggerHitFx('enemy', 'buff', moveType);
+        } else {
+          playSfx('statusHit', muted);
+          triggerHitFx('player', 'status', moveType);
+        }
       }
       if (statusResult.attackerStageDelta) {
         setEnemyStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
@@ -1014,13 +1181,31 @@ export function BattleArena({
       if (statusResult.fieldPatch) {
         setBattleField((f) => mergeFieldPatch(f, statusResult.fieldPatch));
       }
+      if (statusResult.transform) {
+        // Morph: collapse Ditto, swap into the copy, then bloom the new form
+        setEnemyTransformPhase('out');
+        await delay(480);
+        patchEnemy(statusResult.transform.patch);
+        if (typeof statusResult.transform.patch.hp === 'number') {
+          commitEnemyHp(statusResult.transform.patch.hp);
+        }
+        const copiedId = statusResult.transform.patch.id;
+        if (typeof copiedId === 'number') {
+          const species = enemySpeciesById[copiedId];
+          if (species) markSeen(species);
+        }
+        setEnemyTransformPhase('in');
+        await delay(560);
+        setEnemyTransformPhase(null);
+      }
       if (statusResult.healFraction != null || HALF_HEAL_MOVES.has(stored.slug)) {
         const frac = healFractionForMove(
           stored.slug,
           battleField.weather,
           statusResult.healFraction,
         );
-        const healed = Math.min(maxHpForMon(enemy), enemyHpRef.current + Math.max(1, Math.floor(maxHpForMon(enemy) * frac)));
+        const max = maxHpForMon({ ...enemy, ...statusResult.transform?.patch });
+        const healed = Math.min(max, enemyHpRef.current + Math.max(1, Math.floor(max * frac)));
         commitEnemyHp(healed);
         patchEnemy({ hp: healed });
       }
@@ -1041,13 +1226,16 @@ export function BattleArena({
         });
         if (talkDmg.damage > 0) {
           damagePartyMember(target.caughtAt, talkDmg.damage);
+          playHitSfx(talked.category, muted, moveTypeForFx(talked));
+          triggerHitFx('player', 'damage', moveTypeForFx(talked));
           showDamage(`-${talkDmg.damage}`, 'player');
         }
         say(`${enemy.displayName} used ${talked.name} in its sleep!`);
       }
       if (statusResult.attackerStatus) {
-        patchEnemy({ status: statusResult.attackerStatus, hp: maxHpForMon(enemy) });
-        commitEnemyHp(maxHpForMon(enemy));
+        const max = maxHpForMon(enemy);
+        patchEnemy({ status: statusResult.attackerStatus, hp: max });
+        commitEnemyHp(max);
       }
       if (statusResult.clearAttackerStatus) {
         patchEnemy({ status: undefined });
@@ -1058,7 +1246,8 @@ export function BattleArena({
         patchEnemy({ hp: newHp });
       }
       if (HALF_HEAL_MOVES.has(stored.slug) && statusResult.healFraction == null && !WEATHER_HEAL_MOVES.has(stored.slug)) {
-        const healed = Math.min(maxHpForMon(enemy), enemyHpRef.current + Math.max(1, Math.floor(maxHpForMon(enemy) / 2)));
+        const max = maxHpForMon(enemy);
+        const healed = Math.min(max, enemyHpRef.current + Math.max(1, Math.floor(max / 2)));
         commitEnemyHp(healed);
         patchEnemy({ hp: healed });
       }
@@ -1090,6 +1279,8 @@ export function BattleArena({
     const lastCrit = dmgResult.lastCrit;
     const lastEffectiveness = dmgResult.lastEffectiveness;
 
+    if (fledRef.current) return false;
+
     if (dmgResult.presentHeal) {
       useGameStore.getState().healPartyMember(target.caughtAt, dmgResult.presentHeal);
       say(`${leader.name}'s ${enemy.displayName} used Present! ${target.displayName} recovered HP!`);
@@ -1102,7 +1293,8 @@ export function BattleArena({
       const cat = stored.category === 'physical' ? 'physical' : 'special';
       setPlayerVolatiles((v) => accumulateCounterDamage(v, dmgResult.lastHitDamage, cat));
       triggerShake();
-      playSfx('hit', muted);
+      playHitSfx(stored.category, muted, moveTypeForFx(stored));
+      triggerHitFx('player', 'damage', moveTypeForFx(stored));
       showDamage(`-${totalDamage}`, 'player');
     } else {
       playSfx('fail', muted);
@@ -1185,7 +1377,7 @@ export function BattleArena({
       return true;
     }
     return false;
-  }, [advanceAfterEnemyFaint, canAct, damagePartyMember, enemy, enemyHp, enemyPendingTurn, enemyStages.atk, enemyStages.spa, handlePartyWipe, leader.name, muted, patchEnemy, playerStages.def, playerStages.spd, say, setPartyMemberStatus]);
+  }, [advanceAfterEnemyFaint, canAct, damagePartyMember, enemy, enemyHp, enemyPendingTurn, enemyStages.atk, enemyStages.spa, enemySpeciesById, handlePartyWipe, leader.name, markSeen, moveTypeForFx, muted, patchEnemy, playerStages.def, playerStages.spd, say, setPartyMemberStatus, triggerHitFx]);
 
   enemyAttackRef.current = executeEnemyAttack;
 
@@ -1399,6 +1591,16 @@ export function BattleArena({
         await delay(900);
         return 'continue';
       }
+      {
+        const moveType = moveTypeForFx(releaseMove, releaseMove.ownerCaughtAt);
+        if (isSelfStatusMove(releaseMove.slug)) {
+          playSfx('buff', muted);
+          triggerHitFx('player', 'buff', moveType);
+        } else {
+          playSfx('statusHit', muted);
+          triggerHitFx('enemy', 'status', moveType);
+        }
+      }
       if (statusResult.attackerStageDelta) {
         setPlayerStages((s) => mergeStageDelta(s, statusResult.attackerStageDelta));
       }
@@ -1467,7 +1669,8 @@ export function BattleArena({
           patchEnemy({ hp: newHp });
           if (talkDmg.damage > 0) {
             triggerShake();
-            playSfx('hit', muted);
+            playHitSfx(talked.category, muted, moveTypeForFx(talked, attacker.caughtAt));
+            triggerHitFx('enemy', 'damage', moveTypeForFx(talked, attacker.caughtAt));
             showDamage(`-${talkDmg.damage}`, 'enemy');
           }
           say(`${attacker.displayName} used ${talked.name} in its sleep!`);
@@ -1498,6 +1701,16 @@ export function BattleArena({
                 defenderLastMoveSlug: enemyLastMoveSlug,
               });
               for (const msg of metro.messages) say(msg);
+              if (!metro.failed) {
+                const moveType = moveTypeForFx(mimicked, attacker.caughtAt);
+                if (isSelfStatusMove(mimicked.slug)) {
+                  playSfx('buff', muted);
+                  triggerHitFx('player', 'buff', moveType);
+                } else {
+                  playSfx('statusHit', muted);
+                  triggerHitFx('enemy', 'status', moveType);
+                }
+              }
               if (metro.defenderStatus) patchEnemy({ status: metro.defenderStatus });
             } else {
               const metroDmg = calculateMoveDamage({
@@ -1518,7 +1731,8 @@ export function BattleArena({
               patchEnemy({ hp: newHp });
               if (metroDmg.damage > 0) {
                 triggerShake();
-                playSfx('hit', muted);
+                playHitSfx(mimicked.category, muted, moveTypeForFx(mimicked, attacker.caughtAt));
+                triggerHitFx('enemy', 'damage', moveTypeForFx(mimicked, attacker.caughtAt));
                 showDamage(`-${metroDmg.damage}`, 'enemy');
               }
               say(
@@ -1595,7 +1809,12 @@ export function BattleArena({
         const cat = releaseMove.category === 'physical' ? 'physical' : 'special';
         setEnemyVolatiles((v) => accumulateCounterDamage(v, dmgResult.lastHitDamage, cat));
         triggerShake();
-        playSfx('hit', muted);
+        playHitSfx(
+          releaseMove.category,
+          muted,
+          moveTypeForFx(releaseMove, releaseMove.ownerCaughtAt),
+        );
+        triggerHitFx('enemy', 'damage', moveTypeForFx(releaseMove, releaseMove.ownerCaughtAt));
         showDamage(`-${totalDamage}`, 'enemy');
       } else {
         playSfx('fail', muted);
@@ -1679,6 +1898,7 @@ export function BattleArena({
       enemyStages.def,
       enemyStages.eva,
       enemyStages.spd,
+      moveTypeForFx,
       muted,
       patchEnemy,
       playerStages.acc,
@@ -1686,6 +1906,7 @@ export function BattleArena({
       playerPendingTurn,
       playerStages.spa,
       say,
+      triggerHitFx,
       useMovePp,
       xAttackPhysical,
       xAttackSpecial,
@@ -1706,21 +1927,26 @@ export function BattleArena({
         const result = await executePlayerAttack(move);
         return result;
       };
-      const runEnemy = async () => executeEnemyAttack();
+      const runEnemy = async () => {
+        if (fledRef.current || phaseRef.current === 'result') return false;
+        return executeEnemyAttack();
+      };
 
       if (playerFirst) {
         const result = await runPlayer();
-        if (result === 'enemy_fainted' || result === 'abort') return;
+        if (result === 'enemy_fainted' || result === 'abort' || fledRef.current) return;
         const wiped = await runEnemy();
-        if (wiped) return;
+        if (wiped || fledRef.current) return;
       } else {
         const wiped = await runEnemy();
-        if (wiped) return;
+        if (wiped || fledRef.current) return;
         const result = await runPlayer();
-        if (result === 'enemy_fainted' || result === 'abort') return;
+        if (result === 'enemy_fainted' || result === 'abort' || fledRef.current) return;
       }
 
+      if (fledRef.current) return;
       await tickEndOfTurnStatus();
+      if (fledRef.current) return;
       await runChaosIfNeeded(hostUsedAttack);
 
       setPlayerVolatiles((v) =>
@@ -1799,7 +2025,7 @@ export function BattleArena({
         commitEnemyHp(newHp);
         patchEnemy({ hp: newHp });
         triggerShake();
-        playSfx('hit', muted);
+        playHitSfx('physical', muted);
         showDamage(`-${counterDmg}`, 'enemy');
         say(`${activeMember?.nickname ?? activeMember?.displayName ?? 'Your Pokémon'} countered the attack!`);
         await delay(900);
@@ -2027,10 +2253,10 @@ export function BattleArena({
       setProcessing(true);
       say('Chaos forces you to skip your turn!');
       await delay(700);
-      if (cancelled) return;
+      if (cancelled || fledRef.current) return;
       const wiped = await enemyAttackRef.current();
-      if (!cancelled && !wiped) setPhase('choose');
-      if (!cancelled) setProcessing(false);
+      if (!cancelled && !fledRef.current && !wiped) setPhase('choose');
+      if (!cancelled && !fledRef.current) setProcessing(false);
     })();
 
     return () => {
@@ -2040,12 +2266,16 @@ export function BattleArena({
 
   const spendItemTurn = useCallback(
     async (msg: string) => {
-      if (phase !== 'choose' || processing) return;
+      if (phase !== 'choose' || processing || fledRef.current) return;
       setProcessing(true);
       say(msg);
       await delay(900);
+      if (fledRef.current) {
+        setProcessing(false);
+        return;
+      }
       const wiped = await executeEnemyAttack();
-      if (!wiped) setPhase('choose');
+      if (!wiped && !fledRef.current) setPhase('choose');
       setProcessing(false);
     },
     [executeEnemyAttack, phase, processing, say],
@@ -2103,8 +2333,9 @@ export function BattleArena({
           }
         }
       } else {
+        if (fledRef.current) return;
         const wiped = await executeEnemyAttack();
-        if (!wiped) {
+        if (!wiped && !fledRef.current) {
           await finishTurn();
         }
       }
@@ -2227,33 +2458,112 @@ export function BattleArena({
           </div>
 
           <div className="gym-leader-info">
-            <h3>{leader.name}</h3>
+            <h3
+              className={battleContext === 'giovanni' ? 'gym-leader-info__name--giovanni' : undefined}
+              data-text={battleContext === 'giovanni' ? leader.name : undefined}
+            >
+              {leader.name}
+            </h3>
             <TypeBadge type={leader.type} />
           </div>
 
           {enemy && (
             <div className="battle-scene">
               {leader.sprite && (
-                <img
-                  src={leader.sprite}
-                  alt={leader.name}
-                  className="battle-trainer__sprite"
-                  onError={(e) => {
-                    const filename = leader.sprite?.split('/').pop();
-                    imgFallback(
-                      e,
-                      filename ? remoteTrainerSprite(filename) : undefined,
-                      PLACEHOLDER_SPRITE,
-                    );
-                  }}
-                />
+                <div
+                  className={`battle-trainer__sprite-wrap${
+                    battleContext === 'giovanni' ? ' battle-trainer__sprite-wrap--giovanni' : ''
+                  }`}
+                >
+                  <img
+                    src={leader.sprite}
+                    alt={leader.name}
+                    className="battle-trainer__sprite"
+                    onError={(e) => {
+                      const filename = leader.sprite?.split('/').pop();
+                      imgFallback(
+                        e,
+                        filename ? remoteTrainerSprite(filename) : undefined,
+                        PLACEHOLDER_SPRITE,
+                      );
+                    }}
+                  />
+                  {battleContext === 'giovanni' && (
+                    <>
+                      <span className="battle-trainer__ground-shadow" aria-hidden />
+                      <span className="battle-trainer__smoke" aria-hidden>
+                        <span className="battle-trainer__smoke-wisp" />
+                        <span className="battle-trainer__smoke-wisp" />
+                        <span className="battle-trainer__smoke-wisp" />
+                        <span className="battle-trainer__smoke-wisp" />
+                        <span className="battle-trainer__smoke-wisp" />
+                        <span className="battle-trainer__smoke-wisp" />
+                        <span className="battle-trainer__smoke-plume" />
+                      </span>
+                      <span className="battle-trainer__red-eye" aria-hidden />
+                    </>
+                  )}
+                </div>
               )}
               <div className="gym-enemy">
-                <div className="gym-enemy__sprite-wrap">
+                <div
+                  className={`gym-enemy__sprite-wrap${
+                    enemyTransformPhase ? ' gym-enemy__sprite-wrap--transforming' : ''
+                  }`}
+                >
+                  {enemyTransformPhase && (
+                    <span
+                      className={`gym-enemy__transform-flash gym-enemy__transform-flash--${enemyTransformPhase}`}
+                      aria-hidden
+                    />
+                  )}
+                  {hitFx?.side === 'enemy' && (
+                    <span
+                      key={`hit-fx-${hitFx.id}`}
+                      className={`battle-hit-fx battle-hit-fx--${hitFx.mode} battle-hit-fx--type-${hitFx.type}`}
+                      style={
+                        {
+                          '--hit-color':
+                            hitFx.mode === 'buff'
+                              ? '#fbbf24'
+                              : (TYPE_COLORS[hitFx.type] ?? TYPE_COLORS.normal),
+                        } as CSSProperties
+                      }
+                      aria-hidden
+                    >
+                      <span className="battle-hit-fx__burst" />
+                      <span className="battle-hit-fx__ring" />
+                      <span className="battle-hit-fx__spark battle-hit-fx__spark--1" />
+                      <span className="battle-hit-fx__spark battle-hit-fx__spark--2" />
+                      <span className="battle-hit-fx__spark battle-hit-fx__spark--3" />
+                      <span className="battle-hit-fx__spark battle-hit-fx__spark--4" />
+                    </span>
+                  )}
                   <img
-                    src={localBattleGif(enemy.id)}
+                    key={`enemy-gif-${enemy.id}-${enemyIndex}-${enemy.shiny ? 's' : 'n'}-${enemyTransformPhase ?? 'idle'}`}
+                    src={
+                      enemy.shiny && enemy.shinySprite
+                        ? enemy.shinySprite
+                        : localBattleGif(enemy.id)
+                    }
                     alt={enemy.displayName}
-                    className="gym-enemy__sprite gym-enemy__sprite--clickable"
+                    className={`gym-enemy__sprite gym-enemy__sprite--clickable${
+                      enemyTransformPhase
+                        ? ` gym-enemy__sprite--transform-${enemyTransformPhase}`
+                        : ''
+                    }${
+                      hitFx?.side === 'enemy' && hitFx.mode === 'damage'
+                        ? ' gym-enemy__sprite--hit-damage'
+                        : ''
+                    }${
+                      hitFx?.side === 'enemy' && hitFx.mode === 'status'
+                        ? ' gym-enemy__sprite--hit-status'
+                        : ''
+                    }${
+                      hitFx?.side === 'enemy' && hitFx.mode === 'buff'
+                        ? ' gym-enemy__sprite--hit-buff'
+                        : ''
+                    }`}
                     title={`View ${enemy.displayName} details`}
                     aria-label={`View ${enemy.displayName} details`}
                     role="button"
@@ -2266,6 +2576,8 @@ export function BattleArena({
                       }
                     }}
                     onError={(e) => {
+                      const img = e.currentTarget;
+                      delete img.dataset.remoteFallback;
                       battleGifOnError(e, enemy.id, enemy.sprite || PLACEHOLDER_SPRITE);
                     }}
                   />
@@ -2417,6 +2729,21 @@ export function BattleArena({
                   );
                 })}
               </div>
+              {allowPaidFlee && (
+                <button
+                  type="button"
+                  className="btn btn--ghost battle-flee-btn"
+                  disabled={processing || hostInputLocked || !canAffordFlee}
+                  title={
+                    canAffordFlee
+                      ? `Pay ¥${FLEE_COST} to flee this battle`
+                      : `Need ¥${FLEE_COST} to run away`
+                  }
+                  onClick={() => void handleFlee()}
+                >
+                  Run Away (¥{FLEE_COST})
+                </button>
+              )}
             </div>
           )}
 
@@ -2473,6 +2800,7 @@ export function BattleArena({
             highlightActive={phase !== 'prep'}
             activeBattlerVolatiles={playerVolatiles}
             activeBattlerStages={playerStages}
+            activeHitFx={hitFx?.side === 'player' ? hitFx : null}
             inBattle
             onPotionUsed={() => spendItemTurn('You used a Potion!')}
             onElixirUsed={() => spendItemTurn('You used a Max Elixir!')}

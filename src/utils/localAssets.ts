@@ -55,17 +55,34 @@ export function remoteBattleGif(id: number): string {
   return `${POKEAPI_POKEMON}/versions/generation-v/black-white/animated/${id}.gif`;
 }
 
+export function remoteShinyBattleGif(id: number): string {
+  return `${POKEAPI_POKEMON}/versions/generation-v/black-white/animated/shiny/${id}.gif`;
+}
+
 export function localBattleGif(id: number): string {
   return localAsset(`pokemon/battle/${id}.gif`);
 }
 
-/** Local battle GIF → remote GIF → static PNG. */
+/**
+ * Battle sprite fallback:
+ * - Normal: local GIF → remote GIF → static PNG
+ * - Shiny: remote shiny GIF (often already the src) → shiny static PNG
+ */
 export function battleGifOnError(
   e: { currentTarget: HTMLImageElement },
   id: number,
   staticFallback?: string,
+  shiny = false,
 ): void {
   const img = e.currentTarget;
+  if (shiny) {
+    imgFallback(
+      e,
+      remotePokemonShinySprite(id),
+      staticFallback ?? localPokemonShinySprite(id),
+    );
+    return;
+  }
   if (img.dataset.remoteFallback !== '1') {
     img.dataset.remoteFallback = '1';
     img.src = remoteBattleGif(id);

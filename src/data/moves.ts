@@ -1,5 +1,6 @@
 import type { BattleMove, CaughtPokemon, MoveCategory, StatusAilment, StoredMove } from '../types/game';
-import { cachedMoveToStored, getCachedSpecies, getSpeciesWeightKg } from './speciesCache';
+import { cachedMoveToStored, getCachedSpecies, getRandomCachedMoves, getSpeciesWeightKg } from './speciesCache';
+import { MISSINGNO_ID } from './missingno';
 import { CURATED_SPECIES_MOVES_GEN1 } from './speciesMovesGen1';
 import { CURATED_SPECIES_MOVES_GEN2 } from './speciesMovesGen2';
 import { getStabMultiplier } from './typeChart';
@@ -79,6 +80,11 @@ function fallbackMove(name: string, slug: string, typeHint: string): StoredMove 
 export function assignMoves(speciesId: number, types: string[], _level = 5, preferStrong = false): StoredMove[] {
   void _level;
   void preferStrong;
+
+  // MissingNo. has no learnset — roll four random moves from the move cache.
+  if (speciesId === MISSINGNO_ID) {
+    return getRandomCachedMoves(4);
+  }
 
   const curated = CURATED_SPECIES_MOVES_GEN1[speciesId] ?? CURATED_SPECIES_MOVES_GEN2[speciesId];
   if (curated) {

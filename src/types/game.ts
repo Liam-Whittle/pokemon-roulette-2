@@ -2,6 +2,7 @@ export type Screen =
   | 'title'
   | 'setup'
   | 'starter'
+  | 'hardcore-draft'
   | 'hub'
   | 'catch'
   | 'fishing'
@@ -11,6 +12,7 @@ export type Screen =
   | 'elite'
   | 'item'
   | 'pokedex'
+  | 'global-pokedex'
   | 'party'
   | 'bag'
   | 'results'
@@ -20,7 +22,14 @@ export type Screen =
   | 'hall'
   | 'coming-soon'
   | 'shop'
+  | 'prestige'
   | 'teamrocket'
+  | 'trainerbattle'
+  | 'rivalbattle'
+  | 'giovanni'
+  | 'missingno'
+  | 'gamecorner'
+  | 'daily'
   | 'mp-host-lobby'
   | 'mp-join'
   | 'mp-guest';
@@ -48,9 +57,26 @@ export type ActivityType =
   | 'rarecandy'
   | 'healpowder'
   | 'xattack'
-  | 'stone';
+  | 'stone'
+  | 'trainer'
+  | 'rival'
+  | 'newpokemon'
+  | 'wondertrade'
+  | 'benchwarmers'
+  | 'luckyegg'
+  | 'picnic'
+  | 'carepackage'
+  | 'mewtoll';
 
-export type PathwayId = 'catch' | 'items' | 'mystery';
+export type PathwayId = 'catch' | 'explore' | 'mischief';
+
+export type BattleContext =
+  | 'gym'
+  | 'elite'
+  | 'teamrocket'
+  | 'trainer'
+  | 'rival'
+  | 'giovanni';
 
 export interface WheelSegment {
   id: string;
@@ -58,6 +84,8 @@ export interface WheelSegment {
   activity: ActivityType;
   color: string;
   icon: string;
+  /** Explicit wedge image URL (e.g. trainer sprite). Takes priority over id-based sprites. */
+  image?: string;
   comingSoon?: boolean;
   weight?: number;
 }
@@ -270,7 +298,7 @@ export interface PcStat {
 
 /** Persisted mid-battle progress so a refresh/exit can resume the same fight. */
 export interface BattleSnapshot {
-  context: 'gym' | 'elite' | 'teamrocket';
+  context: BattleContext;
   leaderId: string;
   eliteStage: number;
   enemyIndex: number;

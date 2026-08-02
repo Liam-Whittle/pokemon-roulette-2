@@ -48,14 +48,23 @@ export function computeShakeB(a: number): number {
   return Math.floor(1048560 / Math.sqrt(Math.sqrt(16711680 / safeA)));
 }
 
+/** Flat catch-chance bonus per failed throw in the same encounter (chance mode). */
+export const THROW_CHAIN_BONUS = 0.01;
+
 /** Probability all four shakes succeed (for UI display). */
-export function catchProbability(catchRate: number, ballId: string): number {
+export function catchProbability(
+  catchRate: number,
+  ballId: string,
+  /** Extra absolute catch chance (0–1), e.g. throw-chain bonus. */
+  flatBonus = 0,
+): number {
   if (ballId === 'masterball') return 1;
   const a = computeCatchA(catchRate, ballId);
   if (a >= 255) return 1;
   const b = computeShakeB(a);
   const pShake = b / 65536;
-  return Math.pow(pShake, 4);
+  const base = Math.pow(pShake, 4);
+  return Math.min(1, base + Math.max(0, flatBonus));
 }
 
 /** Run authentic four-shake catch checks (Gen 3–7). */
@@ -63,11 +72,26 @@ export function resolveCatchShakes(
   catchRate: number,
   ballId: string,
   rng: () => number = Math.random,
+  /** Extra absolute catch chance (0–1) added on top of Gen odds. */
+  flatBonus = 0,
 ): CatchShakeResult {
   if (ballId === 'masterball') return { caught: true, shakes: 4 };
 
   const a = computeCatchA(catchRate, ballId);
   if (a >= 255) return { caught: true, shakes: 4 };
+
+  // Flat bonus (throw chain): resolve against the displayed probability so UI matches.
+  if (flatBonus > 0) {
+    const p = catchProbability(catchRate, ballId, flatBonus);
+    if (rng() < p) return { caught: true, shakes: 4 };
+    const b = computeShakeB(a);
+    for (let shake = 1; shake <= 3; shake++) {
+      if (Math.floor(rng() * 65536) >= b) {
+        return { caught: false, shakes: shake };
+      }
+    }
+    return { caught: false, shakes: 3 };
+  }
 
   const b = computeShakeB(a);
   for (let shake = 1; shake <= 4; shake++) {

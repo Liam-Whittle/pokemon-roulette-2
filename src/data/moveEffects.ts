@@ -1,4 +1,4 @@
-import type { CaughtPokemon, IVs, StatusAilment, StoredMove } from '../types/game';
+import type { CaughtPokemon, EVs, IVs, NatureId, StatusAilment, StoredMove } from '../types/game';
 import type { BattleVolatiles } from './battleVolatiles';
 import { cachedMoveToStored } from './speciesCache';
 import { maxHpForMon } from '../utils/stats';
@@ -244,6 +244,12 @@ export interface TransformSnapshot {
     types: string[];
     moves: StoredMove[];
     ivs: IVs;
+    evs: EVs;
+    nature: NatureId;
+    level: number;
+    sprite: string;
+    shinySprite?: string;
+    shiny?: boolean;
     hp: number;
     maxHp: number;
   };
@@ -251,16 +257,26 @@ export interface TransformSnapshot {
   transformedStartHp: number;
 }
 
+/** Copy species, moves, IVs/EVs/nature/level/sprites — keep user's HP%. */
 export function buildTransformPatch(
   user: CaughtPokemon,
-  enemy: CaughtPokemon,
+  target: CaughtPokemon,
 ): { patch: Partial<CaughtPokemon>; snapshot: TransformSnapshot } {
   const userMax = maxHpForMon(user);
   const cur = user.hp ?? userMax;
   const hpPercent = userMax > 0 ? cur / userMax : 1;
-  const enemyMax = maxHpForMon(enemy);
-  const newHp = Math.max(1, Math.round(enemyMax * hpPercent));
+  const asTarget: CaughtPokemon = {
+    ...user,
+    id: target.id,
+    ivs: { ...target.ivs },
+    evs: { ...target.evs },
+    nature: target.nature,
+    level: target.level,
+  };
+  const newMax = maxHpForMon(asTarget);
+  const newHp = Math.max(1, Math.round(newMax * hpPercent));
   const transformedStartHp = newHp;
+  const targetName = target.nickname ?? target.displayName;
 
   const snapshot: TransformSnapshot = {
     original: {
@@ -270,6 +286,12 @@ export function buildTransformPatch(
       types: [...user.types],
       moves: user.moves.map((m) => ({ ...m })),
       ivs: { ...user.ivs },
+      evs: { ...user.evs },
+      nature: user.nature,
+      level: user.level,
+      sprite: user.sprite,
+      shinySprite: user.shinySprite,
+      shiny: user.shiny,
       hp: cur,
       maxHp: userMax,
     },
@@ -278,13 +300,20 @@ export function buildTransformPatch(
   };
 
   const patch: Partial<CaughtPokemon> = {
-    id: enemy.id,
-    name: enemy.name,
-    displayName: enemy.displayName,
-    types: [...enemy.types],
-    moves: enemy.moves.map((m) => ({ ...m })),
-    ivs: { ...enemy.ivs },
+    id: target.id,
+    name: target.name,
+    displayName: targetName,
+    types: [...target.types],
+    moves: target.moves.map((m) => ({ ...m })),
+    ivs: { ...target.ivs },
+    evs: { ...target.evs },
+    nature: target.nature,
+    level: target.level,
+    sprite: target.sprite,
+    shinySprite: target.shinySprite,
+    shiny: target.shiny,
     hp: newHp,
+    pp: Object.fromEntries(target.moves.map((m) => [m.slug, m.maxPp])),
   };
 
   return { patch, snapshot };
@@ -305,8 +334,23 @@ export function revertTransform(
     types: [...orig.types],
     moves: orig.moves.map((m) => ({ ...m })),
     ivs: { ...orig.ivs },
+    evs: { ...orig.evs },
+    nature: orig.nature,
+    level: orig.level,
+    sprite: orig.sprite,
+    shinySprite: orig.shinySprite,
+    shiny: orig.shiny,
     hp: finalHp,
   };
+}
+
+export function pickRandomTransformTarget(party: CaughtPokemon[]): CaughtPokemon | null {
+  if (party.length === 0) return null;
+  return party[Math.floor(Math.random() * party.length)] ?? null;
+}
+
+export function enemyNeedsAutoTransform(mon: CaughtPokemon): boolean {
+  return mon.id === 132 && mon.moves.some((m) => m.slug === 'transform');
 }
 
 export function applyRolloutLock(volatiles: BattleVolatiles): BattleVolatiles {

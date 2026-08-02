@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { MISSINGNO_ID, MISSINGNO_SPRITE } from '../data/missingno';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { TypeBadge } from '../components/TypeBadge';
@@ -44,10 +45,19 @@ export function PokedexScreen() {
                   </span>
                 )}
                 <img
-                  src={entry.caught && entry.shiny && entry.shinySprite ? entry.shinySprite : entry.sprite}
+                  src={
+                    Number(id) === MISSINGNO_ID
+                      ? MISSINGNO_SPRITE
+                      : entry.caught && entry.shiny && entry.shinySprite
+                        ? entry.shinySprite
+                        : entry.sprite
+                  }
                   alt={entry.name}
-                  className="pokedex-entry__sprite"
-                  onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
+                  className={`pokedex-entry__sprite${Number(id) === MISSINGNO_ID ? ' pokedex-entry__sprite--missingno' : ''}`}
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src =
+                      Number(id) === MISSINGNO_ID ? MISSINGNO_SPRITE : PLACEHOLDER_SPRITE;
+                  }}
                 />
                 <span className="pokedex-entry__id">#{String(id).padStart(3, '0')}</span>
                 <span className={`pokedex-entry__name${nameSize}`} title={displayName}>

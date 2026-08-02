@@ -14,9 +14,13 @@ import { currentHp } from '../utils/stats';
 import type { GymLeader } from '../types/game';
 import type { RegionId } from '../data/pools';
 
-function buildRocketLeader(region: RegionId): GymLeader {
+function buildRocketLeader(region: RegionId, partySize: number): GymLeader {
   const shuffled = [...getRegionRocketPool(region)].sort(() => Math.random() - 0.5);
-  const picked = shuffled.slice(0, 3);
+  const count = Math.max(1, partySize + 1);
+  const picked = shuffled.slice(0, Math.min(count, shuffled.length));
+  while (picked.length < count && shuffled.length > 0) {
+    picked.push(shuffled[picked.length % shuffled.length]!);
+  }
 
   return {
     ...TEAM_ROCKET_LEADER,
@@ -42,7 +46,13 @@ export function TeamRocketScreen() {
   const stealRandomPartyPokemon = useGameStore((s) => s.stealRandomPartyPokemon);
   const setPendingHubNotice = useGameStore((s) => s.setPendingHubNotice);
 
-  const [leader] = useState(() => buildRocketLeader(region));
+  const [leader] = useState(() => buildRocketLeader(region, party.length));
+  const luckyEggActive = useGameStore((s) => s.luckyEggActive);
+  const setLuckyEggActive = useGameStore((s) => s.setLuckyEggActive);
+  const grantXpAllPartyAndPc = useGameStore((s) => s.grantXpAllPartyAndPc);
+  const hasSecretKey = useGameStore(
+    (s) => (s.bag.find((i) => i.id === 'secretkey')?.quantity ?? 0) > 0,
+  );
   const [victoryOpen, setVictoryOpen] = useState(false);
   // Freeze HP at fight start so mid-battle faints do not overwrite the restore map.
   const hpSnapshotRef = useRef<Record<number, number> | null>(null);
@@ -52,6 +62,7 @@ export function TeamRocketScreen() {
     );
   }
   const stolenNameRef = useRef<string | null>(null);
+  const fledRef = useRef(false);
 
   const hasParty = party.length > 1;
 
@@ -61,7 +72,7 @@ export function TeamRocketScreen() {
 
   useEffect(() => {
     if (!victoryOpen || muted) return;
-    playClip(asset('sounds/gym_victory.mp3'));
+    playClip(asset('sounds/gym_victory.mp3'), 0.4);
   }, [victoryOpen, muted]);
 
   const handleDefeat = useMemo(
@@ -70,6 +81,14 @@ export function TeamRocketScreen() {
       stolenNameRef.current = stealRandomPartyPokemon();
     },
     [restorePartyHpSnapshot, stealRandomPartyPokemon],
+  );
+
+  const handleFlee = useMemo(
+    () => () => {
+      fledRef.current = true;
+      restorePartyHpSnapshot(hpSnapshotRef.current ?? {});
+    },
+    [restorePartyHpSnapshot],
   );
 
   function dismissVictory() {
@@ -93,12 +112,26 @@ export function TeamRocketScreen() {
         loseLifeOnDefeat={false}
         healAllOnDefeat={false}
         onBeforeDefeatExit={handleDefeat}
+        onFlee={handleFlee}
         onWin={() => {
           addMoney(150);
           reviveHealAllParty();
+          if (luckyEggActive) {
+            grantXpAllPartyAndPc(150);
+            setLuckyEggActive(false);
+          }
+          if (hasSecretKey) {
+            setScreen('giovanni');
+            return;
+          }
           setVictoryOpen(true);
         }}
         onLose={() => {
+          if (fledRef.current) {
+            setPendingHubNotice('You paid ¥50 and ran away from Team Rocket!');
+            setScreen('hub');
+            return;
+          }
           const stolen = stolenNameRef.current;
           setPendingHubNotice(
             stolen

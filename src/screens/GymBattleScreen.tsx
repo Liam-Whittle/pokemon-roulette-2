@@ -8,6 +8,7 @@ export function GymBattleScreen() {
   const badges = useGameStore((s) => s.badges);
   const setScreen = useGameStore((s) => s.setScreen);
   const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const biggerBetter = useGameStore((s) => s.isUnlockActive('biggerBetter'));
 
   const [leader] = useState(() => {
     const { debugGymId, setDebugGym } = useGameStore.getState();
@@ -32,6 +33,7 @@ export function GymBattleScreen() {
         title="Gym Battle"
         battleContext="gym"
         leader={leader}
+        appendExtraEnemy={biggerBetter}
         winBadge={{
           id: leader.id,
           name: leader.badgeName,

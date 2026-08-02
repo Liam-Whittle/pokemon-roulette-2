@@ -1,4 +1,4 @@
-import { useRef, useCallback, useEffect, useMemo, useState } from 'react';
+import { useRef, useCallback, useEffect, useId, useMemo, useState } from 'react';
 import clsx from 'clsx';
 import { getItemSprite, getSegmentSprite } from '../data/icons';
 import {
@@ -9,6 +9,17 @@ import {
 } from '../hooks/useWheelPhysics';
 import { playSfx } from '../utils/sound';
 import { useGameStore } from '../store/useGameStore';
+import { asset } from '../utils/asset';
+
+const WHEEL_HUB_BALL = asset('img/ball.png');
+/** Hub radius in SVG units (matches the old center disc). */
+const WHEEL_HUB_R = 34;
+/**
+ * ball.png has ~14% transparent padding around the ball. Scale the image so the
+ * opaque ball reaches the hub edge and covers the center disc completely.
+ */
+const WHEEL_HUB_BALL_SCALE = 1.2;
+const WHEEL_HUB_BALL_SIZE = WHEEL_HUB_R * 2 * WHEEL_HUB_BALL_SCALE;
 
 export interface SpinnerSegment {
   id: string;
@@ -33,6 +44,10 @@ interface WheelProps {
   disabled?: boolean;
   /** When set, the wheel is view-only and animates to the given result. */
   replay?: WheelReplay | null;
+  /** Hide text labels on wedges (sprites/icons still show). */
+  hideLabels?: boolean;
+  /** Fires when the pointer passes onto a new wedge while spinning. */
+  onPassSegment?: (segment: SpinnerSegment) => void;
 }
 
 function normalize(angle: number): number {
@@ -52,7 +67,14 @@ function buildSegmentArcs(weights: number[]): { startDeg: number; endDeg: number
   });
 }
 
-export function Wheel({ segments, onLand, disabled, replay = null }: WheelProps) {
+export function Wheel({
+  segments,
+  onLand,
+  disabled,
+  replay = null,
+  hideLabels = false,
+  onPassSegment,
+}: WheelProps) {
   const wheelRef = useRef<HTMLDivElement>(null);
   const muted = useGameStore((s) => s.muted);
   const landedRef = useRef(false);
@@ -61,6 +83,7 @@ export function Wheel({ segments, onLand, disabled, replay = null }: WheelProps)
   const lastReplayKey = useRef<number | null>(null);
   const [weakFlick, setWeakFlick] = useState(false);
   const isReplay = replay != null;
+  const hubClipId = `wheel-hub-clip-${useId().replace(/:/g, '')}`;
 
   segmentsRef.current = segments;
 
@@ -121,8 +144,10 @@ export function Wheel({ segments, onLand, disabled, replay = null }: WheelProps)
     if (idx !== prevIdxRef.current) {
       prevIdxRef.current = idx;
       playSfx('tick', muted);
+      const seg = segmentsRef.current[idx];
+      if (seg) onPassSegment?.(seg);
     }
-  }, [angle, isSpinning, resolveIndex, muted]);
+  }, [angle, isSpinning, resolveIndex, muted, onPassSegment]);
 
   return (
     <div className="wheel-wrapper">
@@ -155,6 +180,9 @@ export function Wheel({ segments, onLand, disabled, replay = null }: WheelProps)
               <stop offset="68%" stopColor="#8b97a8" />
               <stop offset="100%" stopColor="#586273" />
             </radialGradient>
+            <clipPath id={hubClipId}>
+              <circle cx="200" cy="200" r={WHEEL_HUB_R} />
+            </clipPath>
           </defs>
           {segments.map((seg, i) => {
             const { startDeg, endDeg, midDeg } = arcs[i];
@@ -226,26 +254,35 @@ export function Wheel({ segments, onLand, disabled, replay = null }: WheelProps)
                     {seg.icon}
                   </text>
                 ) : null}
-                <text
-                  x={labelX}
-                  y={labelY}
-                  textAnchor="middle"
-                  dominantBaseline="central"
-                  fill="#0f0f1a"
-                  fontSize={labelFontSize}
-                  fontWeight="800"
-                  transform={`rotate(${rotation}, ${labelX}, ${labelY})`}
-                  style={{ pointerEvents: 'none' }}
-                >
-                  {seg.comingSoon ? 'Soon' : seg.label}
-                </text>
+                {!hideLabels && (
+                  <text
+                    x={labelX}
+                    y={labelY}
+                    textAnchor="middle"
+                    dominantBaseline="central"
+                    fill="#0f0f1a"
+                    fontSize={labelFontSize}
+                    fontWeight="800"
+                    transform={`rotate(${rotation}, ${labelX}, ${labelY})`}
+                    style={{ pointerEvents: 'none' }}
+                  >
+                    {seg.comingSoon ? 'Soon' : seg.label}
+                  </text>
+                )}
               </g>
             );
           })}
-          <circle cx="200" cy="200" r="34" fill="#0f0f1a" stroke="#fff" strokeWidth="4" />
-          <text x="200" y="200" textAnchor="middle" dominantBaseline="central" fontSize="30">
-            ⚡
-          </text>
+          <circle cx="200" cy="200" r={WHEEL_HUB_R} fill="#0f0f1a" />
+          <image
+            href={WHEEL_HUB_BALL}
+            x={200 - WHEEL_HUB_BALL_SIZE / 2}
+            y={200 - WHEEL_HUB_BALL_SIZE / 2}
+            width={WHEEL_HUB_BALL_SIZE}
+            height={WHEEL_HUB_BALL_SIZE}
+            clipPath={`url(#${hubClipId})`}
+            preserveAspectRatio="xMidYMid meet"
+            style={{ pointerEvents: 'none' }}
+          />
         </svg>
       </div>
 

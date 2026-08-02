@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
+import { registerSettingsDebugClick } from '../utils/debugUnlock';
 
 export function SettingsMenu() {
   const [open, setOpen] = useState(false);
@@ -41,6 +42,7 @@ export function SettingsMenu() {
         aria-label="Settings"
         aria-expanded={open}
         onClick={() => {
+          registerSettingsDebugClick();
           playSfx('click', muted);
           setOpen((v) => !v);
         }}

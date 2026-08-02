@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { resolveCatchShakes } from '../utils/catchChance';
+import { resolveCatchShakes, type CatchShakeResult } from '../utils/catchChance';
 import type { CatchBallId } from '../types/game';
 import { playSfx } from '../utils/sound';
 
@@ -11,10 +11,14 @@ interface CatchChanceProps {
   ballSprite: string;
   catchRate: number;
   muted: boolean;
+  /** Absolute catch-chance bonus (0–1), e.g. throw-chain +1% per prior fail. */
+  chanceBonus?: number;
   /** Called when the Pokémon should vanish into the ball. */
   onAbsorb: () => void;
   onResult: (success: boolean) => void;
   onStatusChange?: (status: string) => void;
+  /** Override shake resolution (e.g. flat daily catch). Defaults to Gen catch math. */
+  resolveResult?: () => CatchShakeResult;
 }
 
 const STAR_COLORS = ['#ff6b6b', '#ffd93d', '#6bcbff'];
@@ -45,9 +49,11 @@ export function CatchChance({
   ballSprite,
   catchRate,
   muted,
+  chanceBonus = 0,
   onAbsorb,
   onResult,
   onStatusChange,
+  resolveResult,
 }: CatchChanceProps) {
   const [phase, setPhase] = useState<AnimPhase>('throw');
   const [wiggleIndex, setWiggleIndex] = useState(0);
@@ -57,9 +63,13 @@ export function CatchChance({
   const onAbsorbRef = useRef(onAbsorb);
   const onResultRef = useRef(onResult);
   const onStatusRef = useRef(onStatusChange);
+  const resolveRef = useRef(resolveResult);
+  const chanceBonusRef = useRef(chanceBonus);
   onAbsorbRef.current = onAbsorb;
   onResultRef.current = onResult;
   onStatusRef.current = onStatusChange;
+  resolveRef.current = resolveResult;
+  chanceBonusRef.current = chanceBonus;
 
   useEffect(() => {
     onStatusRef.current?.(statusForPhase(phase));
@@ -70,7 +80,9 @@ export function CatchChance({
 
     const throwTimer = window.setTimeout(() => {
       onAbsorbRef.current();
-      const result = resolveCatchShakes(catchRate, ballId);
+      const result = resolveRef.current
+        ? resolveRef.current()
+        : resolveCatchShakes(catchRate, ballId, Math.random, chanceBonusRef.current);
       setSuccess(result.caught);
       setWiggleCount(result.shakes);
       setWiggleIndex(0);

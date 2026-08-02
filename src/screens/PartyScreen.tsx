@@ -3,9 +3,11 @@ import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { TypeBadge } from '../components/TypeBadge';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
+import { MISSINGNO_ID } from '../data/missingno';
 
 export function PartyScreen() {
   const party = useGameStore((s) => s.party);
+  const maxParty = useGameStore((s) => s.getMaxParty());
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
 
@@ -21,7 +23,9 @@ export function PartyScreen() {
           ← Back
         </button>
         <h2 className="screen-title">👥 Party</h2>
-        <p className="collection-count">{party.length}/5</p>
+        <p className="collection-count">
+          {party.length}/{maxParty}
+        </p>
       </header>
 
       {party.length === 0 ? (
@@ -40,7 +44,7 @@ export function PartyScreen() {
               <img
                 src={mon.shiny && mon.shinySprite ? mon.shinySprite : mon.sprite}
                 alt={mon.displayName}
-                className="party-slot__sprite"
+                className={`party-slot__sprite${mon.id === MISSINGNO_ID ? ' party-slot__sprite--missingno' : ''}`}
                 onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
               />
               <div className="party-slot__info">

@@ -13,10 +13,11 @@ import { getCachedSpecies } from '../data/speciesCache';
 import { filterEncounterPoolByEvolutionLevel } from '../utils/encounterPool';
 import {
   ITEMS,
-  MAX_PARTY,
+  getMaxPartySize,
   getRegionCavePool,
   getRegionFishingPool,
   getRegionFossilPool,
+  getRegionAllPokemonPool,
   getRegionGrassPool,
   getRegionGymLeaders,
   getRegionLegendaryPool,
@@ -25,6 +26,17 @@ import {
   pickRandomPokemonId,
 } from '../data/pools';
 import type { RegionId } from '../data/pools';
+import {
+  ALL_REGION_IDS,
+  DAILY_ENCOUNTER_SHINY_ODDS,
+  DEFAULT_DAILY_BALL_CAP,
+  MEW_MISCHIEF_CHANCE,
+  PRESTIGE_UNLOCKS,
+  clearedRegionsFromHall,
+  type PrestigeUnlockId,
+} from '../data/prestige';
+import { MISSINGNO_ID } from '../data/missingno';
+import { createShopStock, pickHiddenStoneId, type ShopStockMap } from '../utils/shopCatalog';
 import type {
   ActivityResult,
   ActivityType,
@@ -95,6 +107,40 @@ interface GameState {
   faints: number;
   shiniesCaught: number;
 
+  /** Meta progression (survives resetGame). */
+  prestigePoints: number;
+  ownedUnlocks: PrestigeUnlockId[];
+  prestigeVisited: boolean;
+  /** Meta toggle for Hundred Percenter Daily Encounter (Prestige Shop only). */
+  hundredPercenterEnabled: boolean;
+  globalPokedex: Record<number, PokedexEntry>;
+  dailyBalls: number;
+  dailyBallCap: number;
+  dailyDateKey: string | null;
+  /** Persisted current Daily Encounter species — survives leaving the menu. */
+  dailyEncounterId: number | null;
+  /** Whether the current daily encounter was rolled shiny (1/40). */
+  dailyEncounterShiny: boolean;
+
+  /** Run-scoped unlock toggles chosen at New Game. */
+  activeUnlocks: PrestigeUnlockId[];
+  shopStock: ShopStockMap;
+  hiddenStoneId: string | null;
+  gameCornerGuessesLeft: number;
+  maxRepelSpinsLeft: number;
+  /** Locked catch-path wheel species; survives Back until the wheel is spun. */
+  pendingCatchWheelIds: number[] | null;
+  mysteryEggGymsLeft: number | null;
+  missingNoDismissed: boolean;
+  missingNoReady: boolean;
+  luckyEggActive: boolean;
+  hardcoreDraftSpinsLeft: number;
+  pendingArceusBlessing: boolean;
+  /** Whether Mew's Mischief is replacing normal paths on the hub. */
+  mewMischiefActive: boolean;
+  /** `spinsCount` this Mischief offer was rolled for — avoids re-rolls on menu remounts. */
+  mewMischiefAtSpin: number;
+
   setScreen: (screen: Screen) => void;
   setPendingGymAfterShop: (target: 'gym' | 'elite' | null) => void;
   setDebugGym: (id: string | null) => void;
@@ -161,6 +207,47 @@ interface GameState {
   saveBattleSnapshot: (snapshot: BattleSnapshot) => void;
   clearBattleSnapshot: () => void;
   resetGame: () => void;
+
+  hasUnlock: (id: PrestigeUnlockId) => boolean;
+  isUnlockActive: (id: PrestigeUnlockId) => boolean;
+  getMaxParty: () => number;
+  getUnlockedRegions: () => RegionId[];
+  visitPrestigeShop: () => void;
+  buyUnlock: (id: PrestigeUnlockId) => boolean;
+  setHundredPercenterEnabled: (enabled: boolean) => void;
+  setActiveUnlocks: (ids: PrestigeUnlockId[]) => void;
+  beginRunWithUnlocks: (ids: PrestigeUnlockId[], region: RegionId) => void;
+  buyShopItem: (itemId: string, price: number) => boolean;
+  refillShopStock: () => void;
+  mergeIntoGlobalDex: (entry: PokedexEntry & { id: number }) => void;
+  registerGlobalCatch: (pokemon: PokemonData, shiny?: boolean) => void;
+  refreshDailyBalls: () => void;
+  /**
+   * Returns the current daily encounter (rolling if missing / invalid / new day).
+   * `null` when every eligible species is already in the Global Pokédex.
+   */
+  ensureDailyEncounter: () => { id: number; shiny: boolean } | null;
+  /** After a successful catch — roll a new uncaught encounter (or null if none left). */
+  advanceDailyEncounter: () => { id: number; shiny: boolean } | null;
+  consumeDailyBall: () => boolean;
+  onRegionClearedDailyBonus: () => void;
+  setGameCornerGuesses: (n: number) => void;
+  setMaxRepelSpins: (n: number) => void;
+  setPendingCatchWheelIds: (ids: number[] | null) => void;
+  setMysteryEggGyms: (n: number | null) => void;
+  tickMysteryEggGym: () => void;
+  setMissingNoDismissed: (v: boolean) => void;
+  setMissingNoReady: (v: boolean) => void;
+  setLuckyEggActive: (v: boolean) => void;
+  setHardcoreDraftSpinsLeft: (n: number) => void;
+  setPendingArceusBlessing: (v: boolean) => void;
+  /** Roll Mischief only when spinsCount advances; otherwise keep the saved offer. */
+  ensureMewMischiefOffer: () => void;
+  openMysteryGift: () => string | null;
+  debugGrantPrestige: (amount?: number) => void;
+  debugGrantUnlock: (id: PrestigeUnlockId) => void;
+  debugClearUnlocks: () => void;
+  debugUnlockAllRegions: () => void;
 }
 
 const GUEST_UNLOCK_BADGES = 2;
@@ -185,6 +272,18 @@ function createDefaultBag(catchGamemode: CatchGamemode = 'chance'): BagItem[] {
     { id: 'greatball', name: 'Great Ball', quantity: 3, icon: '🔵' },
     { id: 'ultraball', name: 'Ultra Ball', quantity: 1, icon: '🟡' },
   ];
+}
+
+/** Uncaught Kanto/Johto species for Daily Encounter (excludes MissingNo.). */
+function dailyEncounterPool(dex: Record<number, PokedexEntry>): number[] {
+  const caught = new Set(
+    Object.entries(dex)
+      .filter(([, entry]) => entry.caught)
+      .map(([id]) => Number(id)),
+  );
+  return [...getRegionAllPokemonPool('Kanto'), ...getRegionAllPokemonPool('Johto')].filter(
+    (id) => id !== MISSINGNO_ID && id > 0 && !caught.has(id),
+  );
 }
 
 interface EvolvableMember {
@@ -356,6 +455,32 @@ export const useGameStore = create<GameState>()(
       faints: 0,
       shiniesCaught: 0,
 
+      prestigePoints: 0,
+      ownedUnlocks: [],
+      prestigeVisited: false,
+      hundredPercenterEnabled: true,
+      globalPokedex: {},
+      dailyBalls: DEFAULT_DAILY_BALL_CAP,
+      dailyBallCap: DEFAULT_DAILY_BALL_CAP,
+      dailyDateKey: null,
+      dailyEncounterId: null,
+      dailyEncounterShiny: false,
+
+      activeUnlocks: [],
+      shopStock: {},
+      hiddenStoneId: null,
+      gameCornerGuessesLeft: 3,
+      maxRepelSpinsLeft: 0,
+      pendingCatchWheelIds: null,
+      mysteryEggGymsLeft: null,
+      missingNoDismissed: false,
+      missingNoReady: false,
+      luckyEggActive: false,
+      hardcoreDraftSpinsLeft: 0,
+      pendingArceusBlessing: false,
+      mewMischiefActive: false,
+      mewMischiefAtSpin: -1,
+
       setScreen: (screen) => set({ screen }),
       setPendingGymAfterShop: (pendingGymAfterShop) => set({ pendingGymAfterShop }),
       setPendingHubNotice: (pendingHubNotice) => set({ pendingHubNotice }),
@@ -446,6 +571,19 @@ export const useGameStore = create<GameState>()(
           pcExcluded: state.pcExcluded.filter((id) => id !== pokemon.id),
           starterClaimed: true,
           shiniesCaught: shiny ? state.shiniesCaught + 1 : state.shiniesCaught,
+          globalPokedex: {
+            ...state.globalPokedex,
+            [pokemon.id]: {
+              seen: true,
+              caught: true,
+              name: pokemon.displayName,
+              sprite: pokemon.sprite,
+              types: pokemon.types,
+              level: 5,
+              shiny,
+              shinySprite: pokemon.shinySprite,
+            },
+          },
           pokedex: {
             ...state.pokedex,
             [pokemon.id]: {
@@ -467,7 +605,9 @@ export const useGameStore = create<GameState>()(
         if (state.party.some((m) => m.guestOwned)) {
           return state.party.find((m) => m.guestOwned)!.caughtAt;
         }
-        if (state.party.length >= MAX_PARTY) return null;
+        if (state.party.length >= getMaxPartySize(state.activeUnlocks.includes('biggerBetter'))) {
+          return null;
+        }
         const caughtAt = Date.now() + 1;
         const locked = state.badges.length < GUEST_UNLOCK_BADGES;
         const caught: CaughtPokemon = {
@@ -547,10 +687,23 @@ export const useGameStore = create<GameState>()(
           }
 
           const caught = createCaughtAtLevel(pokemon, state.badges.length, nickname, caughtWithBall);
+          const maxParty = getMaxPartySize(state.activeUnlocks.includes('biggerBetter'));
           const nextParty =
-            state.party.length < MAX_PARTY ? [...state.party, caught] : state.party;
+            state.party.length < maxParty ? [...state.party, caught] : state.party;
 
           const priorDex = state.pokedex[pokemon.id];
+          const dexEntry: PokedexEntry = {
+            seen: true,
+            caught: true,
+            name: pokemon.displayName,
+            sprite: pokemon.sprite,
+            types: pokemon.types,
+            level,
+            shiny: priorDex?.shiny ?? false,
+            shinySprite: priorDex?.shinySprite ?? pokemon.shinySprite,
+            caughtWithBall: priorDex?.caughtWithBall ?? caughtWithBall,
+          };
+          const priorGlobal = state.globalPokedex[pokemon.id];
           return {
             party: nextParty,
             pcExcluded: state.pcExcluded.filter((id) => id !== pokemon.id),
@@ -558,16 +711,14 @@ export const useGameStore = create<GameState>()(
             lastCaughtId: caught.id,
             pokedex: {
               ...state.pokedex,
+              [pokemon.id]: dexEntry,
+            },
+            globalPokedex: {
+              ...state.globalPokedex,
               [pokemon.id]: {
-                seen: true,
-                caught: true,
-                name: pokemon.displayName,
-                sprite: pokemon.sprite,
-                types: pokemon.types,
-                level,
-                shiny: priorDex?.shiny ?? false,
-                shinySprite: priorDex?.shinySprite ?? pokemon.shinySprite,
-                caughtWithBall: priorDex?.caughtWithBall ?? caughtWithBall,
+                ...dexEntry,
+                shiny: dexEntry.shiny || priorGlobal?.shiny || false,
+                shinySprite: dexEntry.shinySprite ?? priorGlobal?.shinySprite,
               },
             },
             lastResult: {
@@ -644,24 +795,35 @@ export const useGameStore = create<GameState>()(
       debugAddToParty: (pokemon) => {
         const caught = createCaughtPokemon(pokemon, { level: 5 });
         set((state) => {
+          const maxParty = getMaxPartySize(state.activeUnlocks.includes('biggerBetter'));
           const party =
-            state.party.length < MAX_PARTY
+            state.party.length < maxParty
               ? [...state.party, caught]
-              : [...state.party.slice(0, MAX_PARTY - 1), caught];
+              : [...state.party.slice(0, maxParty - 1), caught];
+          const dexEntry = {
+            seen: true,
+            caught: true,
+            name: pokemon.displayName,
+            sprite: pokemon.sprite,
+            types: pokemon.types,
+            level: 5,
+            shiny: state.pokedex[pokemon.id]?.shiny ?? false,
+            shinySprite: state.pokedex[pokemon.id]?.shinySprite ?? pokemon.shinySprite,
+          };
+          const priorGlobal = state.globalPokedex[pokemon.id];
           return {
             party,
             lastCaughtAt: caught.caughtAt,
             pokedex: {
               ...state.pokedex,
+              [pokemon.id]: dexEntry,
+            },
+            globalPokedex: {
+              ...state.globalPokedex,
               [pokemon.id]: {
-                seen: true,
-                caught: true,
-                name: pokemon.displayName,
-                sprite: pokemon.sprite,
-                types: pokemon.types,
-                level: 5,
-                shiny: state.pokedex[pokemon.id]?.shiny ?? false,
-                shinySprite: state.pokedex[pokemon.id]?.shinySprite ?? pokemon.shinySprite,
+                ...dexEntry,
+                shiny: dexEntry.shiny || priorGlobal?.shiny || false,
+                shinySprite: dexEntry.shinySprite ?? priorGlobal?.shinySprite,
               },
             },
           };
@@ -819,9 +981,14 @@ export const useGameStore = create<GameState>()(
             badge.image ??
             getRegionGymLeaders(region).find((leader) => leader.id === badge.id)?.badgeImage;
           const badges = [...state.badges, { ...badge, image }];
+          let mysteryEggGymsLeft = state.mysteryEggGymsLeft;
+          if (mysteryEggGymsLeft != null) {
+            mysteryEggGymsLeft = mysteryEggGymsLeft - 1;
+          }
           return {
             badges,
             party: syncGuestLocks(state.party, badges.length),
+            mysteryEggGymsLeft,
           };
         });
       },
@@ -853,7 +1020,11 @@ export const useGameStore = create<GameState>()(
           faints,
           shiniesCaught,
         };
-        set((state) => ({ hallOfChampions: [record, ...state.hallOfChampions] }));
+        set((state) => ({
+          hallOfChampions: [record, ...state.hallOfChampions],
+          prestigePoints: state.prestigePoints + 1,
+        }));
+        get().onRegionClearedDailyBonus();
       },
 
       clearHallOfFame: () => set({ hallOfChampions: [] }),
@@ -1104,6 +1275,305 @@ export const useGameStore = create<GameState>()(
 
       clearBattleSnapshot: () => set({ battleSnapshot: null }),
 
+      hasUnlock: (id) => get().ownedUnlocks.includes(id),
+      isUnlockActive: (id) => get().activeUnlocks.includes(id),
+      getMaxParty: () => getMaxPartySize(get().activeUnlocks.includes('biggerBetter')),
+      getUnlockedRegions: () => {
+        const cleared = clearedRegionsFromHall(get().hallOfChampions);
+        return ALL_REGION_IDS.filter((region) => {
+          const idx = ALL_REGION_IDS.indexOf(region);
+          if (idx <= 0) return true;
+          return cleared.includes(ALL_REGION_IDS[idx - 1]!);
+        });
+      },
+
+      visitPrestigeShop: () => {
+        set((state) => {
+          if (state.prestigeVisited || state.ownedUnlocks.length > 0) {
+            return { prestigeVisited: true };
+          }
+          return { prestigeVisited: true, prestigePoints: state.prestigePoints + 1 };
+        });
+      },
+
+      buyUnlock: (id) => {
+        const def = PRESTIGE_UNLOCKS.find((u) => u.id === id);
+        if (!def) return false;
+        const state = get();
+        if (state.ownedUnlocks.includes(id)) return false;
+        const cleared = clearedRegionsFromHall(state.hallOfChampions);
+        if (def.requiresRegionClear && cleared.length === 0) return false;
+        if (def.cost > 0 && state.prestigePoints < def.cost) return false;
+        set({
+          ownedUnlocks: [...state.ownedUnlocks, id],
+          prestigePoints: state.prestigePoints - def.cost,
+          ...(id === 'hundredPercenter' ? { hundredPercenterEnabled: true } : {}),
+        });
+        return true;
+      },
+
+      setHundredPercenterEnabled: (enabled) => set({ hundredPercenterEnabled: enabled }),
+
+      setActiveUnlocks: (ids) => set({ activeUnlocks: ids }),
+
+      beginRunWithUnlocks: (ids, region) => {
+        const stoneId = ids.includes('hiddenStock') ? pickHiddenStoneId(region) : null;
+        const stock = createShopStock(region, ids, stoneId);
+        const hardcore = ids.includes('hardcore');
+        const onTheHouse = ids.includes('onTheHouse');
+        const draftSize = getMaxPartySize(ids.includes('biggerBetter'));
+        let bag = createDefaultBag('chance');
+        if (onTheHouse) {
+          bag = upsertBagItem(bag, 'shinycharm', 1);
+        }
+        if (ids.includes('mysteryGift')) {
+          bag = upsertBagItem(bag, 'mysterygift', 1);
+        }
+        set({
+          activeUnlocks: ids,
+          hiddenStoneId: stoneId,
+          shopStock: stock,
+          gameCornerGuessesLeft: 3,
+          maxRepelSpinsLeft: 0,
+          pendingCatchWheelIds: null,
+          mysteryEggGymsLeft: null,
+          missingNoDismissed: false,
+          missingNoReady: false,
+          luckyEggActive: false,
+          hardcoreDraftSpinsLeft: hardcore ? draftSize : 0,
+          pendingArceusBlessing: false,
+          mewMischiefActive: false,
+          mewMischiefAtSpin: -1,
+          bag,
+          lives: hardcore ? 1 : 2,
+          catchGamemode: 'chance',
+        });
+      },
+
+      buyShopItem: (itemId, price) => {
+        const state = get();
+        const remaining = state.shopStock[itemId];
+        if (remaining !== undefined && remaining !== 'inf' && remaining <= 0) return false;
+        if (!get().spendMoney(price)) return false;
+        get().addItem(itemId, 1);
+        if (remaining !== undefined && remaining !== 'inf') {
+          set((s) => ({
+            shopStock: { ...s.shopStock, [itemId]: Math.max(0, (s.shopStock[itemId] as number) - 1) },
+          }));
+        }
+        return true;
+      },
+
+      refillShopStock: () => {
+        const region = getActiveRegion(get());
+        const stoneId =
+          get().hiddenStoneId ??
+          (get().activeUnlocks.includes('hiddenStock') ? pickHiddenStoneId(region) : null);
+        set({
+          hiddenStoneId: stoneId,
+          shopStock: createShopStock(region, get().activeUnlocks, stoneId),
+        });
+      },
+
+      mergeIntoGlobalDex: (entry) => {
+        const { id, ...rest } = entry;
+        set((state) => {
+          const prior = state.globalPokedex[id];
+          return {
+            globalPokedex: {
+              ...state.globalPokedex,
+              [id]: {
+                ...rest,
+                shiny: rest.shiny || prior?.shiny || false,
+                shinySprite: rest.shinySprite ?? prior?.shinySprite,
+              },
+            },
+          };
+        });
+      },
+
+      registerGlobalCatch: (pokemon, shiny = false) => {
+        set((state) => {
+          const prior = state.globalPokedex[pokemon.id];
+          return {
+            globalPokedex: {
+              ...state.globalPokedex,
+              [pokemon.id]: {
+                seen: true,
+                caught: true,
+                name: pokemon.displayName,
+                sprite: pokemon.sprite,
+                types: pokemon.types,
+                level: prior?.level ?? 5,
+                shiny: shiny || prior?.shiny || false,
+                shinySprite: shiny
+                  ? pokemon.shinySprite ?? prior?.shinySprite
+                  : prior?.shinySprite ?? pokemon.shinySprite,
+              },
+            },
+          };
+        });
+      },
+
+      refreshDailyBalls: () => {
+        const today = new Date().toISOString().slice(0, 10);
+        set((state) => {
+          if (state.dailyDateKey === today) return state;
+          return {
+            dailyDateKey: today,
+            dailyBalls: state.dailyBallCap,
+            // New calendar day → new encounter (can't keep yesterday's mon).
+            dailyEncounterId: null,
+            dailyEncounterShiny: false,
+          };
+        });
+      },
+
+      ensureDailyEncounter: () => {
+        get().refreshDailyBalls();
+        const state = get();
+        const pool = dailyEncounterPool(state.globalPokedex);
+        const existing = state.dailyEncounterId;
+        const existingOk =
+          typeof existing === 'number' &&
+          existing !== MISSINGNO_ID &&
+          pool.includes(existing);
+
+        if (existingOk) {
+          return { id: existing, shiny: !!state.dailyEncounterShiny };
+        }
+
+        if (pool.length === 0) {
+          set({ dailyEncounterId: null, dailyEncounterShiny: false });
+          return null;
+        }
+
+        const id = pickRandom(pool);
+        const shiny = Math.random() < DAILY_ENCOUNTER_SHINY_ODDS;
+        set({ dailyEncounterId: id, dailyEncounterShiny: shiny });
+        return { id, shiny };
+      },
+
+      advanceDailyEncounter: () => {
+        const pool = dailyEncounterPool(get().globalPokedex);
+        if (pool.length === 0) {
+          set({ dailyEncounterId: null, dailyEncounterShiny: false });
+          return null;
+        }
+        const current = get().dailyEncounterId;
+        let id = pickRandom(pool);
+        for (let i = 0; i < 8 && id === current && pool.length > 1; i++) {
+          id = pickRandom(pool);
+        }
+        const shiny = Math.random() < DAILY_ENCOUNTER_SHINY_ODDS;
+        set({ dailyEncounterId: id, dailyEncounterShiny: shiny });
+        return { id, shiny };
+      },
+
+      consumeDailyBall: () => {
+        get().refreshDailyBalls();
+        if (get().dailyBalls <= 0) return false;
+        set((state) => ({ dailyBalls: state.dailyBalls - 1 }));
+        return true;
+      },
+
+      onRegionClearedDailyBonus: () => {
+        set((state) => {
+          const cap = state.dailyBallCap + 1;
+          return {
+            dailyBallCap: cap,
+            dailyBalls: cap,
+            dailyDateKey: new Date().toISOString().slice(0, 10),
+          };
+        });
+      },
+
+      setGameCornerGuesses: (n) => set({ gameCornerGuessesLeft: n }),
+      setMaxRepelSpins: (n) => set({ maxRepelSpinsLeft: n }),
+      setPendingCatchWheelIds: (ids) => set({ pendingCatchWheelIds: ids }),
+      setMysteryEggGyms: (n) => set({ mysteryEggGymsLeft: n }),
+      tickMysteryEggGym: () => {
+        set((state) => {
+          if (state.mysteryEggGymsLeft == null) return state;
+          const next = state.mysteryEggGymsLeft - 1;
+          return { mysteryEggGymsLeft: next };
+        });
+      },
+      setMissingNoDismissed: (v) => set({ missingNoDismissed: v }),
+      setMissingNoReady: (v) => set({ missingNoReady: v }),
+      setLuckyEggActive: (v) => set({ luckyEggActive: v }),
+      setHardcoreDraftSpinsLeft: (n) => set({ hardcoreDraftSpinsLeft: n }),
+      setPendingArceusBlessing: (v) => set({ pendingArceusBlessing: v }),
+
+      ensureMewMischiefOffer: () => {
+        const state = get();
+        const unlocked = state.activeUnlocks.includes('mewsMischief');
+        if (!unlocked) {
+          if (state.mewMischiefActive || state.mewMischiefAtSpin !== state.spinsCount) {
+            set({ mewMischiefActive: false, mewMischiefAtSpin: state.spinsCount });
+          }
+          return;
+        }
+        // Already rolled for this hub visit / spin count — keep the offer stable across menus.
+        if (state.mewMischiefAtSpin === state.spinsCount) return;
+        // Only offer Mischief after at least one wheel spin has been completed.
+        if (state.spinsCount <= 0) {
+          set({ mewMischiefActive: false, mewMischiefAtSpin: 0 });
+          return;
+        }
+        set({
+          mewMischiefActive: Math.random() < MEW_MISCHIEF_CHANCE,
+          mewMischiefAtSpin: state.spinsCount,
+        });
+      },
+
+      openMysteryGift: () => {
+        if (!get().consumeItem('mysterygift', 1)) return null;
+        const rewards = ['omnistone', 'secretkey', 'mysteryegg', 'maxrepel'] as const;
+        const reward = pickRandom([...rewards]);
+        get().addItem(reward, 1);
+        if (reward === 'mysteryegg') {
+          set({ mysteryEggGymsLeft: 4 });
+        }
+        return reward;
+      },
+
+      debugGrantPrestige: (amount = 1) =>
+        set((state) => ({ prestigePoints: state.prestigePoints + amount })),
+      debugGrantUnlock: (id) =>
+        set((state) =>
+          state.ownedUnlocks.includes(id)
+            ? state
+            : { ownedUnlocks: [...state.ownedUnlocks, id] },
+        ),
+      debugClearUnlocks: () => set({ ownedUnlocks: [], activeUnlocks: [] }),
+      debugUnlockAllRegions: () => {
+        /* Hall entries unlock regions; grant fake clears via prestige helper by adding minimal HoF */
+        const hall = get().hallOfChampions;
+        const needed: RegionId[] = ['Kanto'];
+        const extras = needed.filter((r) => !hall.some((h) => h.region === r));
+        if (extras.length === 0) return;
+        set((state) => ({
+          hallOfChampions: [
+            ...extras.map((region) => ({
+              id: `debug-${region}-${Date.now()}`,
+              trainerName: 'Debug',
+              trainerAvatar: '',
+              region,
+              party: [],
+              date: Date.now(),
+              timeMs: 1,
+              itemsUsed: 0,
+              livesUsed: 0,
+              revivesUsed: 0,
+              faints: 0,
+              shiniesCaught: 0,
+            })),
+            ...state.hallOfChampions,
+          ],
+        }));
+      },
+
       resetGame: () =>
         set({
           screen: 'title',
@@ -1139,6 +1609,20 @@ export const useGameStore = create<GameState>()(
           revivesUsed: 0,
           faints: 0,
           shiniesCaught: 0,
+          activeUnlocks: [],
+          shopStock: {},
+          hiddenStoneId: null,
+          gameCornerGuessesLeft: 3,
+          maxRepelSpinsLeft: 0,
+          pendingCatchWheelIds: null,
+          mysteryEggGymsLeft: null,
+          missingNoDismissed: false,
+          missingNoReady: false,
+          luckyEggActive: false,
+          hardcoreDraftSpinsLeft: 0,
+          pendingArceusBlessing: false,
+          mewMischiefActive: false,
+          mewMischiefAtSpin: -1,
         }),
     }),
     {
@@ -1176,6 +1660,29 @@ export const useGameStore = create<GameState>()(
         revivesUsed: state.revivesUsed,
         faints: state.faints,
         shiniesCaught: state.shiniesCaught,
+        prestigePoints: state.prestigePoints,
+        ownedUnlocks: state.ownedUnlocks,
+        prestigeVisited: state.prestigeVisited,
+        hundredPercenterEnabled: state.hundredPercenterEnabled,
+        globalPokedex: state.globalPokedex,
+        dailyBalls: state.dailyBalls,
+        dailyBallCap: state.dailyBallCap,
+        dailyDateKey: state.dailyDateKey,
+        dailyEncounterId: state.dailyEncounterId,
+        dailyEncounterShiny: state.dailyEncounterShiny,
+        activeUnlocks: state.activeUnlocks,
+        shopStock: state.shopStock,
+        hiddenStoneId: state.hiddenStoneId,
+        gameCornerGuessesLeft: state.gameCornerGuessesLeft,
+        maxRepelSpinsLeft: state.maxRepelSpinsLeft,
+        pendingCatchWheelIds: state.pendingCatchWheelIds,
+        mysteryEggGymsLeft: state.mysteryEggGymsLeft,
+        missingNoDismissed: state.missingNoDismissed,
+        missingNoReady: state.missingNoReady,
+        luckyEggActive: state.luckyEggActive,
+        hardcoreDraftSpinsLeft: state.hardcoreDraftSpinsLeft,
+        mewMischiefActive: state.mewMischiefActive,
+        mewMischiefAtSpin: state.mewMischiefAtSpin,
       }),
       migrate: (persisted: unknown) => {
         const state = persisted as Record<string, unknown>;
@@ -1204,6 +1711,48 @@ export const useGameStore = create<GameState>()(
         if (typeof state.revivesUsed !== 'number') state.revivesUsed = 0;
         if (typeof state.faints !== 'number') state.faints = 0;
         if (typeof state.shiniesCaught !== 'number') state.shiniesCaught = 0;
+        if (typeof state.prestigePoints !== 'number') state.prestigePoints = 0;
+        if (!Array.isArray(state.ownedUnlocks)) state.ownedUnlocks = [];
+        if (typeof state.prestigeVisited !== 'boolean') state.prestigeVisited = false;
+        if (typeof state.hundredPercenterEnabled !== 'boolean') {
+          state.hundredPercenterEnabled = true;
+        }
+        if (!state.globalPokedex || typeof state.globalPokedex !== 'object') state.globalPokedex = {};
+        if (typeof state.dailyBalls !== 'number') state.dailyBalls = DEFAULT_DAILY_BALL_CAP;
+        if (typeof state.dailyBallCap !== 'number') state.dailyBallCap = DEFAULT_DAILY_BALL_CAP;
+        if (state.dailyDateKey !== null && typeof state.dailyDateKey !== 'string') {
+          state.dailyDateKey = null;
+        }
+        if (state.dailyEncounterId !== null && typeof state.dailyEncounterId !== 'number') {
+          state.dailyEncounterId = null;
+        }
+        if (typeof state.dailyEncounterShiny !== 'boolean') {
+          state.dailyEncounterShiny = false;
+        }
+        if (!Array.isArray(state.activeUnlocks)) state.activeUnlocks = [];
+        if (!state.shopStock || typeof state.shopStock !== 'object') state.shopStock = {};
+        if (typeof state.hiddenStoneId !== 'string') state.hiddenStoneId = null;
+        if (typeof state.gameCornerGuessesLeft !== 'number') state.gameCornerGuessesLeft = 3;
+        if (typeof state.maxRepelSpinsLeft !== 'number') state.maxRepelSpinsLeft = 0;
+        if (
+          state.pendingCatchWheelIds != null &&
+          (!Array.isArray(state.pendingCatchWheelIds) ||
+            !state.pendingCatchWheelIds.every((id) => typeof id === 'number'))
+        ) {
+          state.pendingCatchWheelIds = null;
+        }
+        if (
+          state.mysteryEggGymsLeft !== null &&
+          typeof state.mysteryEggGymsLeft !== 'number'
+        ) {
+          state.mysteryEggGymsLeft = null;
+        }
+        if (typeof state.missingNoDismissed !== 'boolean') state.missingNoDismissed = false;
+        if (typeof state.missingNoReady !== 'boolean') state.missingNoReady = false;
+        if (typeof state.luckyEggActive !== 'boolean') state.luckyEggActive = false;
+        if (typeof state.hardcoreDraftSpinsLeft !== 'number') state.hardcoreDraftSpinsLeft = 0;
+        if (typeof state.mewMischiefActive !== 'boolean') state.mewMischiefActive = false;
+        if (typeof state.mewMischiefAtSpin !== 'number') state.mewMischiefAtSpin = -1;
         if (Array.isArray(state.badges)) {
           const trainer = state.trainer as { region?: string } | null;
           const region = trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
@@ -1214,7 +1763,7 @@ export const useGameStore = create<GameState>()(
         }
         return state;
       },
-      version: 11,
+      version: 12,
     },
   ),
 );

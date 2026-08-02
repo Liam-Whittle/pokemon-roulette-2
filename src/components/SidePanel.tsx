@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useState, type CSSProperties, type ReactNode } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { TypeBadge } from './TypeBadge';
 import { PokeDollarAmount } from './PokeDollar';
@@ -9,14 +9,22 @@ import { PokemonDetailModal } from './PokemonDetailModal';
 import { ItemDetailModal } from './ItemDetailModal';
 import { BattleEffectBadges, StageBadges, type StatStageValues } from './StatusBadge';
 import type { BattleVolatiles } from '../data/battleVolatiles';
+import { TYPE_COLORS } from '../data/typeChart';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { currentHp, maxHpForMon, isFainted, MAX_LEVEL } from '../utils/stats';
 import { canEvolveNow, getAvailableEvolutions } from '../utils/evolution';
 import { hasReducedPp } from '../data/moves';
 import { getRegionTotalGyms, resolveBadgeImage } from '../data/pools';
+import { MISSINGNO_ID } from '../data/missingno';
 import { playSfx } from '../utils/sound';
 import { imgFallback, remoteBadge } from '../utils/localAssets';
 import type { BagItem, CatchBallId, EvolutionInfo, IVs, NatureId, StoredMove } from '../types/game';
+
+export type ActiveHitFx = {
+  mode: 'damage' | 'status' | 'buff';
+  type: string;
+  id: number;
+};
 
 const BALL_LABELS: Record<CatchBallId, string> = {
   pokeball: 'Poké Ball',
@@ -62,6 +70,8 @@ interface SidePanelProps {
   activeBattlerVolatiles?: BattleVolatiles;
   /** Battle-only stat stage changes on the active battler (Atk/Def/etc.). */
   activeBattlerStages?: StatStageValues;
+  /** Brief hit / buff FX overlaid on the active battler's sprite. */
+  activeHitFx?: ActiveHitFx | null;
 }
 
 function PartyHpBar({ current, max }: { current: number; max: number }) {
@@ -93,6 +103,7 @@ export function SidePanel({
   onBattleSendOut,
   activeBattlerVolatiles,
   activeBattlerStages,
+  activeHitFx = null,
 }: SidePanelProps) {
   const party = useGameStore((state) => state.party);
   const pokedex = useGameStore((state) => state.pokedex);
@@ -309,12 +320,48 @@ export function SidePanel({
                     {inBattle && isActive && (
                       <StageBadges stages={activeBattlerStages} placement="party" />
                     )}
+                    {inBattle && isActive && activeHitFx && (
+                      <span
+                        key={`party-hit-${activeHitFx.id}`}
+                        className={`battle-hit-fx battle-hit-fx--party battle-hit-fx--${activeHitFx.mode} battle-hit-fx--type-${activeHitFx.type}`}
+                        style={
+                          {
+                            '--hit-color':
+                              activeHitFx.mode === 'buff'
+                                ? '#fbbf24'
+                                : (TYPE_COLORS[activeHitFx.type] ?? TYPE_COLORS.normal),
+                          } as CSSProperties
+                        }
+                        aria-hidden
+                      >
+                        <span className="battle-hit-fx__burst" />
+                        <span className="battle-hit-fx__ring" />
+                        <span className="battle-hit-fx__spark battle-hit-fx__spark--1" />
+                        <span className="battle-hit-fx__spark battle-hit-fx__spark--2" />
+                        <span className="battle-hit-fx__spark battle-hit-fx__spark--3" />
+                        <span className="battle-hit-fx__spark battle-hit-fx__spark--4" />
+                      </span>
+                    )}
                     <img
                       src={
                         pokemon.shiny && pokemon.shinySprite ? pokemon.shinySprite : pokemon.sprite
                       }
                       alt={pokemon.displayName}
-                      className="side-panel__sprite side-panel__sprite--clickable"
+                      className={`side-panel__sprite side-panel__sprite--clickable${
+                        pokemon.id === MISSINGNO_ID ? ' side-panel__sprite--missingno' : ''
+                      }${
+                        inBattle && isActive && activeHitFx?.mode === 'damage'
+                          ? ' side-panel__sprite--hit-damage'
+                          : ''
+                      }${
+                        inBattle && isActive && activeHitFx?.mode === 'status'
+                          ? ' side-panel__sprite--hit-status'
+                          : ''
+                      }${
+                        inBattle && isActive && activeHitFx?.mode === 'buff'
+                          ? ' side-panel__sprite--hit-buff'
+                          : ''
+                      }`}
                       onClick={() =>
                         setSelectedMon({
                           id: pokemon.id,

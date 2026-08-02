@@ -1,13 +1,15 @@
-import { getItemSprite, getPathwayHeroSprite, getSegmentSprite, getUISprite } from '../data/icons';
-import { getRegionCatchSegments } from '../data/pools';
-import { useGameStore } from '../store/useGameStore';
+import { getItemSprite, getPathwayHeroSprite, getUISprite } from '../data/icons';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { imgFallback, remoteItemSprite, remotePokemonSprite } from '../utils/localAssets';
 import type { PathwayId } from '../types/game';
 
+type HubActionVariant = 'shop' | 'gamecorner' | 'mysterygift' | 'cinnabar' | 'maxrepel';
+
 interface PathwaySelectorProps {
   onSelect: (pathway: PathwayId) => void;
   disabled?: boolean;
+  showMischief?: boolean;
+  hideCatch?: boolean;
 }
 
 const PATHWAYS: {
@@ -15,55 +17,51 @@ const PATHWAYS: {
   title: string;
   subtitle: string;
   className: string;
-  icons: string[];
 }[] = [
   {
     id: 'catch',
     title: 'Catch Pokémon',
-    subtitle: 'Grass, Fishing, Cave, Fossil & Legendary',
+    subtitle: 'Spin for a random regional Pokémon',
     className: 'pathway-card--catch',
-    icons: ['wild', 'fishing', 'cave', 'fossil', 'legendary'],
   },
   {
-    id: 'items',
-    title: 'Hunt Items',
-    subtitle: 'Find items, Potions, Candy & More',
+    id: 'explore',
+    title: 'Explore World',
+    subtitle: 'Trainers, Rival, Rocket, loot & more',
     className: 'pathway-card--items',
-    icons: ['item', 'elixir', 'potion', 'rarecandy', 'healpowder', 'xattack'],
   },
   {
-    id: 'mystery',
-    title: 'Mystery',
-    subtitle: 'Uber Spin, Team Rocket, Heals & Cash',
+    id: 'mischief',
+    title: "Mew's Mischief",
+    subtitle: 'Wonder Trade, Picnic, Lucky Egg & more',
     className: 'pathway-card--mystery',
-    icons: ['uberspin', 'teamrocket', 'fullheal', 'money100'],
   },
 ];
 
 function PathwayHero({ pathId }: { pathId: PathwayId }) {
-  if (pathId === 'items') {
+  if (pathId === 'explore') {
     return (
       <img
-        src={getItemSprite('electricgem') ?? ''}
-        alt="Electric Gem"
+        src={getPathwayHeroSprite('explore')}
+        alt="Explore"
         className="pathway-card__hero pathway-card__hero--item item-icon-img"
-        onError={(e) => imgFallback(e, remoteItemSprite('electric-gem.png'), PLACEHOLDER_SPRITE)}
+        onError={(e) => imgFallback(e, remoteItemSprite('bicycle.png'), PLACEHOLDER_SPRITE)}
       />
     );
   }
 
-  if (pathId === 'mystery') {
+  if (pathId === 'mischief') {
     return (
       <img
-        src={getItemSprite('mysteryegg') ?? ''}
-        alt="Mystery Egg"
-        className="pathway-card__hero pathway-card__hero--item item-icon-img"
-        onError={(e) => imgFallback(e, remoteItemSprite('mystery-egg.png'), PLACEHOLDER_SPRITE)}
+        src={getPathwayHeroSprite('mischief')}
+        alt="Mew's Mischief"
+        className="pathway-card__hero pathway-card__hero--pokemon"
+        onError={(e) => imgFallback(e, remotePokemonSprite(151), PLACEHOLDER_SPRITE)}
       />
     );
   }
 
-  const src = getPathwayHeroSprite(pathId);
+  const src = getPathwayHeroSprite('catch');
 
   return (
     <img
@@ -75,17 +73,19 @@ function PathwayHero({ pathId }: { pathId: PathwayId }) {
   );
 }
 
-export function PathwaySelector({ onSelect, disabled }: PathwaySelectorProps) {
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
-  const catchIcons = getRegionCatchSegments(region).map((segment) => segment.id);
-  const catchSubtitle =
-    region === 'Johto'
-      ? 'Grass, Fishing, Cave & Legendary'
-      : 'Grass, Fishing, Cave, Fossil & Legendary';
-
-  const pathways = PATHWAYS.map((path) =>
-    path.id === 'catch' ? { ...path, icons: catchIcons, subtitle: catchSubtitle } : path,
-  );
+export function PathwaySelector({
+  onSelect,
+  disabled,
+  showMischief = false,
+  hideCatch = false,
+}: PathwaySelectorProps) {
+  const pathways = PATHWAYS.filter((path) => {
+    // Mew swipes the usual paths — only Mischief remains.
+    if (showMischief) return path.id === 'mischief';
+    if (path.id === 'mischief') return false;
+    if (path.id === 'catch') return !hideCatch;
+    return true;
+  });
 
   return (
     <div className="pathway-hub">
@@ -100,18 +100,6 @@ export function PathwaySelector({ onSelect, disabled }: PathwaySelectorProps) {
           <div className="pathway-card__hero-wrap">
             <PathwayHero pathId={path.id} />
           </div>
-          <div className="pathway-card__icons">
-            {path.icons.map((iconId) => {
-              const src = getSegmentSprite(iconId);
-              return src ? (
-                <img key={iconId} src={src} alt="" className="pathway-card__icon-img" />
-              ) : (
-                <span key={iconId} className="pathway-card__icon-fallback">
-                  ?
-                </span>
-              );
-            })}
-          </div>
           <h4 className="pathway-card__title">{path.title}</h4>
           <p className="pathway-card__subtitle">{path.subtitle}</p>
         </button>
@@ -122,13 +110,37 @@ export function PathwaySelector({ onSelect, disabled }: PathwaySelectorProps) {
 
 interface HubShopButtonProps {
   onClick: () => void;
+  label?: string;
+  variant?: HubActionVariant;
+  disabled?: boolean;
+  title?: string;
 }
 
-export function HubShopButton({ onClick }: HubShopButtonProps) {
+const HUB_ACTION_ICONS: Record<HubActionVariant, string> = {
+  shop: getUISprite('shop'),
+  gamecorner: getUISprite('gamecorner'),
+  mysterygift: getUISprite('mysterygift'),
+  cinnabar: getUISprite('cinnabar'),
+  maxrepel: getItemSprite('maxrepel') ?? getUISprite('shop'),
+};
+
+export function HubShopButton({
+  onClick,
+  label = 'Poké Mart',
+  variant = 'shop',
+  disabled = false,
+  title,
+}: HubShopButtonProps) {
   return (
-    <button type="button" className="hub-shop-btn" onClick={onClick}>
-      <img src={getUISprite('shop')} alt="" className="hub-shop-btn__icon" />
-      Poké Mart
+    <button
+      type="button"
+      className={`hub-shop-btn hub-shop-btn--${variant}`}
+      onClick={onClick}
+      disabled={disabled}
+      title={title}
+    >
+      <img src={HUB_ACTION_ICONS[variant]} alt="" className="hub-shop-btn__icon" />
+      {label}
     </button>
   );
 }

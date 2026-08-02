@@ -5,12 +5,14 @@ import { fetchPokemon, fetchPokemonDetail, type PokemonDetail } from '../api/pok
 import type { CatchBallId, IVs, NatureId, PokemonData, StatKey, StoredMove } from '../types/game';
 import { TypeBadge } from './TypeBadge';
 import { ItemIcon } from './ItemIcon';
+import { GlitchText } from './GlitchText';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import { useGameStore } from '../store/useGameStore';
 import { playClip, stopClip } from '../utils/music';
 import { getCryStyleForRegion } from '../data/pools';
 import { applyRegionMoveType } from '../data/gen2MoveTypes';
 import { MAGIKARP_ID, describeMove, formatMoveCategory, formatMovePowerDisplay } from '../data/moves';
+import { MISSINGNO_DATA, MISSINGNO_ID, MISSINGNO_SPRITE } from '../data/missingno';
 import {
   getBaseStatsForSpecies,
   getComputedStats,
@@ -50,6 +52,8 @@ interface PokemonDetailModalProps {
   nature?: NatureId;
   moves?: StoredMove[];
   pp?: Record<string, number>;
+  /** When false, hide the left battle-stats / moveset panels. */
+  showSidePanel?: boolean;
   onClose: () => void;
 }
 
@@ -108,10 +112,24 @@ export function PokemonDetailModal({
   nature,
   moves,
   pp,
+  showSidePanel = true,
   onClose,
 }: PokemonDetailModalProps) {
-  const [data, setData] = useState<PokemonData | null>(null);
-  const [detail, setDetail] = useState<PokemonDetail | null>(null);
+  const isMissingNo = id === MISSINGNO_ID;
+  const [data, setData] = useState<PokemonData | null>(() =>
+    id === MISSINGNO_ID ? MISSINGNO_DATA : null,
+  );
+  const [detail, setDetail] = useState<PokemonDetail | null>(() =>
+    id === MISSINGNO_ID
+      ? {
+          genus: 'Glitch Pokémon',
+          heightM: 3.3,
+          weightKg: 1590.8,
+          flavorText:
+            'A corrupted data form. Looking at it for too long makes the Pokédex text scramble.',
+        }
+      : null,
+  );
   const muted = useGameStore((s) => s.muted);
   const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
   const cryStyle = useGameStore((s) => getCryStyleForRegion(s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
@@ -131,20 +149,22 @@ export function PokemonDetailModal({
   const displayEvs = evs ?? zeroEVs();
   const catchRate = getSpeciesCatchRate(id);
 
-  const computedStats = isMagichad
-    ? null
-    : getComputedStats({
-        id,
-        level: displayLevel,
-        ivs: displayIvs,
-        evs: displayEvs,
-        nature: displayNature,
-      });
-  const baseStats = isMagichad ? null : getBaseStatsForSpecies(id);
-  const deltas = isMagichad
-    ? null
-    : statDeltasFromBase(id, displayLevel, displayIvs, displayEvs, displayNature);
-  const displayMoves = moves?.slice(0, 4) ?? [];
+  const computedStats =
+    isMagichad || !showSidePanel
+      ? null
+      : getComputedStats({
+          id,
+          level: displayLevel,
+          ivs: displayIvs,
+          evs: displayEvs,
+          nature: displayNature,
+        });
+  const baseStats = isMagichad || !showSidePanel ? null : getBaseStatsForSpecies(id);
+  const deltas =
+    isMagichad || !showSidePanel
+      ? null
+      : statDeltasFromBase(id, displayLevel, displayIvs, displayEvs, displayNature);
+  const displayMoves = showSidePanel ? (moves?.slice(0, 4) ?? []) : [];
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!shiny) return;
@@ -167,13 +187,14 @@ export function PokemonDetailModal({
   };
 
   useEffect(() => {
+    if (isMissingNo) return;
     let active = true;
     fetchPokemon(id).then((d) => active && setData(d)).catch(() => {});
     fetchPokemonDetail(id).then((d) => active && setDetail(d)).catch(() => {});
     return () => {
       active = false;
     };
-  }, [id]);
+  }, [id, isMissingNo]);
 
   useEffect(() => {
     if (!shiny) return;
@@ -206,14 +227,21 @@ export function PokemonDetailModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // MissingNo cry is its own effect so a later `data` update can't stopClip mid-play.
   useEffect(() => {
-    if (muted || cryPlayedRef.current || !introDone) return;
+    if (!isMissingNo || muted || !introDone) return;
+    const clip = playClip(asset('sounds/missingno_cry.mp3'), 0.6);
+    return () => stopClip(clip);
+  }, [isMissingNo, muted, introDone]);
+
+  useEffect(() => {
+    if (isMissingNo || muted || cryPlayedRef.current || !introDone) return;
 
     let clip: HTMLAudioElement | null = null;
 
     if (isMagichad) {
       cryPlayedRef.current = true;
-      clip = playClip(asset('sounds/magikarp_detail.mp3'));
+      clip = playClip(asset('sounds/magikarp_detail.mp3'), 0.6);
     } else if (data) {
       const crySrc =
         (cryStyle === 'legacy' ? data.cryLegacy : data.cryLatest) ??
@@ -221,24 +249,26 @@ export function PokemonDetailModal({
         data.cryLegacy;
       if (crySrc) {
         cryPlayedRef.current = true;
-        clip = playClip(crySrc);
+        clip = playClip(crySrc, 0.6);
       }
     }
 
     return () => stopClip(clip);
-  }, [muted, introDone, data, isMagichad, cryStyle]);
+  }, [muted, introDone, data, isMagichad, isMissingNo, cryStyle]);
 
-  const art = isMagichad
-    ? asset('img/magikarp_shiny.png')
-    : data
-      ? shiny && data.shinyArtwork
-        ? data.shinyArtwork
-        : data.artwork || data.sprite
-      : '';
+  const art = isMissingNo
+    ? MISSINGNO_SPRITE
+    : isMagichad
+      ? asset('img/magikarp_shiny.png')
+      : data
+        ? shiny && data.shinyArtwork
+          ? data.shinyArtwork
+          : data.artwork || data.sprite
+        : '';
 
   const displayName = isMagichad ? 'Magichad' : name;
   const displayGenus = isMagichad ? 'Chad Pokémon' : detail?.genus;
-  const displayBst = isMagichad ? '∞' : data?.baseStatTotal;
+  const displayBst = isMagichad ? '∞' : isMissingNo ? MISSINGNO_DATA.baseStatTotal : data?.baseStatTotal;
   const displayHeight = isMagichad
     ? '7 foot without shoes'
     : detail && detail.heightM > 0
@@ -263,12 +293,12 @@ export function PokemonDetailModal({
         onClick={(e) => e.stopPropagation()}
       >
         <motion.div
-          className={`mon-detail${shiny ? ' mon-detail--shiny' : ''}${isMagichad ? ' mon-detail--magichad' : ''}`}
+          className={`mon-detail${shiny ? ' mon-detail--shiny' : ''}${isMagichad ? ' mon-detail--magichad' : ''}${isMissingNo ? ' mon-detail--missingno' : ''}`}
           style={shiny ? { rotateX, rotateY, transformPerspective: 900 } : undefined}
           onPointerMove={handlePointerMove}
           onPointerLeave={handlePointerLeave}
         >
-        {shiny && (
+        {shiny && !isMissingNo && (
           <>
             <div className="mon-detail__foil" aria-hidden />
             <div className="mon-detail__ribbon-wrap" aria-hidden>
@@ -288,7 +318,16 @@ export function PokemonDetailModal({
           </>
         )}
 
-        {!shiny && (
+        {isMissingNo && (
+          <>
+            <div className="mon-detail__glitch-scan" aria-hidden />
+            <div className="mon-detail__ribbon-wrap" aria-hidden>
+              <span className="mon-detail__ribbon mon-detail__ribbon--glitch">CORRUPT</span>
+            </div>
+          </>
+        )}
+
+        {(!shiny || isMissingNo) && (
           <button type="button" className="mon-detail__close" onClick={onClose} aria-label="Close">
             ✕
           </button>
@@ -304,21 +343,30 @@ export function PokemonDetailModal({
                 <motion.img
                   src={art}
                   alt={displayName}
-                  className={`mon-detail__art${shiny ? ' mon-detail__art--shiny' : ''}`}
+                  className={`mon-detail__art${shiny ? ' mon-detail__art--shiny' : ''}${isMissingNo ? ' mon-detail__art--missingno' : ''}`}
                   animate={
-                    shiny
-                      ? { y: [0, -6, 0], scale: [1, 1.04, 1], rotate: [0, 0.6, -0.6, 0] }
-                      : undefined
+                    isMissingNo
+                      ? { x: [0, -2, 2, -1, 0], y: [0, 1, -1, 0] }
+                      : shiny
+                        ? { y: [0, -6, 0], scale: [1, 1.04, 1], rotate: [0, 0.6, -0.6, 0] }
+                        : undefined
                   }
                   transition={
-                    shiny ? { duration: 3.2, repeat: Infinity, ease: 'easeInOut' } : undefined
+                    isMissingNo
+                      ? { duration: 2.8, repeat: Infinity, ease: 'easeInOut', repeatDelay: 1.2 }
+                      : shiny
+                        ? { duration: 3.2, repeat: Infinity, ease: 'easeInOut' }
+                        : undefined
                   }
                   onError={(e) => {
-                    (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                    (e.target as HTMLImageElement).src = isMissingNo
+                      ? MISSINGNO_SPRITE
+                      : PLACEHOLDER_SPRITE;
                   }}
                 />
               </motion.div>
-              {shiny && (
+              {isMissingNo && <div className="mon-detail__glitch-bars" aria-hidden />}
+              {shiny && !isMissingNo && (
                 <div className="mon-detail__particles" aria-hidden>
                   {SHINY_PARTICLES.map((p) => (
                     <motion.span
@@ -346,10 +394,19 @@ export function PokemonDetailModal({
         <div className="mon-detail__body">
           <div className="mon-detail__header">
             <h3 className="mon-detail__name">
-              {shiny && <span className="mon-detail__name-emoji">✨</span>}
-              <span className={`mon-detail__name-text${shiny ? ' mon-detail__name-text--shiny' : ''}`}>
-                {displayName}
-              </span>
+              {shiny && !isMissingNo && <span className="mon-detail__name-emoji">✨</span>}
+              {isMissingNo ? (
+                <GlitchText
+                  text={displayName}
+                  className="mon-detail__name-text mon-detail__name-text--glitch"
+                  intervalMs={70}
+                  revealChance={0.28}
+                />
+              ) : (
+                <span className={`mon-detail__name-text${shiny ? ' mon-detail__name-text--shiny' : ''}`}>
+                  {displayName}
+                </span>
+              )}
               {caughtWithBall && (
                 <ItemIcon
                   id={caughtWithBall}
@@ -359,16 +416,36 @@ export function PokemonDetailModal({
                 />
               )}
             </h3>
-            <span className="mon-detail__id">{isMagichad ? '#∞' : `#${String(id).padStart(3, '0')}`}</span>
+            <span className={`mon-detail__id${isMissingNo ? ' mon-detail__id--glitch' : ''}`}>
+              {isMagichad ? '#∞' : isMissingNo ? (
+                <GlitchText text="#000" intervalMs={90} revealChance={0.35} />
+              ) : (
+                `#${String(id).padStart(3, '0')}`
+              )}
+            </span>
           </div>
 
-          {shiny && (
+          {isMissingNo && (
+            <p className="mon-detail__rarity mon-detail__rarity--glitch">
+              Glitch form · data unstable
+            </p>
+          )}
+
+          {shiny && !isMissingNo && (
             <p className="mon-detail__rarity">
               {isMagichad ? 'Chad variant · 1 in ∞ encounter' : 'Shiny variant · 1 in 40 encounter'}
             </p>
           )}
 
-          {displayGenus && <p className="mon-detail__genus">{displayGenus}</p>}
+          {displayGenus && (
+            <p className="mon-detail__genus">
+              {isMissingNo ? (
+                <GlitchText text={displayGenus} intervalMs={120} revealChance={0.4} />
+              ) : (
+                displayGenus
+              )}
+            </p>
+          )}
 
           <div className="mon-detail__types">
             {isMagichad ? (
@@ -381,7 +458,9 @@ export function PokemonDetailModal({
           <div className="mon-detail__stats">
             <div className="mon-detail__stat">
               <span className="mon-detail__stat-label">LVL</span>
-              <span className="mon-detail__stat-value">{isMagichad ? '∞' : displayLevel}</span>
+              <span className="mon-detail__stat-value">
+                {isMagichad ? '∞' : displayLevel}
+              </span>
             </div>
             <div className="mon-detail__stat">
               <span className="mon-detail__stat-label">Nature</span>
@@ -393,7 +472,7 @@ export function PokemonDetailModal({
               <span className="mon-detail__stat-label">Catch Rate</span>
               <span className="mon-detail__stat-value">{isMagichad ? '∞' : catchRate}</span>
             </div>
-            {(isMagichad || data) && (
+            {(isMagichad || isMissingNo || data) && (
               <div className="mon-detail__stat">
                 <span className="mon-detail__stat-label">Base Stat Total</span>
                 <span className="mon-detail__stat-value">{displayBst}</span>
@@ -413,9 +492,16 @@ export function PokemonDetailModal({
             )}
           </div>
 
-          {!isMagichad && data?.isLegendary && <span className="mon-detail__legendary">Legendary</span>}
+          {!isMagichad && !isMissingNo && data?.isLegendary && (
+            <span className="mon-detail__legendary">Legendary</span>
+          )}
+          {isMissingNo && <span className="mon-detail__legendary mon-detail__legendary--glitch">Glitch</span>}
 
-          {displayFlavor && <p className="mon-detail__flavor">{displayFlavor}</p>}
+          {displayFlavor && (
+            <p className={`mon-detail__flavor${isMissingNo ? ' mon-detail__flavor--glitch' : ''}`}>
+              {displayFlavor}
+            </p>
+          )}
         </div>
         </motion.div>
 

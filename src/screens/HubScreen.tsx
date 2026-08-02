@@ -1,28 +1,73 @@
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useMemo } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { SidePanel } from '../components/SidePanel';
 import { DebugMenu } from '../components/DebugMenu';
-import { Wheel } from '../components/Wheel';
+import { Wheel, type SpinnerSegment } from '../components/Wheel';
 import { PathwaySelector, HubShopButton } from '../components/PathwaySelector';
 import {
   ELITE_PREP_SPINS,
   ITEMS,
   PATHWAY_SEGMENTS,
   SPINS_PER_GYM,
-  getRegionCatchSegments,
-  getStoneItemIdsForRegion,
-  getRegionTotalGyms,
   UBER_EMPTY_BAG_ITEMS,
   UBER_SPIN_SEGMENTS,
+  filterPoolByMinBst,
+  getRegionAllPokemonPool,
+  getRegionExploreSegments,
+  getRegionTotalGyms,
+  getStoneItemIdsForRegion,
   pickRandom,
 } from '../data/pools';
+import {
+  ARCEUS_BLESSING_CHANCE,
+  ARCEUS_BST_MIN,
+  NEW_POKEMON_WHEEL_WEDGES,
+} from '../data/prestige';
 import { PokeCenterVisits } from '../components/PokeDollar';
-import { PokeCenterModal } from '../components/PokeCenterModal';
+import { PokeCenterModal, type HealModalVariant } from '../components/PokeCenterModal';
+import { OldManCatchTutorial } from '../components/OldManCatchTutorial';
 import { GameIcon } from '../components/GameIcon';
 import { useGameStore } from '../store/useGameStore';
-import { publishHostActivity, publishHostWheelSpin } from '../multiplayer/publish';
+import { publishHostWheelSpin } from '../multiplayer/publish';
+import { getSegmentSprite } from '../data/icons';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
-import type { PathwayId, WheelSegment } from '../types/game';
+import { fetchPokemon } from '../api/pokeapi';
+import { createCaughtAtLevel } from '../utils/pokemonInstance';
+import { maxHpForMon } from '../utils/stats';
+import {
+  isDebugUnlocked,
+  registerAvatarDebugClick,
+  subscribeDebugUnlock,
+} from '../utils/debugUnlock';
+import { TYPE_COLORS } from '../data/typeChart';
+import { localPokemonSprite } from '../utils/localAssets';
+import { MISSINGNO_ID } from '../data/missingno';
+import type { PathwayId, PokemonData, WheelSegment } from '../types/game';
+
+function sampleUnique<T>(arr: T[], n: number): T[] {
+  const copy = [...arr];
+  for (let i = copy.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [copy[i], copy[j]] = [copy[j], copy[i]];
+  }
+  return copy.slice(0, Math.min(n, copy.length));
+}
+
+function preloadImage(url: string): Promise<void> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve();
+    img.onerror = () => resolve();
+    img.src = url;
+  });
+}
+
+async function fetchAndPreloadCatchMons(ids: number[]): Promise<PokemonData[]> {
+  const results = await Promise.all(ids.map((id) => fetchPokemon(id).catch(() => null)));
+  const list = results.filter((p): p is PokemonData => p !== null);
+  await Promise.all(list.map((p) => preloadImage(p.sprite || PLACEHOLDER_SPRITE)));
+  return list;
+}
 
 export function HubScreen() {
   const trainer = useGameStore((s) => s.trainer);
@@ -35,25 +80,54 @@ export function HubScreen() {
   const lives = useGameStore((s) => s.lives);
   const setScreen = useGameStore((s) => s.setScreen);
   const startActivity = useGameStore((s) => s.startActivity);
-  const startLegendaryEncounter = useGameStore((s) => s.startLegendaryEncounter);
   const incrementSpins = useGameStore((s) => s.incrementSpins);
   const setLastGymSpin = useGameStore((s) => s.setLastGymSpin);
   const addItem = useGameStore((s) => s.addItem);
+  const consumeItem = useGameStore((s) => s.consumeItem);
   const restorePartyPp = useGameStore((s) => s.restorePartyPp);
   const reviveHealAllParty = useGameStore((s) => s.reviveHealAllParty);
   const grantXpAllPartyAndPc = useGameStore((s) => s.grantXpAllPartyAndPc);
   const addMoney = useGameStore((s) => s.addMoney);
+  const spendMoney = useGameStore((s) => s.spendMoney);
   const pendingHubNotice = useGameStore((s) => s.pendingHubNotice);
   const setPendingHubNotice = useGameStore((s) => s.setPendingHubNotice);
-
   const setPendingGymAfterShop = useGameStore((s) => s.setPendingGymAfterShop);
+  const getMaxParty = useGameStore((s) => s.getMaxParty);
+  const isUnlockActive = useGameStore((s) => s.isUnlockActive);
+  const maxRepelSpinsLeft = useGameStore((s) => s.maxRepelSpinsLeft);
+  const setMaxRepelSpins = useGameStore((s) => s.setMaxRepelSpins);
+  const pendingCatchWheelIds = useGameStore((s) => s.pendingCatchWheelIds);
+  const setPendingCatchWheelIds = useGameStore((s) => s.setPendingCatchWheelIds);
+  const setLuckyEggActive = useGameStore((s) => s.setLuckyEggActive);
+  const openMysteryGift = useGameStore((s) => s.openMysteryGift);
+  const missingNoDismissed = useGameStore((s) => s.missingNoDismissed);
+  const missingNoReady = useGameStore((s) => s.missingNoReady);
+  const setMissingNoDismissed = useGameStore((s) => s.setMissingNoDismissed);
+  const setMissingNoReady = useGameStore((s) => s.setMissingNoReady);
+  const mysteryEggGymsLeft = useGameStore((s) => s.mysteryEggGymsLeft);
+  const setMysteryEggGyms = useGameStore((s) => s.setMysteryEggGyms);
+  const debugAddToParty = useGameStore((s) => s.debugAddToParty);
+  const bag = useGameStore((s) => s.bag);
+
+  const hardcore = isUnlockActive('hardcore');
+  const arceusBlessing = isUnlockActive('arceusBlessing');
+  const gamba = isUnlockActive('weLikeGamba');
+  const missingNoUnlock = isUnlockActive('missingNo');
+  const showMischief = useGameStore((s) => s.mewMischiefActive);
+  const ensureMewMischiefOffer = useGameStore((s) => s.ensureMewMischiefOffer);
 
   const [activePathway, setActivePathway] = useState<PathwayId | null>(null);
   const [wheelLocked, setWheelLocked] = useState(false);
   const [uberSpinOpen, setUberSpinOpen] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
-  const [pokeCenterOpen, setPokeCenterOpen] = useState(false);
+  const [healModal, setHealModal] = useState<HealModalVariant | null>(null);
   const [martPrompt, setMartPrompt] = useState<'gym' | 'elite' | null>(null);
+  const [debugOn, setDebugOn] = useState(isDebugUnlocked);
+  const [catchMons, setCatchMons] = useState<PokemonData[] | null>(null);
+  const [passName, setPassName] = useState('');
+  const [arceusChoices, setArceusChoices] = useState<PokemonData[] | null>(null);
+  const [missingPrompt, setMissingPrompt] = useState<number | null>(null);
+  const [wonderTradeOpen, setWonderTradeOpen] = useState(false);
 
   const totalGyms = getRegionTotalGyms(region);
   const gymBadges = badges.length;
@@ -61,17 +135,157 @@ export function HubScreen() {
   const spinsSinceGym = spinsCount - lastGymSpin;
   const spinsThreshold = allGymsDone ? ELITE_PREP_SPINS : SPINS_PER_GYM;
   const spinsUntilNext = Math.max(0, spinsThreshold - spinsSinceGym);
-  const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || pokeCenterOpen || !!martPrompt;
+  const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || !!healModal || !!martPrompt;
+  const maxParty = getMaxParty();
+  const hasMissingNo = party.some((m) => m.id === MISSINGNO_ID);
 
-  const wheelSegments: WheelSegment[] = activePathway
-    ? activePathway === 'catch'
-      ? getRegionCatchSegments(region)
-      : PATHWAY_SEGMENTS[activePathway]
-    : [];
+  useEffect(() => subscribeDebugUnlock(() => setDebugOn(true)), []);
+
+  useEffect(() => {
+    ensureMewMischiefOffer();
+  }, [ensureMewMischiefOffer, spinsCount]);
+
+  // MissingNo. prompt when party has water + flying (last catch types)
+  useEffect(() => {
+    if (!missingNoUnlock || missingNoDismissed || missingNoReady) return;
+    const last = party[party.length - 1];
+    if (!last) return;
+    const hasWater = party.some((m) => m.types.includes('water'));
+    const hasFlying = party.some((m) => m.types.includes('flying'));
+    if (hasWater && hasFlying) setMissingPrompt(0);
+  }, [party, missingNoUnlock, missingNoDismissed, missingNoReady]);
+
+  // Hatch mystery egg
+  useEffect(() => {
+    if (mysteryEggGymsLeft !== 0) return;
+    if ((bag.find((i) => i.id === 'mysteryegg')?.quantity ?? 0) <= 0) return;
+    void (async () => {
+      consumeItem('mysteryegg', 1);
+      setMysteryEggGyms(null);
+      const id = pickRandom(getRegionAllPokemonPool(region));
+      try {
+        const mon = await fetchPokemon(id);
+        const avg =
+          party.length > 0
+            ? Math.round(party.reduce((s, m) => s + m.level, 0) / party.length)
+            : 10;
+        const caught = createCaughtAtLevel(mon, 0);
+        caught.level = avg;
+        caught.ivs = {
+          hp: 31,
+          attack: 31,
+          defense: 31,
+          specialAttack: 31,
+          specialDefense: 31,
+          speed: 31,
+        };
+        caught.hp = maxHpForMon(caught);
+        debugAddToParty(mon);
+        useGameStore.setState((state) => ({
+          party: state.party.map((m) =>
+            m.caughtAt === state.lastCaughtAt
+              ? { ...caught, caughtAt: m.caughtAt, shiny: m.shiny }
+              : m,
+          ),
+        }));
+        setNotice(`Your Mystery Egg hatched into ${mon.displayName} (max IVs)!`);
+      } catch {
+        setNotice('Your Mystery Egg hatched, but something went wrong.');
+      }
+    })();
+  }, [
+    mysteryEggGymsLeft,
+    bag,
+    region,
+    party,
+    consumeItem,
+    setMysteryEggGyms,
+    debugAddToParty,
+  ]);
+
+  const exploreSegments = useMemo(() => getRegionExploreSegments(region), [region]);
+  const mischiefSegments = PATHWAY_SEGMENTS.mischief;
+
+  const wheelSegments: WheelSegment[] =
+    activePathway === 'explore'
+      ? exploreSegments
+      : activePathway === 'mischief'
+        ? mischiefSegments
+        : [];
+
+  // Warm sprites for a locked catch wheel while still on the path picker
+  useEffect(() => {
+    if (activePathway === 'catch' || !pendingCatchWheelIds?.length) return;
+    let cancelled = false;
+    void fetchAndPreloadCatchMons(pendingCatchWheelIds).then((list) => {
+      if (!cancelled && list.length) setCatchMons(list);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activePathway, pendingCatchWheelIds]);
+
+  // Load catch wheel mons when catch path selected (reuse locked wheel on Back)
+  useEffect(() => {
+    if (activePathway !== 'catch') {
+      if (activePathway != null) setCatchMons(null);
+      setPassName('');
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const stored = useGameStore.getState().pendingCatchWheelIds;
+      if (stored?.length) {
+        const list = await fetchAndPreloadCatchMons(stored);
+        if (!cancelled) setCatchMons(list);
+        return;
+      }
+
+      const pool = getRegionAllPokemonPool(region);
+      const sampleSize =
+        maxRepelSpinsLeft > 0
+          ? Math.min(pool.length, NEW_POKEMON_WHEEL_WEDGES * 3)
+          : NEW_POKEMON_WHEEL_WEDGES;
+      const ids = sampleUnique(pool, sampleSize);
+      let list = await fetchAndPreloadCatchMons(ids);
+      if (maxRepelSpinsLeft > 0) {
+        const high = list.filter((p) => p.baseStatTotal > 400);
+        if (high.length >= NEW_POKEMON_WHEEL_WEDGES) {
+          list = high.slice(0, NEW_POKEMON_WHEEL_WEDGES);
+        } else if (high.length >= 4) {
+          list = high;
+        } else {
+          list = list.slice(0, NEW_POKEMON_WHEEL_WEDGES);
+        }
+      } else {
+        list = list.slice(0, NEW_POKEMON_WHEEL_WEDGES);
+      }
+      if (cancelled) return;
+      setPendingCatchWheelIds(list.map((p) => p.id));
+      setCatchMons(list);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [activePathway, region, maxRepelSpinsLeft, setPendingCatchWheelIds]);
+
+  const catchSegments: SpinnerSegment[] = useMemo(
+    () =>
+      (catchMons ?? []).map((p) => ({
+        id: String(p.id),
+        label: p.displayName,
+        color: TYPE_COLORS[p.types[0]] ?? '#6b7280',
+        icon: '',
+        image: p.sprite || PLACEHOLDER_SPRITE,
+      })),
+    [catchMons],
+  );
 
   const maybeTriggerGym = useCallback(() => {
     const state = useGameStore.getState();
-    const gymsDone = state.badges.length >= getRegionTotalGyms(state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto');
+    const gymsDone =
+      state.badges.length >=
+      getRegionTotalGyms(state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto');
     const spinsSince = state.spinsCount - state.lastGymSpin;
     if (!gymsDone) {
       if (spinsSince >= SPINS_PER_GYM) {
@@ -104,11 +318,70 @@ export function HubScreen() {
     setPendingHubNotice(null);
   }, [pendingHubNotice, setPendingHubNotice]);
 
+  const handleCatchLand = useCallback(
+    async (seg: SpinnerSegment) => {
+      incrementSpins();
+      grantXpAllPartyAndPc(50);
+      setWheelLocked(true);
+      if (maxRepelSpinsLeft > 0) setMaxRepelSpins(maxRepelSpinsLeft - 1);
+
+      const lockedMons = catchMons;
+      setPendingCatchWheelIds(null);
+
+      if (arceusBlessing && Math.random() < ARCEUS_BLESSING_CHANCE) {
+        const pool = filterPoolByMinBst(getRegionAllPokemonPool(region), ARCEUS_BST_MIN);
+        const ids = sampleUnique(pool.length ? pool : getRegionAllPokemonPool(region), 5);
+        const mons = (
+          await Promise.all(ids.map((id) => fetchPokemon(id).catch(() => null)))
+        ).filter((p): p is PokemonData => p !== null);
+        if (mons.length > 0) {
+          setCatchMons(null);
+          setArceusChoices(mons);
+          setWheelLocked(false);
+          setActivePathway(null);
+          return;
+        }
+      }
+
+      const chosenId = Number(seg.id);
+      const chosen =
+        (lockedMons ?? []).find((p) => p.id === chosenId) ??
+        (await fetchPokemon(chosenId).catch(() => null));
+      if (!chosen) {
+        setWheelLocked(false);
+        return;
+      }
+      useGameStore.getState().setCurrentPokemon(chosen);
+      window.setTimeout(() => {
+        setCatchMons(null);
+        setScreen('catch');
+        setWheelLocked(false);
+        setActivePathway(null);
+      }, 700);
+    },
+    [
+      incrementSpins,
+      grantXpAllPartyAndPc,
+      maxRepelSpinsLeft,
+      setMaxRepelSpins,
+      setPendingCatchWheelIds,
+      arceusBlessing,
+      region,
+      catchMons,
+      setScreen,
+    ],
+  );
+
   const handleLand = useCallback(
     (segment: { activity?: string; id: string; label?: string }) => {
       if (!activePathway) return;
 
-      incrementSpins();
+      // Mischief is a bonus path — don't spend a gym/path roll.
+      if (activePathway === 'mischief') {
+        useGameStore.setState({ mewMischiefActive: false });
+      } else {
+        incrementSpins();
+      }
       grantXpAllPartyAndPc(50);
       setWheelLocked(true);
       publishHostWheelSpin({
@@ -118,102 +391,90 @@ export function HubScreen() {
         result: { id: segment.id, label: segment.label ?? segment.id },
       });
 
-      setTimeout(async () => {
-        if (segment.activity === 'legendary') {
-          publishHostActivity({
-            kind: 'notice',
-            title: 'Legendary!',
-            message: 'A legendary encounter begins!',
-            success: true,
-          });
-          startLegendaryEncounter();
-        } else if (segment.activity === 'uber') {
+      setTimeout(() => {
+        const activity = segment.activity;
+        if (activity === 'uber') {
           setUberSpinOpen(true);
-        } else if (segment.activity === 'teamrocket') {
-          const partySize = useGameStore.getState().party.length;
-          if (partySize <= 1) {
+        } else if (activity === 'teamrocket') {
+          if (party.length <= 1) {
             addItem('potion', 2);
-            const msg =
-              "Come back when you're a challenge for Team Rocket! They laughed you off and left 2 Potions behind.";
-            setNotice(msg);
-            publishHostActivity({
-              kind: 'notice',
-              title: 'Team Rocket',
-              message: msg,
-              success: false,
-              itemId: 'potion',
-            });
+            setNotice(
+              "Come back when you're a challenge for Team Rocket! They left 2 Potions.",
+            );
           } else {
-            publishHostActivity({
-              kind: 'notice',
-              title: 'Team Rocket',
-              message: 'Prepare for trouble!',
-              success: true,
-            });
             setScreen('teamrocket');
           }
-        } else if (segment.activity === 'potion') {
-          addItem('potion', 1);
-          const msg = 'You received a Potion!';
-          setNotice(msg);
-          publishHostActivity({ kind: 'notice', title: 'Potion!', message: msg, success: true, itemId: 'potion' });
-        } else if (segment.activity === 'rarecandy') {
+        } else if (activity === 'trainer') {
+          setScreen('trainerbattle');
+        } else if (activity === 'rival') {
+          setScreen('rivalbattle');
+        } else if (activity === 'rarecandy') {
           addItem('rarecandy', 1);
-          const msg = 'You received a Rare Candy!';
-          setNotice(msg);
-          publishHostActivity({
-            kind: 'notice',
-            title: 'Rare Candy!',
-            message: msg,
-            success: true,
-            itemId: 'rarecandy',
-          });
-        } else if (segment.activity === 'xattack') {
-          addItem('xattack', 1);
-          const msg = 'You received an X-Attack!';
-          setNotice(msg);
-          publishHostActivity({
-            kind: 'notice',
-            title: 'X-Attack!',
-            message: msg,
-            success: true,
-            itemId: 'xattack',
-          });
-        } else if (segment.activity === 'stone') {
+          setNotice('You received a Rare Candy!');
+        } else if (activity === 'stone') {
           const stoneId = pickRandom(getStoneItemIdsForRegion(region));
-          const stone = ITEMS.find((item) => item.id === stoneId);
           addItem(stoneId, 1);
-          const stoneName = stone?.name ?? 'Evolution Stone';
-          const msg = `You received a ${stoneName}!`;
-          setNotice(msg);
-          publishHostActivity({
-            kind: 'notice',
-            title: 'Stone!',
-            message: msg,
-            success: true,
-            itemId: stoneId,
-          });
-        } else if (segment.activity === 'fullheal' || segment.activity === 'pokecenter') {
+          setNotice(`You received a ${ITEMS.find((i) => i.id === stoneId)?.name ?? 'Stone'}!`);
+        } else if (activity === 'fullheal') {
           reviveHealAllParty();
-          setPokeCenterOpen(true);
-          publishHostActivity({
-            kind: 'notice',
-            title: 'Full Heal',
-            message: 'The party was fully healed!',
-            success: true,
-          });
-        } else if (segment.activity === 'money100') {
+          setHealModal('pokecenter');
+        } else if (activity === 'picnic') {
+          reviveHealAllParty();
+          setHealModal('picnic');
+        } else if (activity === 'money100') {
           addMoney(100);
-          const msg = 'You found ¥100!';
-          setNotice(msg);
-          publishHostActivity({ kind: 'notice', title: 'Cash!', message: msg, success: true });
+          setNotice('You found ¥100!');
+        } else if (activity === 'luckyegg') {
+          setLuckyEggActive(true);
+          setNotice('Lucky Egg! Next battle grants bonus XP.');
+        } else if (activity === 'carepackage') {
+          addItem('pokeball', 2);
+          addItem('potion', 1);
+          if (Math.random() < 0.1) addItem('rarecandy', 1);
+          setNotice('Care Package: 2 Poké Balls, 1 Potion' + (Math.random() < 0.1 ? ', Rare Candy!' : '!'));
+        } else if (activity === 'mewtoll') {
+          if (Math.random() < 0.5 && useGameStore.getState().money >= 75) {
+            spendMoney(75);
+            setNotice("Mew's Toll: lost ¥75.");
+          } else {
+            const common = ['pokeball', 'potion', 'healpowder'] as const;
+            const id = pickRandom([...common]);
+            if ((bag.find((i) => i.id === id)?.quantity ?? 0) > 0) {
+              consumeItem(id, 1);
+              setNotice(`Mew's Toll: lost a ${id}.`);
+            } else {
+              spendMoney(Math.min(75, useGameStore.getState().money));
+              setNotice("Mew's Toll: took some of your money.");
+            }
+          }
+        } else if (activity === 'benchwarmers') {
+          const state = useGameStore.getState();
+          if (state.party.length === 0) {
+            setNotice('No party to train.');
+          } else {
+            const avg = Math.round(
+              state.party.reduce((s, m) => s + m.level, 0) / state.party.length,
+            );
+            let lowest = state.party[0]!;
+            for (const m of state.party) {
+              if (m.level < lowest.level) lowest = m;
+            }
+            if (lowest.level >= avg) {
+              setNotice('Your team is already evened out.');
+            } else {
+              useGameStore.setState((s) => ({
+                party: s.party.map((m) =>
+                  m.caughtAt === lowest.caughtAt
+                    ? { ...m, level: avg, hp: maxHpForMon({ ...m, level: avg }) }
+                    : m,
+                ),
+              }));
+              setNotice(`${lowest.displayName} trained up to Lv.${avg}!`);
+            }
+          }
+        } else if (activity === 'wondertrade') {
+          setWonderTradeOpen(true);
         } else {
-          publishHostActivity({
-            kind: 'notice',
-            title: segment.label ?? 'Path chosen',
-            message: `Heading to ${segment.label ?? segment.id}…`,
-            success: true,
-          });
           startActivity(segment as WheelSegment);
         }
         setWheelLocked(false);
@@ -224,13 +485,18 @@ export function HubScreen() {
       activePathway,
       incrementSpins,
       grantXpAllPartyAndPc,
-      startActivity,
-      startLegendaryEncounter,
-      setScreen,
+      wheelSegments,
+      party.length,
       addItem,
+      setScreen,
+      region,
       reviveHealAllParty,
       addMoney,
-      wheelSegments,
+      setLuckyEggActive,
+      spendMoney,
+      bag,
+      consumeItem,
+      startActivity,
     ],
   );
 
@@ -239,75 +505,35 @@ export function HubScreen() {
     returnToPathHub();
   }, [returnToPathHub]);
 
-  const dismissPokeCenter = useCallback(() => {
-    setPokeCenterOpen(false);
+  const dismissHealModal = useCallback(() => {
+    setHealModal(null);
     returnToPathHub();
   }, [returnToPathHub]);
 
   const handleUberLand = useCallback(
     (segment: { id: string; label: string }) => {
-      publishHostWheelSpin({
-        kind: 'uber',
-        title: 'Uber Spin',
-        segments: UBER_SPIN_SEGMENTS,
-        result: segment,
-      });
       setUberSpinOpen(false);
       if (segment.id === 'masterball') {
         addItem('masterball');
-        const msg = 'Uber Spin awarded a Master Ball!';
-        setNotice(msg);
-        publishHostActivity({
-          kind: 'notice',
-          title: 'Uber Spin',
-          message: msg,
-          success: true,
-          itemId: 'masterball',
-        });
+        setNotice('Uber Spin awarded a Master Ball!');
         return;
       }
       if (segment.id === 'bonus-all-items') {
         const state = useGameStore.getState();
         const itemIds =
           state.bag.length > 0 ? state.bag.map((item) => item.id) : [...UBER_EMPTY_BAG_ITEMS];
-        for (const itemId of itemIds) {
-          addItem(itemId, 1);
-        }
-        const msg =
-          state.bag.length > 0
-            ? 'Uber Spin awarded +1 to every item in your bag!'
-            : 'Uber Spin stocked your bag with starter items!';
-        setNotice(msg);
-        publishHostActivity({
-          kind: 'notice',
-          title: 'Uber Spin',
-          message: msg,
-          success: true,
-        });
+        for (const itemId of itemIds) addItem(itemId, 1);
+        setNotice('Uber Spin awarded +1 to bag items!');
         return;
       }
       if (segment.id === 'bonus-xp') {
         grantXpAllPartyAndPc(200);
-        const msg = 'Uber Spin awarded +200 XP to your party and PC!';
-        setNotice(msg);
-        publishHostActivity({
-          kind: 'notice',
-          title: 'Uber Spin',
-          message: msg,
-          success: true,
-        });
+        setNotice('Uber Spin awarded +200 XP!');
         return;
       }
       if (segment.id === 'bonus-money') {
         addMoney(250);
-        const msg = 'Uber Spin awarded ¥250!';
-        setNotice(msg);
-        publishHostActivity({
-          kind: 'notice',
-          title: 'Uber Spin',
-          message: msg,
-          success: true,
-        });
+        setNotice('Uber Spin awarded ¥250!');
       }
     },
     [addItem, addMoney, grantXpAllPartyAndPc],
@@ -335,6 +561,8 @@ export function HubScreen() {
     </p>
   ) : null;
 
+  const hasMysteryGift = (bag.find((i) => i.id === 'mysterygift')?.quantity ?? 0) > 0;
+
   return (
     <motion.div
       className="screen hub-screen"
@@ -345,22 +573,38 @@ export function HubScreen() {
       <header className="hub-header">
         <div className="hub-header__trainer">
           {trainer?.avatar && /[/.]/.test(trainer.avatar) ? (
-            <img
-              src={trainer.avatar}
-              alt={trainer.name}
-              className="hub-header__avatar-img"
-              onError={(e) => {
-                (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+            <button
+              type="button"
+              className="hub-header__avatar-btn"
+              onClick={() => {
+                if (registerAvatarDebugClick()) setDebugOn(true);
               }}
-            />
+            >
+              <img
+                src={trainer.avatar}
+                alt={trainer.name}
+                className="hub-header__avatar-img"
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                }}
+              />
+            </button>
           ) : (
-            <span className="hub-header__avatar">{trainer?.avatar}</span>
+            <button
+              type="button"
+              className="hub-header__avatar-btn"
+              onClick={() => {
+                if (registerAvatarDebugClick()) setDebugOn(true);
+              }}
+            >
+              <span className="hub-header__avatar">{trainer?.avatar}</span>
+            </button>
           )}
           <div>
             <h2 className="hub-header__name">{trainer?.name}</h2>
             <p className="hub-header__stats">
-              Party: {party.length}/5 · Badges: {gymBadges}/{totalGyms} · Paths: {spinsCount} ·{' '}
-              <PokeCenterVisits lives={lives} />
+              Party: {party.length}/{maxParty} · Badges: {gymBadges}/{totalGyms} · Paths:{' '}
+              {spinsCount} · <PokeCenterVisits lives={lives} />
             </p>
           </div>
         </div>
@@ -368,7 +612,8 @@ export function HubScreen() {
 
       {eliteCleared && (
         <div className="hub-champion-banner">
-          <GameIcon ui="champion" alt="" className="game-icon-img game-icon-img--inline" /> {region} Champion!
+          <GameIcon ui="champion" alt="" className="game-icon-img game-icon-img--inline" />{' '}
+          {region} Champion!
         </div>
       )}
 
@@ -386,13 +631,39 @@ export function HubScreen() {
               >
                 <h3 className="hub-wheel-title">
                   {activePathway === 'catch'
-                    ? 'Catch Pokémon'
-                    : activePathway === 'items'
-                      ? 'Hunt Items'
-                      : 'Mystery Path'}
+                    ? 'Catch Pokémon Wheel'
+                    : activePathway === 'explore'
+                      ? 'Explore World'
+                      : "Mew's Mischief"}
                 </h3>
-                <Wheel segments={wheelSegments} onLand={handleLand} disabled={wheelLocked} />
+                {activePathway === 'catch' ? (
+                  <>
+                    <p className="wheel-pass-name" aria-live="polite">
+                      {passName || 'Spin Wheel'}
+                    </p>
+                    {catchMons == null || catchSegments.length === 0 ? (
+                      <p className="loading">Preparing the wheel…</p>
+                    ) : (
+                      <Wheel
+                        segments={catchSegments}
+                        onLand={handleCatchLand}
+                        disabled={wheelLocked}
+                        hideLabels
+                        onPassSegment={(seg) => setPassName(seg.label)}
+                      />
+                    )}
+                  </>
+                ) : (
+                  <Wheel segments={wheelSegments} onLand={handleLand} disabled={wheelLocked} />
+                )}
                 {gymCounter}
+                <button
+                  type="button"
+                  className="wheel-back-btn"
+                  onClick={() => setActivePathway(null)}
+                >
+                  ← Back
+                </button>
               </motion.div>
             ) : (
               <motion.div
@@ -404,9 +675,56 @@ export function HubScreen() {
                 transition={{ duration: 0.28, ease: 'easeOut' }}
               >
                 <h3 className="hub-wheel-title">Choose a Path</h3>
-                <PathwaySelector onSelect={setActivePathway} disabled={pathsDisabled} />
+                <PathwaySelector
+                  onSelect={setActivePathway}
+                  disabled={pathsDisabled}
+                  showMischief={showMischief}
+                  hideCatch={hardcore}
+                />
                 {gymCounter}
-                <HubShopButton onClick={() => setScreen('shop')} />
+                <div className="hub-shop-row">
+                  <HubShopButton onClick={() => setScreen('shop')} />
+                  {gamba && (
+                    <HubShopButton
+                      onClick={() => setScreen('gamecorner')}
+                      label="Game Corner"
+                      variant="gamecorner"
+                    />
+                  )}
+                  {hasMysteryGift && (
+                    <HubShopButton
+                      label="Open Mystery Gift"
+                      variant="mysterygift"
+                      onClick={() => {
+                        const reward = openMysteryGift();
+                        if (reward) {
+                          setNotice(
+                            `Mystery Gift opened: ${ITEMS.find((i) => i.id === reward)?.name ?? reward}!`,
+                          );
+                        }
+                      }}
+                    />
+                  )}
+                  {missingNoReady && !hasMissingNo && (
+                    <HubShopButton
+                      onClick={() => setScreen('missingno')}
+                      label="Fly to Cinnabar Island"
+                      variant="cinnabar"
+                    />
+                  )}
+                </div>
+                {(bag.find((i) => i.id === 'maxrepel')?.quantity ?? 0) > 0 && (
+                  <HubShopButton
+                    label="Use Max Repel"
+                    variant="maxrepel"
+                    onClick={() => {
+                      if (consumeItem('maxrepel', 1)) {
+                        setMaxRepelSpins(3);
+                        setNotice('Max Repel activated for the next 3 Pokémon wheels!');
+                      }
+                    }}
+                  />
+                )}
               </motion.div>
             )}
           </AnimatePresence>
@@ -418,11 +736,225 @@ export function HubScreen() {
         <div className="battle-modal__backdrop">
           <div className="battle-modal uber-spin-modal">
             <h3 className="battle-modal__title">Uber Spin</h3>
-            <p className="battle-modal__subtitle">A secret wheel with rare rewards!</p>
             <Wheel segments={UBER_SPIN_SEGMENTS} onLand={handleUberLand} />
             <button type="button" className="btn btn--ghost" onClick={() => setUberSpinOpen(false)}>
               Close
             </button>
+          </div>
+        </div>
+      )}
+
+      {arceusChoices && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal">
+            <h3 className="battle-modal__title">Arceus&apos;s Blessing</h3>
+            <p className="battle-modal__subtitle">Choose one Pokémon</p>
+            <div className="prestige-grid">
+              {arceusChoices.map((mon) => (
+                <button
+                  key={mon.id}
+                  type="button"
+                  className="btn btn--primary btn--sm"
+                  onClick={() => {
+                    debugAddToParty(mon);
+                    const avg =
+                      party.length > 0
+                        ? Math.round(party.reduce((s, m) => s + m.level, 0) / party.length)
+                        : 10;
+                    useGameStore.setState((state) => ({
+                      party: state.party.map((m) =>
+                        m.caughtAt === state.lastCaughtAt
+                          ? { ...m, level: avg, hp: maxHpForMon({ ...m, level: avg }) }
+                          : m,
+                      ),
+                    }));
+                    setArceusChoices(null);
+                    setNotice(`${mon.displayName} joined your team/PC!`);
+                  }}
+                >
+                  <img src={mon.sprite} alt="" width={48} height={48} />
+                  {mon.displayName}
+                </button>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {wonderTradeOpen && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal wonder-trade-modal">
+            <div className="wonder-trade-modal__hero">
+              <div className="wonder-trade-modal__badge-wrap" aria-hidden>
+                <img
+                  src={getSegmentSprite('wondertrade') ?? localPokemonSprite(151)}
+                  alt=""
+                  className="wonder-trade-modal__badge"
+                  onError={(e) => {
+                    (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                  }}
+                />
+              </div>
+              <div>
+                <h3 className="wonder-trade-modal__title">Wonder Trade</h3>
+                <p className="wonder-trade-modal__subtitle">
+                  Send one party Pokémon into the unknown — Mew finds a similar-strength partner.
+                </p>
+              </div>
+            </div>
+
+            <div className="wonder-trade-modal__list">
+              {party.map((m) => (
+                <button
+                  key={m.caughtAt}
+                  type="button"
+                  className="wonder-trade-card"
+                  onClick={async () => {
+                    const pool = getRegionAllPokemonPool(region);
+                    const candidates = (
+                      await Promise.all(
+                        sampleUnique(pool, 20).map((id) => fetchPokemon(id).catch(() => null)),
+                      )
+                    ).filter((p): p is PokemonData => p !== null);
+                    const bst = m.types ? candidates : candidates;
+                    const targetBst =
+                      candidates.find((c) => Math.abs(c.baseStatTotal - (candidates[0]?.baseStatTotal ?? 0)) < 999) ??
+                      candidates[0];
+                    // Prefer similar BST using party member's species cache via fetch
+                    const fromData = await fetchPokemon(m.id).catch(() => null);
+                    const fromBst = fromData?.baseStatTotal ?? 400;
+                    const match =
+                      candidates.find(
+                        (c) => Math.abs(c.baseStatTotal - fromBst) / fromBst <= 0.1,
+                      ) ?? pickRandom(candidates);
+                    if (!match) {
+                      setWonderTradeOpen(false);
+                      setNotice('No trade partner found.');
+                      return;
+                    }
+                    useGameStore.setState((state) => ({
+                      party: state.party.filter((p) => p.caughtAt !== m.caughtAt),
+                    }));
+                    debugAddToParty(match);
+                    useGameStore.setState((state) => ({
+                      party: state.party.map((p) =>
+                        p.caughtAt === state.lastCaughtAt
+                          ? { ...p, level: m.level, hp: maxHpForMon({ ...p, level: m.level }) }
+                          : p,
+                      ),
+                    }));
+                    void bst;
+                    void targetBst;
+                    setWonderTradeOpen(false);
+                    setNotice(`Traded ${m.displayName} for ${match.displayName}!`);
+                  }}
+                >
+                  <img
+                    src={m.sprite || localPokemonSprite(m.id)}
+                    alt=""
+                    className="wonder-trade-card__sprite"
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                    }}
+                  />
+                  <div className="wonder-trade-card__info">
+                    <span className="wonder-trade-card__name">{m.displayName}</span>
+                    <span className="wonder-trade-card__meta">Lv. {m.level}</span>
+                    <div className="wonder-trade-card__types">
+                      {m.types.map((t) => (
+                        <span
+                          key={t}
+                          className="wonder-trade-card__type"
+                          style={{ background: TYPE_COLORS[t] ?? '#6b7280' }}
+                        >
+                          {t}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                  <span className="wonder-trade-card__action">Trade</span>
+                </button>
+              ))}
+            </div>
+
+            <button
+              type="button"
+              className="wonder-trade-modal__cancel"
+              onClick={() => setWonderTradeOpen(false)}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {missingPrompt !== null && (
+        <div className="battle-modal__backdrop">
+          <div className="battle-modal hub-notice-modal">
+            {missingPrompt === 0 && (
+              <>
+                <p className="hub-notice-modal__text">Are you in a hurry?</p>
+                <div className="battle-modal__actions">
+                  <button
+                    type="button"
+                    className="btn btn--primary"
+                    onClick={() => setMissingPrompt(1)}
+                  >
+                    No
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn--ghost"
+                    onClick={() => {
+                      setMissingNoDismissed(true);
+                      setMissingPrompt(null);
+                    }}
+                  >
+                    Yes
+                  </button>
+                </div>
+              </>
+            )}
+            {missingPrompt === 1 && (
+              <>
+                <p className="hub-notice-modal__text">
+                  I see you are using a Pokédex. When you catch a Pokémon, it&apos;s automatically
+                  updated.
+                </p>
+                <button type="button" className="btn btn--primary" onClick={() => setMissingPrompt(2)}>
+                  …
+                </button>
+              </>
+            )}
+            {missingPrompt === 2 && (
+              <>
+                <p className="hub-notice-modal__text">What? You don&apos;t know how to catch Pokémon?</p>
+                <button type="button" className="btn btn--primary" onClick={() => setMissingPrompt(3)}>
+                  …
+                </button>
+              </>
+            )}
+            {missingPrompt === 3 && (
+              <OldManCatchTutorial onContinue={() => setMissingPrompt(4)} />
+            )}
+            {missingPrompt === 4 && (
+              <>
+                <p className="hub-notice-modal__text">
+                  First, you need to weaken the target Pokémon
+                </p>
+                <button
+                  type="button"
+                  className="btn btn--primary"
+                  onClick={() => {
+                    setMissingNoReady(true);
+                    setMissingPrompt(null);
+                    setNotice('A new option appeared: Fly to Cinnabar Island');
+                  }}
+                >
+                  OK
+                </button>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -475,9 +1007,14 @@ export function HubScreen() {
         </div>
       )}
 
-      {pokeCenterOpen && <PokeCenterModal onClose={dismissPokeCenter} />}
+      {healModal && <PokeCenterModal variant={healModal} onClose={dismissHealModal} />}
 
-      {trainer?.name.toLowerCase() === 'debug' && <DebugMenu onUberSpin={() => setUberSpinOpen(true)} />}
+      {debugOn && (
+        <DebugMenu
+          onUberSpin={() => setUberSpinOpen(true)}
+          onWonderTrade={() => setWonderTradeOpen(true)}
+        />
+      )}
     </motion.div>
   );
 }

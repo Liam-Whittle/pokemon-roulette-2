@@ -20,8 +20,14 @@ export function StarterScreen() {
   const hasShinyCharm = useGameStore(
     (state) => (state.bag.find((item) => item.id === 'shinycharm')?.quantity ?? 0) > 0,
   );
+  const onTheHouse = useGameStore((state) => state.activeUnlocks.includes('onTheHouse'));
+  const shinyPlus = useGameStore((state) => state.activeUnlocks.includes('shinyCharmPlus'));
   const starterId = useMemo(() => pickRandom(getRegionStarters(region)), [region]);
-  const isShiny = useMemo(() => Math.random() < (hasShinyCharm ? 1 / 15 : 1 / 40), [hasShinyCharm]);
+  const isShiny = useMemo(() => {
+    if (onTheHouse) return true;
+    const odds = shinyPlus ? 1 / 5 : hasShinyCharm ? 1 / 15 : 1 / 40;
+    return Math.random() < odds;
+  }, [hasShinyCharm, onTheHouse, shinyPlus]);
 
   useEffect(() => {
     fetchPokemon(starterId).then(setStarter);

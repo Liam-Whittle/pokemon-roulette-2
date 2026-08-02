@@ -1,7 +1,8 @@
 import { assignMoves } from '../data/moves';
+import { MISSINGNO_ID } from '../data/missingno';
 import type { CatchBallId, CaughtPokemon, PokemonData } from '../types/game';
 import { encounterLevelForBadges } from './xp';
-import { maxHpForMon, randomIVs, randomNature, zeroEVs } from './stats';
+import { maxHpForMon, perfectIVs, randomIVs, randomNature, zeroEVs } from './stats';
 
 export function createCaughtPokemon(
   pokemon: PokemonData,
@@ -15,7 +16,7 @@ export function createCaughtPokemon(
   } = {},
 ): CaughtPokemon {
   const level = opts.level ?? 5;
-  const ivs = randomIVs();
+  const ivs = pokemon.id === MISSINGNO_ID ? perfectIVs() : randomIVs();
   const nature = randomNature();
   const moves = assignMoves(pokemon.id, pokemon.types, level, opts.preferStrongMoves ?? false);
   const mon: CaughtPokemon = {
@@ -56,15 +57,29 @@ export function createCaughtAtLevel(
 
 /** Migrate legacy save entries that used powerLevel. */
 export function migrateCaughtPokemon(raw: Record<string, unknown>): CaughtPokemon {
-  if (typeof raw.level === 'number' && Array.isArray(raw.moves)) {
-    return raw as unknown as CaughtPokemon;
-  }
   const id = Number(raw.id) || 1;
   const types = (raw.types as string[]) ?? ['normal'];
-  const level = 5;
-  const ivs = randomIVs();
-  const nature = randomNature();
-  const moves = assignMoves(id, types, level);
+
+  if (typeof raw.level === 'number' && Array.isArray(raw.moves) && raw.moves.length > 0) {
+    const mon = raw as unknown as CaughtPokemon;
+    if (id !== MISSINGNO_ID) return mon;
+    // Existing MissingNo. catches: lock lore IVs and refill empty/corrupt movesets.
+    const ivs = perfectIVs();
+    const moves =
+      mon.moves.length >= 4 ? mon.moves.slice(0, 4) : assignMoves(MISSINGNO_ID, types, mon.level);
+    const patched = { ...mon, ivs, moves };
+    patched.hp = maxHpForMon(patched);
+    return patched;
+  }
+
+  const level = typeof raw.level === 'number' ? raw.level : 5;
+  const nature =
+    typeof raw.nature === 'string' ? (raw.nature as CaughtPokemon['nature']) : randomNature();
+  const ivs = id === MISSINGNO_ID ? perfectIVs() : randomIVs();
+  const moves =
+    Array.isArray(raw.moves) && raw.moves.length > 0
+      ? (raw.moves as CaughtPokemon['moves'])
+      : assignMoves(id, types, level);
   const mon: CaughtPokemon = {
     id,
     name: String(raw.name ?? 'unknown'),
@@ -75,11 +90,11 @@ export function migrateCaughtPokemon(raw: Record<string, unknown>): CaughtPokemo
     caughtAt: Number(raw.caughtAt) || Date.now(),
     nickname: raw.nickname as string | undefined,
     level,
-    xp: 0,
+    xp: typeof raw.xp === 'number' ? raw.xp : 0,
     ivs,
-    evs: zeroEVs(),
+    evs: (raw.evs as CaughtPokemon['evs']) ?? zeroEVs(),
     nature,
-    moves,
+    moves: id === MISSINGNO_ID && moves.length < 4 ? assignMoves(MISSINGNO_ID, types, level) : moves,
     evolvesToId: (raw.evolvesToId as number | null) ?? null,
     shiny: Boolean(raw.shiny),
     caughtWithBall: raw.caughtWithBall as CatchBallId | undefined,
@@ -88,7 +103,7 @@ export function migrateCaughtPokemon(raw: Record<string, unknown>): CaughtPokemo
     guestOwned: raw.guestOwned as boolean | undefined,
     guestLocked: raw.guestLocked as boolean | undefined,
   };
-  if (mon.hp === undefined) mon.hp = maxHpForMon(mon);
+  if (mon.hp === undefined || id === MISSINGNO_ID) mon.hp = maxHpForMon(mon);
   return mon;
 }
 
