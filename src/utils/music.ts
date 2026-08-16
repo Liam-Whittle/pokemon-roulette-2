@@ -1,11 +1,14 @@
 import { asset } from './asset';
+import { gainForSoundSrc } from './audioGains';
 
 export type MusicTrack =
   | 'title'
   | 'titleExtra'
+  | 'createTrainer'
   | 'main'
   | 'kanto'
   | 'johto'
+  | 'hoenn'
   | 'gym'
   | 'elite4'
   | 'pokemon'
@@ -13,6 +16,7 @@ export type MusicTrack =
   | 'gamelose'
   | 'pokemart'
   | 'teamrocket'
+  | 'teamaqua'
   | 'trainerBattle'
   | 'rivalBattle'
   | 'giovanni'
@@ -23,9 +27,11 @@ export type MusicTrack =
 const TRACKS: Record<MusicTrack, string> = {
   title: asset('sounds/title_new.mp3'),
   titleExtra: asset('sounds/title_extra.mp3'),
+  createTrainer: asset('sounds/create_trainer.mp3'),
   main: asset('sounds/main.mp3'),
   kanto: asset('sounds/kanto.mp3'),
   johto: asset('sounds/johto.mp3'),
+  hoenn: asset('sounds/hoenn.mp3'),
   gym: asset('sounds/gym.mp3'),
   elite4: asset('sounds/elite4.mp3'),
   pokemon: asset('sounds/pokemon.mp3'),
@@ -33,6 +39,7 @@ const TRACKS: Record<MusicTrack, string> = {
   gamelose: asset('sounds/game_lose.mp3'),
   pokemart: asset('sounds/pokemart.mp3'),
   teamrocket: asset('sounds/team_rocket.mp3'),
+  teamaqua: asset('sounds/team_aqua.mp3'),
   trainerBattle: asset('sounds/trainer_battle.mp3'),
   rivalBattle: asset('sounds/rival_battle.mp3'),
   giovanni: asset('sounds/giovanni.mp3'),
@@ -41,14 +48,25 @@ const TRACKS: Record<MusicTrack, string> = {
   missingnoCatch: asset('sounds/missingno_catch.mp3'),
 };
 
-/** Scales the user volume slider so music stays comfortable across the full range. */
-const MASTER_GAIN = 0.3;
+/**
+ * Slider → playback gain. Music sits under SFX so hits / cries / ball sounds
+ * stay readable. Clips keep a higher gain; both still track the same slider
+ * (and neither hits 100% at half volume).
+ */
+const MUSIC_MASTER_GAIN = 0.28;
+const CLIP_MASTER_GAIN = 0.55;
 
-/** Per-track multipliers for quieter source files. */
-const TRACK_GAIN: Partial<Record<MusicTrack, number>> = {
-  titleExtra: 2.2,
-  giovanni: 1.44,
-};
+/**
+ * Species cries were normalized to the same -16 LUFS as music, then still
+ * played at 0.6 — they vanished under the mix. Play them at full clip level
+ * plus a little extra so they read over BGM.
+ */
+export const CRY_VOLUME_SCALE = 1.2;
+/** MissingNo's glitch cry still reads quieter than other species. */
+export const MISSINGNO_CRY_VOLUME_SCALE = 1.45;
+
+/** Optional per-track multipliers (files are loudness-normalized; keep near 1). */
+const TRACK_GAIN: Partial<Record<MusicTrack, number>> = {};
 
 let audio: HTMLAudioElement | null = null;
 let unlocked = false; // becomes true after the first user gesture
@@ -57,10 +75,28 @@ let volume = 0.05;
 let currentTrack: MusicTrack | null = null;
 let pendingTrack: MusicTrack = 'title';
 
+function trackFileGain(track: MusicTrack): number {
+  return gainForSoundSrc(TRACKS[track]);
+}
+
 function effectiveVolume(): number {
   if (userMuted) return 0;
-  const trackGain = TRACK_GAIN[pendingTrack] ?? 1;
-  return Math.min(1, volume * MASTER_GAIN * trackGain);
+  const trackGain = (TRACK_GAIN[pendingTrack] ?? 1) * trackFileGain(pendingTrack);
+  return Math.min(1, volume * MUSIC_MASTER_GAIN * trackGain);
+}
+
+/** Slider value 0–1 (ignores mute / master). */
+export function getMusicVolume(): number {
+  return volume;
+}
+
+export function isMusicMuted(): boolean {
+  return userMuted;
+}
+
+/** Shared base level for playClip / battle samples (respects slider, not mute). */
+export function getClipBaseVolume(): number {
+  return Math.min(1, Math.max(0, volume * CLIP_MASTER_GAIN));
 }
 
 function ensureAudio(): HTMLAudioElement {
@@ -164,7 +200,7 @@ export function playClip(src: string, volumeScale = 1): HTMLAudioElement | null 
   if (userMuted) return null;
   try {
     const clip = new Audio(src);
-    const base = Math.min(1, Math.max(volume, volume * 2, 0.1));
+    const base = getClipBaseVolume() * gainForSoundSrc(src);
     clip.volume = Math.min(1, Math.max(0, base * volumeScale));
     activeClips.push(clip);
     clip.addEventListener('ended', () => {

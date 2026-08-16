@@ -193,6 +193,10 @@ export interface CaughtPokemon {
   pp?: Record<string, number>;
   guestOwned?: boolean;
   guestLocked?: boolean;
+  /** Assigned battle ability slug (one slot, rolled on create). */
+  ability?: string;
+  /** null = genderless. */
+  gender?: import('../data/speciesGender').PokemonGender | null;
 }
 
 export interface BagItem {
@@ -307,7 +311,7 @@ export interface BattleSnapshot {
   xAttackPhysical?: boolean;
   xAttackSpecial?: boolean;
   log: string[];
-  phase?: 'prep' | 'choose' | 'between' | 'forcedSwap' | 'victory' | 'result';
+  phase?: 'prep' | 'choose' | 'between' | 'forcedSwap' | 'victory' | 'result' | 'intro';
   battleField?: import('../data/battleField').BattleField;
   playerVolatiles?: import('../data/battleVolatiles').BattleVolatiles;
   enemyVolatiles?: import('../data/battleVolatiles').BattleVolatiles;

@@ -1,4 +1,5 @@
 import type { BaseStats, CaughtPokemon, IVs, NatureId, StatKey } from '../types/game';
+import { abilitySpeedMult, getMonAbility } from '../data/abilities';
 import { MISSINGNO_DATA, MISSINGNO_ID } from '../data/missingno';
 import { getCachedSpecies } from '../data/speciesCache';
 
@@ -160,8 +161,21 @@ export function statDeltasFromBase(
   };
 }
 
-export function effectiveSpeed(mon: Pick<CaughtPokemon, 'id' | 'level' | 'ivs' | 'evs' | 'nature' | 'status'>): number {
+export function effectiveSpeed(
+  mon: Pick<CaughtPokemon, 'id' | 'level' | 'ivs' | 'evs' | 'nature' | 'status' | 'ability'>,
+  weather: 'none' | 'sunny' | 'rain' | 'hail' | 'sandstorm' = 'none',
+  weatherSuppressed = false,
+  extra?: { unburden?: boolean },
+): number {
   let speed = getComputedStats(mon).speed;
-  if (mon.status?.kind === 'paralysis') speed = Math.floor(speed * 0.75);
+  const ability = getMonAbility(mon);
+  if (mon.status?.kind === 'paralysis' && ability !== 'quick-feet') speed = Math.floor(speed * 0.75);
+  speed = Math.floor(
+    speed *
+      abilitySpeedMult(ability, weather, weatherSuppressed, {
+        ...extra,
+        statused: !!mon.status,
+      }),
+  );
   return speed;
 }

@@ -24,7 +24,7 @@ export function applyGen2MoveType(slug: string, type: string): string {
 export function applyRegionMoveType(
   slug: string,
   type: string,
-  region: 'Kanto' | 'Johto',
+  region: 'Kanto' | 'Johto' | 'Hoenn',
 ): string {
   const base = applyGen2MoveType(slug, type);
   if (region === 'Kanto' && base === 'dark') {

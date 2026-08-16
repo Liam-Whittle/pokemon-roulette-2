@@ -1,0 +1,606 @@
+{
+  "overgrow": {
+    "name": "Overgrow",
+    "shortEffect": "Strengthens Grass moves to inflict 1.5× damage at 1/3 max HP or less."
+  },
+  "chlorophyll": {
+    "name": "Chlorophyll",
+    "shortEffect": "Doubles Speed during strong sunlight."
+  },
+  "blaze": {
+    "name": "Blaze",
+    "shortEffect": "Strengthens Fire moves to inflict 1.5× damage at 1/3 max HP or less."
+  },
+  "solar-power": {
+    "name": "Solar Power",
+    "shortEffect": "Increases Special Attack to 1.5× but costs 1/8 max HP after each turn during strong sunlight."
+  },
+  "torrent": {
+    "name": "Torrent",
+    "shortEffect": "Strengthens Water moves to inflict 1.5× damage at 1/3 max HP or less."
+  },
+  "rain-dish": {
+    "name": "Rain Dish",
+    "shortEffect": "Heals for 1/16 max HP after each turn during rain."
+  },
+  "shield-dust": {
+    "name": "Shield Dust",
+    "shortEffect": "Protects against incoming moves' extra effects."
+  },
+  "run-away": {
+    "name": "Run Away",
+    "shortEffect": "Ensures success fleeing from wild battles."
+  },
+  "shed-skin": {
+    "name": "Shed Skin",
+    "shortEffect": "Has a 33% chance of curing any major status ailment after each turn."
+  },
+  "compound-eyes": {
+    "name": "Compound Eyes",
+    "shortEffect": "Increases moves' accuracy to 1.3×."
+  },
+  "tinted-lens": {
+    "name": "Tinted Lens",
+    "shortEffect": "Doubles damage inflicted with not-very-effective moves."
+  },
+  "swarm": {
+    "name": "Swarm",
+    "shortEffect": "Strengthens Bug moves to inflict 1.5× damage at 1/3 max HP or less."
+  },
+  "sniper": {
+    "name": "Sniper",
+    "shortEffect": "Strengthens critical hits to inflict 3× damage rather than 2×."
+  },
+  "keen-eye": {
+    "name": "Keen Eye",
+    "shortEffect": "Prevents accuracy from being lowered."
+  },
+  "tangled-feet": {
+    "name": "Tangled Feet",
+    "shortEffect": "Doubles evasion when confused."
+  },
+  "big-pecks": {
+    "name": "Big Pecks",
+    "shortEffect": "Protects against Defense drops."
+  },
+  "guts": {
+    "name": "Guts",
+    "shortEffect": "Increases Attack to 1.5× with a major status ailment."
+  },
+  "hustle": {
+    "name": "Hustle",
+    "shortEffect": "Strengthens physical moves to inflict 1.5× damage, but decreases their accuracy to 0.8×."
+  },
+  "intimidate": {
+    "name": "Intimidate",
+    "shortEffect": "Lowers opponents' Attack one stage upon entering battle."
+  },
+  "unnerve": {
+    "name": "Unnerve",
+    "shortEffect": "Prevents opposing Pokémon from eating held Berries."
+  },
+  "static": {
+    "name": "Static",
+    "shortEffect": "Has a 30% chance of paralyzing attacking Pokémon on contact."
+  },
+  "lightning-rod": {
+    "name": "Lightning Rod",
+    "shortEffect": "Redirects single-target Electric moves to this Pokémon where possible. Absorbs Electric moves, raising Special Attack one stage."
+  },
+  "sand-veil": {
+    "name": "Sand Veil",
+    "shortEffect": "Increases evasion to 1.25× during a sandstorm. Protects against sandstorm damage."
+  },
+  "sand-rush": {
+    "name": "Sand Rush",
+    "shortEffect": "Doubles Speed during a sandstorm. Protects against sandstorm damage."
+  },
+  "poison-point": {
+    "name": "Poison Point",
+    "shortEffect": "Has a 30% chance of poisoning attacking Pokémon on contact."
+  },
+  "rivalry": {
+    "name": "Rivalry",
+    "shortEffect": "Increases damage inflicted to 1.25× against Pokémon of the same gender, but decreases damage to 0.75× against the opposite gender."
+  },
+  "sheer-force": {
+    "name": "Sheer Force",
+    "shortEffect": "Strengthens moves with extra effects to 1.3× their power, but prevents their extra effects."
+  },
+  "cute-charm": {
+    "name": "Cute Charm",
+    "shortEffect": "Has a 30% chance of infatuating attacking Pokémon on contact."
+  },
+  "magic-guard": {
+    "name": "Magic Guard",
+    "shortEffect": "Protects against damage not directly caused by a move."
+  },
+  "friend-guard": {
+    "name": "Friend Guard",
+    "shortEffect": "Decreases all direct damage taken by friendly Pokémon to 0.75×."
+  },
+  "unaware": {
+    "name": "Unaware",
+    "shortEffect": "Ignores other Pokémon's stat modifiers for damage and accuracy calculation."
+  },
+  "flash-fire": {
+    "name": "Flash Fire",
+    "shortEffect": "Protects against Fire moves. Once one has been blocked, the Pokémon's own Fire moves inflict 1.5× damage until it leaves battle."
+  },
+  "drought": {
+    "name": "Drought",
+    "shortEffect": "Summons strong sunlight that lasts indefinitely upon entering battle."
+  },
+  "competitive": {
+    "name": "Competitive",
+    "shortEffect": "Raises Special Attack by two stages upon having any stat lowered."
+  },
+  "frisk": {
+    "name": "Frisk",
+    "shortEffect": "Reveals an opponent's held item upon entering battle."
+  },
+  "inner-focus": {
+    "name": "Inner Focus",
+    "shortEffect": "Prevents flinching."
+  },
+  "infiltrator": {
+    "name": "Infiltrator",
+    "shortEffect": "Bypasses Light Screen, Reflect, and Safeguard."
+  },
+  "stench": {
+    "name": "Stench",
+    "shortEffect": "Has a 10% chance of making target Pokémon flinch with each hit."
+  },
+  "effect-spore": {
+    "name": "Effect Spore",
+    "shortEffect": "Has a 30% chance of inflcting either paralysis, poison, or sleep on attacking Pokémon on contact."
+  },
+  "dry-skin": {
+    "name": "Dry Skin",
+    "shortEffect": "Causes 1/8 max HP in damage each turn during strong sunlight, but heals for 1/8 max HP during rain. Increases damage from Fire moves to 1.25×, but absorbs Water moves, healing for 1/4 max HP."
+  },
+  "damp": {
+    "name": "Damp",
+    "shortEffect": "Prevents Self-Destruct, Explosion, and Aftermath from working while the Pokémon is in battle."
+  },
+  "wonder-skin": {
+    "name": "Wonder Skin",
+    "shortEffect": "Lowers incoming non-damaging moves' base accuracy to exactly 50%."
+  },
+  "arena-trap": {
+    "name": "Arena Trap",
+    "shortEffect": "Prevents opponents from fleeing or switching out. Eluded by Flying-types and Pokémon in the air."
+  },
+  "sand-force": {
+    "name": "Sand Force",
+    "shortEffect": "Strengthens Rock, Ground, and Steel moves to 1.3× their power during a sandstorm. Protects against sandstorm damage."
+  },
+  "pickup": {
+    "name": "Pickup",
+    "shortEffect": "Picks up other Pokémon's used and Flung held items. May also pick up an item after battle."
+  },
+  "technician": {
+    "name": "Technician",
+    "shortEffect": "Strengthens moves of 60 base power or less to 1.5× their power."
+  },
+  "limber": {
+    "name": "Limber",
+    "shortEffect": "Prevents paralysis."
+  },
+  "cloud-nine": {
+    "name": "Cloud Nine",
+    "shortEffect": "Negates all effects of weather, but does not prevent the weather itself."
+  },
+  "swift-swim": {
+    "name": "Swift Swim",
+    "shortEffect": "Doubles Speed during rain."
+  },
+  "vital-spirit": {
+    "name": "Vital Spirit",
+    "shortEffect": "Prevents sleep."
+  },
+  "anger-point": {
+    "name": "Anger Point",
+    "shortEffect": "Raises Attack to the maximum of six stages upon receiving a critical hit."
+  },
+  "defiant": {
+    "name": "Defiant",
+    "shortEffect": "Raises Attack two stages upon having any stat lowered."
+  },
+  "justified": {
+    "name": "Justified",
+    "shortEffect": "Raises Attack one stage upon taking damage from a Dark move."
+  },
+  "water-absorb": {
+    "name": "Water Absorb",
+    "shortEffect": "Absorbs Water moves, healing for 1/4 max HP."
+  },
+  "synchronize": {
+    "name": "Synchronize",
+    "shortEffect": "Copies burns, paralysis, and poison received onto the Pokémon that inflicted them."
+  },
+  "no-guard": {
+    "name": "No Guard",
+    "shortEffect": "Ensures all moves used by and against the Pokémon hit."
+  },
+  "steadfast": {
+    "name": "Steadfast",
+    "shortEffect": "Raises Speed one stage upon flinching."
+  },
+  "gluttony": {
+    "name": "Gluttony",
+    "shortEffect": "Makes the Pokémon eat any held Berry triggered by low HP below 1/2 its max HP."
+  },
+  "clear-body": {
+    "name": "Clear Body",
+    "shortEffect": "Prevents stats from being lowered by other Pokémon."
+  },
+  "liquid-ooze": {
+    "name": "Liquid Ooze",
+    "shortEffect": "Damages opponents using leeching moves for as much as they would heal."
+  },
+  "rock-head": {
+    "name": "Rock Head",
+    "shortEffect": "Protects against recoil damage."
+  },
+  "sturdy": {
+    "name": "Sturdy",
+    "shortEffect": "Prevents being KOed from full HP, leaving 1 HP instead. Protects against the one-hit KO moves regardless of HP."
+  },
+  "flame-body": {
+    "name": "Flame Body",
+    "shortEffect": "Has a 30% chance of burning attacking Pokémon on contact."
+  },
+  "oblivious": {
+    "name": "Oblivious",
+    "shortEffect": "Prevents infatuation and protects against Captivate."
+  },
+  "own-tempo": {
+    "name": "Own Tempo",
+    "shortEffect": "Prevents confusion."
+  },
+  "regenerator": {
+    "name": "Regenerator",
+    "shortEffect": "Heals for 1/3 max HP upon switching out."
+  },
+  "magnet-pull": {
+    "name": "Magnet Pull",
+    "shortEffect": "Prevents Steel opponents from fleeing or switching out."
+  },
+  "analytic": {
+    "name": "Analytic",
+    "shortEffect": "Strengthens moves to 1.3× their power when moving last."
+  },
+  "early-bird": {
+    "name": "Early Bird",
+    "shortEffect": "Makes sleep pass twice as quickly."
+  },
+  "thick-fat": {
+    "name": "Thick Fat",
+    "shortEffect": "Halves damage from Fire and Ice moves."
+  },
+  "hydration": {
+    "name": "Hydration",
+    "shortEffect": "Cures any major status ailment after each turn during rain."
+  },
+  "ice-body": {
+    "name": "Ice Body",
+    "shortEffect": "Heals for 1/16 max HP after each turn during hail. Protects against hail damage."
+  },
+  "sticky-hold": {
+    "name": "Sticky Hold",
+    "shortEffect": "Prevents a held item from being removed by other Pokémon."
+  },
+  "poison-touch": {
+    "name": "Poison Touch",
+    "shortEffect": "Has a 30% chance of poisoning target Pokémon upon contact."
+  },
+  "shell-armor": {
+    "name": "Shell Armor",
+    "shortEffect": "Protects against critical hits."
+  },
+  "skill-link": {
+    "name": "Skill Link",
+    "shortEffect": "Extends two-to-five-hit moves and Triple Kick to their full length every time."
+  },
+  "overcoat": {
+    "name": "Overcoat",
+    "shortEffect": "Protects against damage from weather."
+  },
+  "levitate": {
+    "name": "Levitate",
+    "shortEffect": "Evades Ground moves."
+  },
+  "cursed-body": {
+    "name": "Cursed Body",
+    "shortEffect": "Has a 30% chance of Disabling any move that hits the Pokémon."
+  },
+  "weak-armor": {
+    "name": "Weak Armor",
+    "shortEffect": "Raises Speed and lowers Defense by one stage each upon being hit by a physical move."
+  },
+  "insomnia": {
+    "name": "Insomnia",
+    "shortEffect": "Prevents sleep."
+  },
+  "forewarn": {
+    "name": "Forewarn",
+    "shortEffect": "Reveals the opponents' strongest move upon entering battle."
+  },
+  "hyper-cutter": {
+    "name": "Hyper Cutter",
+    "shortEffect": "Prevents Attack from being lowered by other Pokémon."
+  },
+  "soundproof": {
+    "name": "Soundproof",
+    "shortEffect": "Protects against sound-based moves."
+  },
+  "aftermath": {
+    "name": "Aftermath",
+    "shortEffect": "Damages the attacker for 1/4 its max HP when knocked out by a contact move."
+  },
+  "harvest": {
+    "name": "Harvest",
+    "shortEffect": "Has a 50% chance of restoring a used Berry after each turn if the Pokémon has held no items in the meantime."
+  },
+  "battle-armor": {
+    "name": "Battle Armor",
+    "shortEffect": "Protects against critical hits."
+  },
+  "reckless": {
+    "name": "Reckless",
+    "shortEffect": "Strengthens recoil moves to 1.2× their power."
+  },
+  "unburden": {
+    "name": "Unburden",
+    "shortEffect": "Doubles Speed upon using or losing a held item."
+  },
+  "iron-fist": {
+    "name": "Iron Fist",
+    "shortEffect": "Strengthens punch-based moves to 1.2× their power."
+  },
+  "neutralizing-gas": {
+    "name": "Neutralizing Gas",
+    "shortEffect": "Neutralizes abilities of all Pokémon in battle."
+  },
+  "natural-cure": {
+    "name": "Natural Cure",
+    "shortEffect": "Cures any major status ailment upon switching out."
+  },
+  "serene-grace": {
+    "name": "Serene Grace",
+    "shortEffect": "Doubles the chance of moves' extra effects occurring."
+  },
+  "healer": {
+    "name": "Healer",
+    "shortEffect": "Has a 30% chance of curing each adjacent ally of any major status ailment after each turn."
+  },
+  "leaf-guard": {
+    "name": "Leaf Guard",
+    "shortEffect": "Protects against major status ailments during strong sunlight."
+  },
+  "scrappy": {
+    "name": "Scrappy",
+    "shortEffect": "Lets the Pokémon's Normal and Fighting moves hit Ghost Pokémon."
+  },
+  "water-veil": {
+    "name": "Water Veil",
+    "shortEffect": "Prevents burns."
+  },
+  "illuminate": {
+    "name": "Illuminate",
+    "shortEffect": "Doubles the wild encounter rate."
+  },
+  "filter": {
+    "name": "Filter",
+    "shortEffect": "Decreases damage taken from super-effective moves by 1/4."
+  },
+  "mold-breaker": {
+    "name": "Mold Breaker",
+    "shortEffect": "Bypasses targets' abilities if they could hinder or prevent a move."
+  },
+  "moxie": {
+    "name": "Moxie",
+    "shortEffect": "Raises Attack one stage upon KOing a Pokémon."
+  },
+  "rattled": {
+    "name": "Rattled",
+    "shortEffect": "Raises Speed one stage upon being hit by a Dark, Ghost, or Bug move."
+  },
+  "imposter": {
+    "name": "Imposter",
+    "shortEffect": "Transforms upon entering battle."
+  },
+  "adaptability": {
+    "name": "Adaptability",
+    "shortEffect": "Increases the same-type attack bonus from 1.5× to 2×."
+  },
+  "anticipation": {
+    "name": "Anticipation",
+    "shortEffect": "Notifies all trainers upon entering battle if an opponent has a super-effective move, Self-Destruct, Explosion, or a one-hit KO move."
+  },
+  "volt-absorb": {
+    "name": "Volt Absorb",
+    "shortEffect": "Absorbs Electric moves, healing for 1/4 max HP."
+  },
+  "quick-feet": {
+    "name": "Quick Feet",
+    "shortEffect": "Increases Speed to 1.5× with a major status ailment."
+  },
+  "trace": {
+    "name": "Trace",
+    "shortEffect": "Copies an opponent's ability upon entering battle."
+  },
+  "download": {
+    "name": "Download",
+    "shortEffect": "Raises the attack stat corresponding to the opponents' weaker defense one stage upon entering battle."
+  },
+  "pressure": {
+    "name": "Pressure",
+    "shortEffect": "Increases the PP cost of moves targetting the Pokémon by one."
+  },
+  "immunity": {
+    "name": "Immunity",
+    "shortEffect": "Prevents poison."
+  },
+  "snow-cloak": {
+    "name": "Snow Cloak",
+    "shortEffect": "Increases evasion to 1.25× during hail. Protects against hail damage."
+  },
+  "marvel-scale": {
+    "name": "Marvel Scale",
+    "shortEffect": "Increases Defense to 1.5× with a major status ailment."
+  },
+  "multiscale": {
+    "name": "Multiscale",
+    "shortEffect": "Halves damage taken from full HP."
+  },
+  "super-luck": {
+    "name": "Super Luck",
+    "shortEffect": "Raises moves' critical hit rates one stage."
+  },
+  "magic-bounce": {
+    "name": "Magic Bounce",
+    "shortEffect": "Reflects most non-damaging moves back at their user."
+  },
+  "plus": {
+    "name": "Plus",
+    "shortEffect": "Increases Special Attack to 1.5× when a friendly Pokémon has Plus or Minus."
+  },
+  "huge-power": {
+    "name": "Huge Power",
+    "shortEffect": "Doubles Attack in battle."
+  },
+  "sap-sipper": {
+    "name": "Sap Sipper",
+    "shortEffect": "Absorbs Grass moves, raising Attack one stage."
+  },
+  "drizzle": {
+    "name": "Drizzle",
+    "shortEffect": "Summons rain that lasts indefinitely upon entering battle."
+  },
+  "speed-boost": {
+    "name": "Speed Boost",
+    "shortEffect": "Raises Speed one stage after each turn."
+  },
+  "prankster": {
+    "name": "Prankster",
+    "shortEffect": "Raises non-damaging moves' priority by one stage."
+  },
+  "shadow-tag": {
+    "name": "Shadow Tag",
+    "shortEffect": "Prevents opponents from fleeing or switching out."
+  },
+  "telepathy": {
+    "name": "Telepathy",
+    "shortEffect": "Protects against friendly Pokémon's damaging moves."
+  },
+  "light-metal": {
+    "name": "Light Metal",
+    "shortEffect": "Halves the Pokémon's weight."
+  },
+  "contrary": {
+    "name": "Contrary",
+    "shortEffect": "Inverts stat changes."
+  },
+  "pickpocket": {
+    "name": "Pickpocket",
+    "shortEffect": "Steals attacking Pokémon's held items on contact."
+  },
+  "honey-gather": {
+    "name": "Honey Gather",
+    "shortEffect": "The Pokémon may pick up Honey after battle."
+  },
+  "magma-armor": {
+    "name": "Magma Armor",
+    "shortEffect": "Prevents freezing."
+  },
+  "moody": {
+    "name": "Moody",
+    "shortEffect": "Raises a random stat two stages and lowers another one stage after each turn."
+  },
+  "suction-cups": {
+    "name": "Suction Cups",
+    "shortEffect": "Prevents being forced out of battle by other Pokémon's moves."
+  },
+  "sand-stream": {
+    "name": "Sand Stream",
+    "shortEffect": "Summons a sandstorm that lasts indefinitely upon entering battle."
+  },
+  "wind-rider": {
+    "name": "Wind Rider",
+    "shortEffect": "Gives immunity to wind moves, and causes the Pokémon's Attack to increase by one stage when hit by one."
+  },
+  "poison-heal": {
+    "name": "Poison Heal",
+    "shortEffect": "Heals for 1/8 max HP after each turn when poisoned in place of damage."
+  },
+  "truant": {
+    "name": "Truant",
+    "shortEffect": "Skips every second turn."
+  },
+  "wonder-guard": {
+    "name": "Wonder Guard",
+    "shortEffect": "Protects against damaging moves that are not super effective."
+  },
+  "normalize": {
+    "name": "Normalize",
+    "shortEffect": "Makes the Pokémon's moves all act Normal-type."
+  },
+  "stall": {
+    "name": "Stall",
+    "shortEffect": "Makes the Pokémon move last within its move's priority bracket."
+  },
+  "heavy-metal": {
+    "name": "Heavy Metal",
+    "shortEffect": "Doubles the Pokémon's weight."
+  },
+  "pure-power": {
+    "name": "Pure Power",
+    "shortEffect": "Doubles Attack in battle."
+  },
+  "minus": {
+    "name": "Minus",
+    "shortEffect": "Increases Special Attack to 1.5× when a friendly Pokémon has Plus or Minus."
+  },
+  "rough-skin": {
+    "name": "Rough Skin",
+    "shortEffect": "Damages attacking Pokémon for 1/8 their max HP on contact."
+  },
+  "simple": {
+    "name": "Simple",
+    "shortEffect": "Doubles the Pokémon's stat modifiers. These doubled modifiers are still capped at -6 or 6 stages."
+  },
+  "solid-rock": {
+    "name": "Solid Rock",
+    "shortEffect": "Decreases damage taken from super-effective moves by 1/4."
+  },
+  "white-smoke": {
+    "name": "White Smoke",
+    "shortEffect": "Prevents stats from being lowered by other Pokémon."
+  },
+  "toxic-boost": {
+    "name": "Toxic Boost",
+    "shortEffect": "Increases Attack to 1.5× when poisoned."
+  },
+  "storm-drain": {
+    "name": "Storm Drain",
+    "shortEffect": "Redirects single-target Water moves to this Pokémon where possible. Absorbs Water moves, raising Special Attack one stage."
+  },
+  "forecast": {
+    "name": "Forecast",
+    "shortEffect": "Changes Castform's type and form to match the weather."
+  },
+  "color-change": {
+    "name": "Color Change",
+    "shortEffect": "Changes type to match when hit by a damaging move."
+  },
+  "protean": {
+    "name": "Protean",
+    "shortEffect": "Changes the bearer's type to match each move it uses."
+  },
+  "air-lock": {
+    "name": "Air Lock",
+    "shortEffect": "Negates all effects of weather, but does not prevent the weather itself."
+  }
+}

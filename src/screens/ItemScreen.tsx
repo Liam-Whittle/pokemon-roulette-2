@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ITEMS, pickFindItemId } from '../data/pools';
+import { ITEMS, pickFindItemId, resolveRegionId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { ItemIcon } from '../components/ItemIcon';
 import { SegmentIcon } from '../components/SegmentIcon';
@@ -12,7 +12,7 @@ export function ItemScreen() {
   const setLastResult = useGameStore((s) => s.setLastResult);
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
 
   const [phase, setPhase] = useState<'search' | 'found'>('search');
   const [foundItem, setFoundItem] = useState<(typeof ITEMS)[0] | null>(null);

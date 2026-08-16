@@ -1,0 +1,514 @@
+{
+  "arceus_cry.mp3": {
+    "category": "cry",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16.12,
+    "measuredTp": -2.97
+  },
+  "arceus_cry.ogg": {
+    "category": "cry",
+    "targetLufs": -16,
+    "gainDb": 0.08,
+    "gainLinear": 1.0093,
+    "measuredLufs": -16.08,
+    "measuredTp": -4.85
+  },
+  "battle_buff.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.02,
+    "gainLinear": 1.0023,
+    "measuredLufs": -14.02,
+    "measuredTp": -4.49
+  },
+  "battle_hit_physical.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.1,
+    "gainLinear": 1.0116,
+    "measuredLufs": -14.79,
+    "measuredTp": -3
+  },
+  "battle_pokeball_open.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.04,
+    "gainLinear": 0.9954,
+    "measuredLufs": -15.96,
+    "measuredTp": -7.75
+  },
+  "battle_pokeball_open.wav": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -15.99,
+    "measuredTp": -8.55
+  },
+  "battle_pokeball_throw.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 2.05,
+    "gainLinear": 1.2662,
+    "measuredLufs": -18.21,
+    "measuredTp": -3.05
+  },
+  "battle_pokeball_throw.wav": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 2,
+    "gainLinear": 1.2589,
+    "measuredLufs": -18.71,
+    "measuredTp": -3
+  },
+  "battle_special_bug.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.02,
+    "gainLinear": 0.9977,
+    "measuredLufs": -13.98,
+    "measuredTp": -2.87
+  },
+  "battle_special_dark.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.1,
+    "gainLinear": 1.0116,
+    "measuredLufs": -18,
+    "measuredTp": -3.07
+  },
+  "battle_special_dragon.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -14,
+    "measuredTp": -3.62
+  },
+  "battle_special_electric.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -14.01,
+    "measuredTp": -4.12
+  },
+  "battle_special_fairy.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.35,
+    "gainLinear": 1.0411,
+    "measuredLufs": -14.35,
+    "measuredTp": -2.97
+  },
+  "battle_special_fighting.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.1,
+    "gainLinear": 1.0116,
+    "measuredLufs": -16.03,
+    "measuredTp": -3.1
+  },
+  "battle_special_fire.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -13.99,
+    "measuredTp": -3.46
+  },
+  "battle_special_flying.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.02,
+    "gainLinear": 0.9977,
+    "measuredLufs": -13.98,
+    "measuredTp": -3.77
+  },
+  "battle_special_ghost.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.3,
+    "gainLinear": 1.0351,
+    "measuredLufs": -15.88,
+    "measuredTp": -3.21
+  },
+  "battle_special_grass.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.05,
+    "gainLinear": 0.9943,
+    "measuredLufs": -13.95,
+    "measuredTp": -4.49
+  },
+  "battle_special_ground.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -17.47,
+    "measuredTp": -3.01
+  },
+  "battle_special_ice.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16.78,
+    "measuredTp": -3
+  },
+  "battle_special_normal.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.02,
+    "gainLinear": 1.0023,
+    "measuredLufs": -14.02,
+    "measuredTp": -7.6
+  },
+  "battle_special_poison.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -13.99,
+    "measuredTp": -3.44
+  },
+  "battle_special_psychic.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -14.01,
+    "measuredTp": -3.77
+  },
+  "battle_special_rock.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.02,
+    "gainLinear": 0.9977,
+    "measuredLufs": -13.98,
+    "measuredTp": -5.54
+  },
+  "battle_special_steel.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.1,
+    "gainLinear": 1.0116,
+    "measuredLufs": -15.29,
+    "measuredTp": -2.88
+  },
+  "battle_special_water.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -14,
+    "measuredTp": -6.75
+  },
+  "battle_status.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.03,
+    "gainLinear": 0.9966,
+    "measuredLufs": -13.97,
+    "measuredTp": -4.35
+  },
+  "cinnabar_island.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -16.01,
+    "measuredTp": -4.19
+  },
+  "create_trainer.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16,
+    "measuredTp": -4.76
+  },
+  "elite4.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16,
+    "measuredTp": -6.74
+  },
+  "evolve.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.49,
+    "gainLinear": 0.9451,
+    "measuredLufs": -13.51,
+    "measuredTp": -1.22
+  },
+  "game_corner.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.02,
+    "gainLinear": 1.0023,
+    "measuredLufs": -16.02,
+    "measuredTp": -4.1
+  },
+  "game_lose.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -16.01,
+    "measuredTp": -5.92
+  },
+  "game_win.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.02,
+    "gainLinear": 0.9977,
+    "measuredLufs": -15.98,
+    "measuredTp": -6.52
+  },
+  "gamewin_new.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.02,
+    "gainLinear": 1.0023,
+    "measuredLufs": -16.02,
+    "measuredTp": -5.36
+  },
+  "giovanni.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -15.99,
+    "measuredTp": -3.88
+  },
+  "giovanni_defeated.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0.03,
+    "gainLinear": 1.0035,
+    "measuredLufs": -14.03,
+    "measuredTp": -1.48
+  },
+  "gym.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -15.99,
+    "measuredTp": -7.07
+  },
+  "gym_victory.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -13.99,
+    "measuredTp": -4.27
+  },
+  "hoenn.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16,
+    "measuredTp": -3.48
+  },
+  "hollow_purple.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -14,
+    "measuredTp": -3.47
+  },
+  "johto.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -16.01,
+    "measuredTp": -5.57
+  },
+  "kanto.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.02,
+    "gainLinear": 1.0023,
+    "measuredLufs": -16.02,
+    "measuredTp": -6.75
+  },
+  "magikarp_detail.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -13.99,
+    "measuredTp": -4.01
+  },
+  "magikarp_splash.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -14,
+    "measuredTp": -4.87
+  },
+  "main.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -15.99,
+    "measuredTp": -6.74
+  },
+  "mew_cry.ogg": {
+    "category": "cry",
+    "targetLufs": -16,
+    "gainDb": 0.17,
+    "gainLinear": 1.0198,
+    "measuredLufs": -16.17,
+    "measuredTp": -5.5
+  },
+  "missingno_catch.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.02,
+    "gainLinear": 0.9977,
+    "measuredLufs": -15.98,
+    "measuredTp": -5.01
+  },
+  "missingno_cry.mp3": {
+    "category": "cry",
+    "targetLufs": -16,
+    "gainDb": 0.02,
+    "gainLinear": 1.0023,
+    "measuredLufs": -16.02,
+    "measuredTp": -3.27
+  },
+  "oldman_catch.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -14,
+    "measuredTp": -2.88
+  },
+  "pokecenter_heal.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -13.99,
+    "measuredTp": -2.13
+  },
+  "pokemart.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -16.01,
+    "measuredTp": -3.33
+  },
+  "pokemon.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16,
+    "measuredTp": -4.74
+  },
+  "pokemon_caught.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -13.99,
+    "measuredTp": -2.17
+  },
+  "pokemon_out.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.03,
+    "gainLinear": 0.9966,
+    "measuredLufs": -15.97,
+    "measuredTp": -8.2
+  },
+  "pokemon_return.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16,
+    "measuredTp": -6.55
+  },
+  "rival_battle.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.04,
+    "gainLinear": 1.0046,
+    "measuredLufs": -16.04,
+    "measuredTp": -5.72
+  },
+  "shiny.mp3": {
+    "category": "sfx",
+    "targetLufs": -14,
+    "gainDb": -0.1,
+    "gainLinear": 0.9886,
+    "measuredLufs": -14.87,
+    "measuredTp": -2.94
+  },
+  "team_aqua.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.03,
+    "gainLinear": 1.0035,
+    "measuredLufs": -16.03,
+    "measuredTp": -6.62
+  },
+  "team_rocket.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0,
+    "gainLinear": 1,
+    "measuredLufs": -16,
+    "measuredTp": -4.61
+  },
+  "title.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -15.99,
+    "measuredTp": -4.16
+  },
+  "title_extra.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.01,
+    "gainLinear": 1.0012,
+    "measuredLufs": -16.01,
+    "measuredTp": -3.01
+  },
+  "title_new.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": -0.01,
+    "gainLinear": 0.9988,
+    "measuredLufs": -15.99,
+    "measuredTp": -4.29
+  },
+  "trainer_battle.mp3": {
+    "category": "music",
+    "targetLufs": -16,
+    "gainDb": 0.05,
+    "gainLinear": 1.0058,
+    "measuredLufs": -16.05,
+    "measuredTp": -2.95
+  }
+}

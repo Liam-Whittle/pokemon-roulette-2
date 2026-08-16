@@ -6,9 +6,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const root = path.join(__dirname, '..');
 const cacheDir = path.join(root, 'src', 'data', 'cache');
 const BASE = 'https://pokeapi.co/api/v2';
-const REGION_MAX = 251;
+const REGION_MAX = 386;
 
-/** Fairy was not a type in Gen II; these moves were Normal in G/S/C. */
+/** Fairy was not a type in Gen II/III; these moves were Normal then. */
 const GEN2_FAIRY_TO_NORMAL = new Set(['charm', 'moonlight', 'sweet-kiss']);
 
 function gen2MoveType(slug, type) {
@@ -16,9 +16,10 @@ function gen2MoveType(slug, type) {
   return type;
 }
 
-const GEN12_VERSION_GROUPS = new Set([
+const GEN123_VERSION_GROUPS = new Set([
   'red-blue', 'blue', 'yellow', 'red-green',
   'gold-silver', 'crystal',
+  'ruby-sapphire', 'emerald', 'firered-leafgreen', 'colosseum', 'xd',
 ]);
 
 const GEN_ORDER = {
@@ -38,24 +39,31 @@ function extractId(url) {
   return match ? Number(match[1]) : 0;
 }
 
-function gen1Types(data) {
+/** Prefer earliest past_types before Gen IV (Fairy era); else current types. */
+function gen3Types(data) {
   const past = (data.past_types ?? [])
     .map((p) => ({
       gen: GEN_ORDER[p.generation.name] ?? 99,
       types: p.types.map((t) => t.type.name),
     }))
+    .filter((p) => p.gen < 6)
     .sort((a, b) => a.gen - b.gen);
-  return past[0]?.types ?? data.types.map((t) => t.type.name);
+  // Use types as they existed entering Gen VI (covers Gen I–III typing).
+  if (past.length) {
+    // Prefer the latest past entry still before Fairy (Gen VI).
+    return past[past.length - 1].types;
+  }
+  return data.types.map((t) => t.type.name).map((t) => (t === 'fairy' ? 'normal' : t));
 }
 
-function extractGen12MoveSlugs(moves) {
+function extractGen123MoveSlugs(moves) {
   const slugs = new Set();
   for (const entry of moves) {
     const slug = entry.move.name;
-    const inGen12 = entry.version_group_details?.some((d) =>
-      GEN12_VERSION_GROUPS.has(d.version_group.name),
+    const inGen123 = entry.version_group_details?.some((d) =>
+      GEN123_VERSION_GROUPS.has(d.version_group.name),
     );
-    if (inGen12) slugs.add(slug);
+    if (inGen123) slugs.add(slug);
   }
   return [...slugs];
 }
@@ -152,13 +160,13 @@ async function main() {
       specialDefense: data.stats[4].base_stat,
       speed: data.stats[5].base_stat,
     };
-    const learnset = extractGen12MoveSlugs(data.moves ?? []);
+    const learnset = extractGen123MoveSlugs(data.moves ?? []);
     learnset.forEach((s) => allMoveSlugs.add(s));
 
     species[id] = {
       id,
       name: data.name,
-      types: gen1Types(data),
+      types: gen3Types(data),
       baseStats: stats,
       baseStatTotal: Object.values(stats).reduce((a, b) => a + b, 0),
       catchRate,

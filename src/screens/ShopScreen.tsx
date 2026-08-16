@@ -8,6 +8,7 @@ import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { buildShopCatalog } from '../utils/shopCatalog';
 import type { RegionId } from '../data/pools';
+import { resolveRegionId } from '../data/pools';
 
 export function ShopScreen() {
   const money = useGameStore((s) => s.money);
@@ -20,7 +21,7 @@ export function ShopScreen() {
   const activeUnlocks = useGameStore((s) => s.activeUnlocks);
   const hiddenStoneId = useGameStore((s) => s.hiddenStoneId);
   const region = useGameStore((s) =>
-    s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto',
+    resolveRegionId(s.trainer?.region),
   ) as RegionId;
   const pendingGymAfterShop = useGameStore((s) => s.pendingGymAfterShop);
   const setPendingGymAfterShop = useGameStore((s) => s.setPendingGymAfterShop);

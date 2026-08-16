@@ -1,13 +1,13 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
-import { getRegionGymLeaders, pickRandom } from '../data/pools';
+import { getRegionGymLeaders, pickRandom, resolveRegionId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 
 export function GymBattleScreen() {
   const badges = useGameStore((s) => s.badges);
   const setScreen = useGameStore((s) => s.setScreen);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const biggerBetter = useGameStore((s) => s.isUnlockActive('biggerBetter'));
 
   const [leader] = useState(() => {

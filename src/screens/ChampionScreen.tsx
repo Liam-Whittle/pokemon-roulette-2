@@ -3,13 +3,14 @@ import { Confetti } from '../components/Confetti';
 import { useGameStore } from '../store/useGameStore';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { playSfx } from '../utils/sound';
+import { resolveRegionId } from '../data/pools';
 
 export function ChampionScreen() {
   const resetGame = useGameStore((s) => s.resetGame);
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
   const trainer = useGameStore((s) => s.trainer);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const avatar = trainer?.avatar;
   const avatarIsSprite = !!avatar && /[/.]/.test(avatar);
   const title = `New Champion of ${region}!!`;

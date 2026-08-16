@@ -1,6 +1,6 @@
 import { DEBUG_STORAGE_KEY } from '../data/prestige';
 
-type Phase = 'settings' | 'avatar' | 'done';
+type Phase = 'settings' | 'sound' | 'done';
 
 let phase: Phase = 'settings';
 let count = 0;
@@ -49,15 +49,15 @@ export function registerSettingsDebugClick(): void {
   }
   count += 1;
   if (count >= NEED) {
-    phase = 'avatar';
+    phase = 'sound';
     count = 0;
   }
 }
 
-export function registerAvatarDebugClick(): boolean {
+export function registerSoundDebugClick(): boolean {
   if (isDebugUnlocked()) return true;
   noteClick();
-  if (phase !== 'avatar') {
+  if (phase !== 'sound') {
     resetSequence();
     return false;
   }

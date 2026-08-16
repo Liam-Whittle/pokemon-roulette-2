@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
-import { getRegionEliteFour } from '../data/pools';
+import { getRegionEliteFour, resolveRegionId } from '../data/pools';
 import { Confetti } from '../components/Confetti';
 import { useGameStore } from '../store/useGameStore';
 
@@ -10,7 +10,7 @@ export function EliteFourScreen() {
   const setEliteCleared = useGameStore((s) => s.setEliteCleared);
   const recordChampion = useGameStore((s) => s.recordChampion);
   const eliteCleared = useGameStore((s) => s.eliteCleared);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const biggerBetter = useGameStore((s) => s.isUnlockActive('biggerBetter'));
   const eliteFour = getRegionEliteFour(region);
 

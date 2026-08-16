@@ -3,10 +3,12 @@ import { cachedMoveToStored, getCachedSpecies, getRandomCachedMoves, getSpeciesW
 import { MISSINGNO_ID } from './missingno';
 import { CURATED_SPECIES_MOVES_GEN1 } from './speciesMovesGen1';
 import { CURATED_SPECIES_MOVES_GEN2 } from './speciesMovesGen2';
+import { CURATED_SPECIES_MOVES_GEN3 } from './speciesMovesGen3';
 import { getStabMultiplier } from './typeChart';
 import { CRIT_CHANCE, CRIT_MULT, HIGH_CRIT_CHANCE, XATTACK_POWER_BONUS } from '../utils/battle';
 import { getComputedStats } from '../utils/stats';
 import { CURATED_MOVE_DESCRIPTIONS } from './moveDescriptions';
+import { isFacadeBoosted, weatherBallPower } from './moveEffects';
 
 export const MAGIKARP_ID = 129;
 
@@ -46,9 +48,21 @@ function toMoveSlug(name: string): string {
     softboiled: 'soft-boiled',
     'hi-jump-kick': 'high-jump-kick',
     'dragon-breath': 'dragon-breath',
+    dragonbreath: 'dragon-breath',
     'octazooka': 'octazooka',
     'faint-attack': 'feint-attack',
     'sacred-fire': 'sacred-fire',
+    bubblebeam: 'bubble-beam',
+    'bubble-beam': 'bubble-beam',
+    'sand-attack': 'sand-attack',
+    sandattack: 'sand-attack',
+    ancientpower: 'ancient-power',
+    'ancient-power': 'ancient-power',
+    'will-o-wisp': 'will-o-wisp',
+    thunderpunch: 'thunder-punch',
+    'thunder-punch': 'thunder-punch',
+    solarebeam: 'solar-beam',
+    solarbeam: 'solar-beam',
   };
   return aliases[normalized] ?? normalized;
 }
@@ -86,7 +100,10 @@ export function assignMoves(speciesId: number, types: string[], _level = 5, pref
     return getRandomCachedMoves(4);
   }
 
-  const curated = CURATED_SPECIES_MOVES_GEN1[speciesId] ?? CURATED_SPECIES_MOVES_GEN2[speciesId];
+  const curated =
+    CURATED_SPECIES_MOVES_GEN1[speciesId]
+    ?? CURATED_SPECIES_MOVES_GEN2[speciesId]
+    ?? CURATED_SPECIES_MOVES_GEN3[speciesId];
   if (curated) {
     return curated.moves
       .map((moveName) => {
@@ -157,6 +174,13 @@ const HIGH_CRIT_MOVE_SLUGS = new Set([
   'slash',
   'crabhammer',
   'aeroblast',
+  'leaf-blade',
+  'blaze-kick',
+  'cross-chop',
+  'air-cutter',
+  'poison-tail',
+  'sky-attack',
+  'razor-wind',
 ]);
 
 export function isHighCritMove(slug: string): boolean {
@@ -244,6 +268,11 @@ export interface MovePowerContext {
   attackerMaxHp?: number;
   hitIndex?: number;
   rolloutPower?: number;
+  attackerStatusKind?: string | null;
+  weather?: 'none' | 'sunny' | 'rain' | 'hail' | 'sandstorm';
+  defenderWeightKg?: number;
+  stockpileCount?: number;
+  tookDamageThisTurn?: boolean;
 }
 
 /** Return power at max happiness (no happiness stat tracked). */
@@ -273,7 +302,8 @@ export function getEffectiveMovePower(
     typeof ctx === 'number' ? { defenderSpeciesId: ctx } : ctx;
 
   if (move.slug === 'low-kick') {
-    return getLowKickPower(getSpeciesWeightKg(context.defenderSpeciesId));
+    const weight = context.defenderWeightKg ?? getSpeciesWeightKg(context.defenderSpeciesId);
+    return getLowKickPower(weight);
   }
   if (move.slug === 'return') {
     return getReturnPower();
@@ -288,6 +318,29 @@ export function getEffectiveMovePower(
   }
   if (move.slug === 'rollout' && context.rolloutPower != null) {
     return context.rolloutPower;
+  }
+  if (move.slug === 'facade' && isFacadeBoosted(context.attackerStatusKind)) {
+    return move.power * 2;
+  }
+  if (move.slug === 'weather-ball') {
+    return weatherBallPower(move.power, context.weather ?? 'none');
+  }
+  if (move.slug === 'eruption' || move.slug === 'water-spout') {
+    const maxHp = context.attackerMaxHp ?? 1;
+    const hp = context.attackerHp ?? maxHp;
+    return Math.max(1, Math.floor(move.power * (hp / maxHp)));
+  }
+  if (move.slug === 'flail') {
+    const maxHp = context.attackerMaxHp ?? 1;
+    const hp = context.attackerHp ?? maxHp;
+    return getReversalPower(hp, maxHp);
+  }
+  if (move.slug === 'spit-up') {
+    const n = context.stockpileCount ?? 0;
+    return n <= 0 ? 0 : Math.min(3, n) * 100;
+  }
+  if (move.slug === 'revenge' && context.tookDamageThisTurn) {
+    return move.power * 2;
   }
   return move.power;
 }
@@ -308,7 +361,7 @@ export function getFixedDamage(move: Pick<StoredMove, 'slug'>, attackerLevel: nu
   }
 }
 
-const OHKO_MOVE_SLUGS = new Set(['guillotine', 'horn-drill', 'fissure']);
+const OHKO_MOVE_SLUGS = new Set(['guillotine', 'horn-drill', 'fissure', 'sheer-cold']);
 
 /** Moves whose damage ignores type effectiveness — hide misleading type chips. */
 export function isFixedDamageMove(slug: string): boolean {

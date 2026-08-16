@@ -44,9 +44,9 @@ const GEN2_PLUS_CHART: Record<string, Record<string, number>> = {
 export function getTypeEffectiveness(
   attackType: string,
   defenderTypes: string[],
-  region: 'Kanto' | 'Johto' = 'Kanto',
+  region: 'Kanto' | 'Johto' | 'Hoenn' = 'Kanto',
 ): number {
-  const chart = region === 'Johto' ? GEN2_PLUS_CHART : GEN1_CHART;
+  const chart = region === 'Kanto' ? GEN1_CHART : GEN2_PLUS_CHART;
   let multiplier = 1;
   for (const defType of defenderTypes) {
     const row = chart[attackType.toLowerCase()];
@@ -82,6 +82,11 @@ export function getEffectivenessChipLabel(multiplier: number): string | null {
   if (multiplier <= 0) return 'No Effect';
   if (multiplier < 1) return 'Not Very';
   return null;
+}
+
+export function hitTimesMessage(hits: number): string | null {
+  if (hits <= 1) return null;
+  return `Hit ${hits} times!`;
 }
 
 export function buildHitBattleMessage(

@@ -1,0 +1,582 @@
+{
+  "at": "2026-08-16T08:58:44.755Z",
+  "force": false,
+  "results": [
+    {
+      "name": "arceus_cry.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.12,
+      "measuredTp": -2.97,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "arceus_cry.ogg",
+      "skipped": true,
+      "target": -16,
+      "before": -16.08,
+      "measuredTp": -4.85,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_buff.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14.02,
+      "measuredTp": -4.49,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_hit_physical.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -13.96,
+      "measuredTp": -2.12,
+      "window": "full",
+      "gainDb": -0.88
+    },
+    {
+      "name": "battle_pokeball_open.mp3",
+      "skipped": false,
+      "target": -16,
+      "before": -6.18,
+      "measuredTp": 2.13,
+      "window": "full",
+      "gainDb": -9.82
+    },
+    {
+      "name": "battle_pokeball_open.wav",
+      "skipped": false,
+      "target": -16,
+      "before": -6.22,
+      "measuredTp": 1.22,
+      "window": "full",
+      "gainDb": -9.78
+    },
+    {
+      "name": "battle_pokeball_throw.mp3",
+      "skipped": false,
+      "target": -16,
+      "before": -26.7,
+      "measuredTp": -11.38,
+      "window": "full",
+      "gainDb": 8.38
+    },
+    {
+      "name": "battle_pokeball_throw.wav",
+      "skipped": false,
+      "target": -16,
+      "before": -26.95,
+      "measuredTp": -11.18,
+      "window": "full",
+      "gainDb": 8.18
+    },
+    {
+      "name": "battle_special_bug.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.98,
+      "measuredTp": -2.87,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_dark.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -16.79,
+      "measuredTp": -1.66,
+      "window": "full",
+      "gainDb": -1.34
+    },
+    {
+      "name": "battle_special_dragon.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14,
+      "measuredTp": -3.62,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_electric.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14.01,
+      "measuredTp": -4.12,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_fairy.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -13.97,
+      "measuredTp": -2.58,
+      "window": "full",
+      "gainDb": -0.42
+    },
+    {
+      "name": "battle_special_fighting.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -14.54,
+      "measuredTp": -1.44,
+      "window": "full",
+      "gainDb": -1.56
+    },
+    {
+      "name": "battle_special_fire.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.99,
+      "measuredTp": -3.46,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_flying.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.98,
+      "measuredTp": -3.77,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_ghost.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -14.3,
+      "measuredTp": -1.41,
+      "window": "full",
+      "gainDb": -1.59
+    },
+    {
+      "name": "battle_special_grass.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.95,
+      "measuredTp": -4.49,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_ground.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -15.84,
+      "measuredTp": -1.29,
+      "window": "full",
+      "gainDb": -1.71
+    },
+    {
+      "name": "battle_special_ice.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -15.06,
+      "measuredTp": -1.25,
+      "window": "full",
+      "gainDb": -1.75
+    },
+    {
+      "name": "battle_special_normal.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14.02,
+      "measuredTp": -7.6,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_poison.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.99,
+      "measuredTp": -3.44,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_psychic.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14.01,
+      "measuredTp": -3.77,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_rock.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.98,
+      "measuredTp": -5.54,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_special_steel.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -14.19,
+      "measuredTp": -1.85,
+      "window": "full",
+      "gainDb": -1.15
+    },
+    {
+      "name": "battle_special_water.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14,
+      "measuredTp": -6.75,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "battle_status.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.97,
+      "measuredTp": -4.35,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "cinnabar_island.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.01,
+      "measuredTp": -4.19,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "create_trainer.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16,
+      "measuredTp": -4.76,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "elite4.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16,
+      "measuredTp": -6.74,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "evolve.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.51,
+      "measuredTp": -1.22,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "game_corner.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.02,
+      "measuredTp": -4.1,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "game_lose.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.01,
+      "measuredTp": -5.92,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "game_win.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.98,
+      "measuredTp": -6.52,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "gamewin_new.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.02,
+      "measuredTp": -5.36,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "giovanni.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.99,
+      "measuredTp": -3.88,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "giovanni_defeated.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14.03,
+      "measuredTp": -1.48,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "gym.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.99,
+      "measuredTp": -7.07,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "gym_victory.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.99,
+      "measuredTp": -4.27,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "hoenn.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16,
+      "measuredTp": -3.48,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "hollow_purple.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14,
+      "measuredTp": -3.47,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "johto.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.01,
+      "measuredTp": -5.57,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "kanto.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.02,
+      "measuredTp": -6.75,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "magikarp_detail.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.99,
+      "measuredTp": -4.01,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "magikarp_splash.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14,
+      "measuredTp": -4.87,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "main.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.99,
+      "measuredTp": -6.74,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "mew_cry.ogg",
+      "skipped": true,
+      "target": -16,
+      "before": -16.17,
+      "measuredTp": -5.5,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "missingno_catch.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.98,
+      "measuredTp": -5.01,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "missingno_cry.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.02,
+      "measuredTp": -3.27,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "oldman_catch.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -14,
+      "measuredTp": -2.88,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "pokecenter_heal.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.99,
+      "measuredTp": -2.13,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "pokemart.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.01,
+      "measuredTp": -3.33,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "pokemon.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16,
+      "measuredTp": -4.74,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "pokemon_caught.mp3",
+      "skipped": true,
+      "target": -14,
+      "before": -13.99,
+      "measuredTp": -2.17,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "pokemon_out.mp3",
+      "skipped": false,
+      "target": -16,
+      "before": -7.76,
+      "measuredTp": -0.26,
+      "window": "burst1.5s",
+      "gainDb": -8.24
+    },
+    {
+      "name": "pokemon_return.mp3",
+      "skipped": false,
+      "target": -16,
+      "before": -11.83,
+      "measuredTp": -2.11,
+      "window": "burst1.5s",
+      "gainDb": -4.17
+    },
+    {
+      "name": "rival_battle.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.04,
+      "measuredTp": -5.72,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "shiny.mp3",
+      "skipped": false,
+      "target": -14,
+      "before": -13.97,
+      "measuredTp": -2.12,
+      "window": "full",
+      "gainDb": -0.88
+    },
+    {
+      "name": "team_aqua.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.03,
+      "measuredTp": -6.62,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "team_rocket.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16,
+      "measuredTp": -4.61,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "title.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.99,
+      "measuredTp": -4.16,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "title_extra.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.01,
+      "measuredTp": -3.01,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "title_new.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -15.99,
+      "measuredTp": -4.29,
+      "window": "full",
+      "gainDb": 0
+    },
+    {
+      "name": "trainer_battle.mp3",
+      "skipped": true,
+      "target": -16,
+      "before": -16.05,
+      "measuredTp": -2.95,
+      "window": "full",
+      "gainDb": 0
+    }
+  ]
+}

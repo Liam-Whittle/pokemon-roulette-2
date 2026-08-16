@@ -4,7 +4,7 @@ import { useGameStore } from '../store/useGameStore';
 import { ItemIcon } from '../components/ItemIcon';
 import { GameIcon } from '../components/GameIcon';
 import { ItemDetailModal } from '../components/ItemDetailModal';
-import { resolveBadgeImage } from '../data/pools';
+import { resolveBadgeImage, resolveRegionId } from '../data/pools';
 import { playSfx } from '../utils/sound';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { imgFallback, remoteBadge } from '../utils/localAssets';
@@ -13,7 +13,7 @@ import type { BagItem } from '../types/game';
 export function BagScreen() {
   const bag = useGameStore((s) => s.bag);
   const badges = useGameStore((s) => s.badges);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
   const [selectedItem, setSelectedItem] = useState<BagItem | null>(null);

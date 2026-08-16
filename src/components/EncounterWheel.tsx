@@ -11,6 +11,7 @@ import { encounterLevelForBadges } from '../utils/xp';
 import { filterEncounterPoolByEvolutionLevel } from '../utils/encounterPool';
 import type { UISpriteKey } from '../data/icons';
 import type { PokemonData } from '../types/game';
+import { filterPoolForIlluminate, partyHasAbility } from '../data/abilities';
 
 interface EncounterWheelProps {
   title: string;
@@ -78,6 +79,9 @@ export function EncounterWheel({
       if (maxRepelSpinsLeft > 0) {
         const high = list.filter((p) => p.baseStatTotal > 400);
         if (high.length >= 3) list = high;
+      }
+      if (partyHasAbility(useGameStore.getState().party, 'illuminate')) {
+        list = filterPoolForIlluminate(list, (p) => p.baseStatTotal, 3);
       }
       setMons(list);
     });

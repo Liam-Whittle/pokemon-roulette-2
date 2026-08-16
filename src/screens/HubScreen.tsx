@@ -17,6 +17,7 @@ import {
   getRegionTotalGyms,
   getStoneItemIdsForRegion,
   pickRandom,
+  resolveRegionId,
 } from '../data/pools';
 import {
   ARCEUS_BLESSING_CHANCE,
@@ -34,14 +35,14 @@ import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { fetchPokemon } from '../api/pokeapi';
 import { createCaughtAtLevel } from '../utils/pokemonInstance';
 import { maxHpForMon } from '../utils/stats';
-import {
-  isDebugUnlocked,
-  registerAvatarDebugClick,
-  subscribeDebugUnlock,
-} from '../utils/debugUnlock';
+import { isDebugUnlocked, subscribeDebugUnlock } from '../utils/debugUnlock';
 import { TYPE_COLORS } from '../data/typeChart';
 import { localPokemonSprite } from '../utils/localAssets';
+import { filterPoolForIlluminate, partyHasAbility } from '../data/abilities';
 import { MISSINGNO_ID } from '../data/missingno';
+import { ArceusBlessingModal, playArceusCry } from '../components/ArceusBlessingModal';
+import { TrainerProfileModal } from '../components/TrainerProfileModal';
+import { playSfx } from '../utils/sound';
 import type { PathwayId, PokemonData, WheelSegment } from '../types/game';
 
 function sampleUnique<T>(arr: T[], n: number): T[] {
@@ -71,7 +72,7 @@ async function fetchAndPreloadCatchMons(ids: number[]): Promise<PokemonData[]> {
 
 export function HubScreen() {
   const trainer = useGameStore((s) => s.trainer);
-  const region = trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
+  const region = resolveRegionId(trainer?.region);
   const party = useGameStore((s) => s.party);
   const badges = useGameStore((s) => s.badges);
   const spinsCount = useGameStore((s) => s.spinsCount);
@@ -107,7 +108,9 @@ export function HubScreen() {
   const mysteryEggGymsLeft = useGameStore((s) => s.mysteryEggGymsLeft);
   const setMysteryEggGyms = useGameStore((s) => s.setMysteryEggGyms);
   const debugAddToParty = useGameStore((s) => s.debugAddToParty);
+  const ensurePartyInstanceFields = useGameStore((s) => s.ensurePartyInstanceFields);
   const bag = useGameStore((s) => s.bag);
+  const muted = useGameStore((s) => s.muted);
 
   const hardcore = isUnlockActive('hardcore');
   const arceusBlessing = isUnlockActive('arceusBlessing');
@@ -128,6 +131,7 @@ export function HubScreen() {
   const [arceusChoices, setArceusChoices] = useState<PokemonData[] | null>(null);
   const [missingPrompt, setMissingPrompt] = useState<number | null>(null);
   const [wonderTradeOpen, setWonderTradeOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
 
   const totalGyms = getRegionTotalGyms(region);
   const gymBadges = badges.length;
@@ -137,9 +141,16 @@ export function HubScreen() {
   const spinsUntilNext = Math.max(0, spinsThreshold - spinsSinceGym);
   const pathsDisabled = wheelLocked || uberSpinOpen || !!notice || !!healModal || !!martPrompt;
   const maxParty = getMaxParty();
-  const hasMissingNo = party.some((m) => m.id === MISSINGNO_ID);
+  const pokedex = useGameStore((s) => s.pokedex);
+  const pcExcluded = useGameStore((s) => s.pcExcluded);
+  const hasMissingNo =
+    party.some((m) => m.id === MISSINGNO_ID) ||
+    !!(pokedex[MISSINGNO_ID]?.caught && !pcExcluded.includes(MISSINGNO_ID));
 
   useEffect(() => subscribeDebugUnlock(() => setDebugOn(true)), []);
+  useEffect(() => {
+    ensurePartyInstanceFields();
+  }, [ensurePartyInstanceFields]);
 
   useEffect(() => {
     ensureMewMischiefOffer();
@@ -260,6 +271,12 @@ export function HubScreen() {
       } else {
         list = list.slice(0, NEW_POKEMON_WHEEL_WEDGES);
       }
+      if (partyHasAbility(useGameStore.getState().party, 'illuminate')) {
+        list = filterPoolForIlluminate(list, (p) => p.baseStatTotal, NEW_POKEMON_WHEEL_WEDGES);
+        if (list.length > NEW_POKEMON_WHEEL_WEDGES) {
+          list = list.slice(0, NEW_POKEMON_WHEEL_WEDGES);
+        }
+      }
       if (cancelled) return;
       setPendingCatchWheelIds(list.map((p) => p.id));
       setCatchMons(list);
@@ -285,7 +302,7 @@ export function HubScreen() {
     const state = useGameStore.getState();
     const gymsDone =
       state.badges.length >=
-      getRegionTotalGyms(state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto');
+      getRegionTotalGyms(resolveRegionId(state.trainer?.region));
     const spinsSince = state.spinsCount - state.lastGymSpin;
     if (!gymsDone) {
       if (spinsSince >= SPINS_PER_GYM) {
@@ -336,6 +353,7 @@ export function HubScreen() {
         ).filter((p): p is PokemonData => p !== null);
         if (mons.length > 0) {
           setCatchMons(null);
+          playArceusCry();
           setArceusChoices(mons);
           setWheelLocked(false);
           setActivePathway(null);
@@ -571,43 +589,41 @@ export function HubScreen() {
       exit={{ opacity: 0 }}
     >
       <header className="hub-header">
-        <div className="hub-header__trainer">
+        <button
+          type="button"
+          className="hub-header__trainer"
+          title="View trainer card"
+          aria-haspopup="dialog"
+          aria-expanded={profileOpen}
+          onClick={() => {
+            playSfx('click', muted);
+            setProfileOpen(true);
+          }}
+        >
           {trainer?.avatar && /[/.]/.test(trainer.avatar) ? (
-            <button
-              type="button"
-              className="hub-header__avatar-btn"
-              onClick={() => {
-                if (registerAvatarDebugClick()) setDebugOn(true);
-              }}
-            >
+            <span className="hub-header__avatar-btn">
               <img
                 src={trainer.avatar}
-                alt={trainer.name}
+                alt=""
                 className="hub-header__avatar-img"
                 onError={(e) => {
                   (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
                 }}
               />
-            </button>
+            </span>
           ) : (
-            <button
-              type="button"
-              className="hub-header__avatar-btn"
-              onClick={() => {
-                if (registerAvatarDebugClick()) setDebugOn(true);
-              }}
-            >
+            <span className="hub-header__avatar-btn">
               <span className="hub-header__avatar">{trainer?.avatar}</span>
-            </button>
+            </span>
           )}
           <div>
-            <h2 className="hub-header__name">{trainer?.name}</h2>
-            <p className="hub-header__stats">
+            <span className="hub-header__name">{trainer?.name}</span>
+            <span className="hub-header__stats">
               Party: {party.length}/{maxParty} · Badges: {gymBadges}/{totalGyms} · Paths:{' '}
               {spinsCount} · <PokeCenterVisits lives={lives} />
-            </p>
+            </span>
           </div>
-        </div>
+        </button>
       </header>
 
       {eliteCleared && (
@@ -744,42 +760,34 @@ export function HubScreen() {
         </div>
       )}
 
-      {arceusChoices && (
-        <div className="battle-modal__backdrop">
-          <div className="battle-modal">
-            <h3 className="battle-modal__title">Arceus&apos;s Blessing</h3>
-            <p className="battle-modal__subtitle">Choose one Pokémon</p>
-            <div className="prestige-grid">
-              {arceusChoices.map((mon) => (
-                <button
-                  key={mon.id}
-                  type="button"
-                  className="btn btn--primary btn--sm"
-                  onClick={() => {
-                    debugAddToParty(mon);
-                    const avg =
-                      party.length > 0
-                        ? Math.round(party.reduce((s, m) => s + m.level, 0) / party.length)
-                        : 10;
-                    useGameStore.setState((state) => ({
-                      party: state.party.map((m) =>
-                        m.caughtAt === state.lastCaughtAt
-                          ? { ...m, level: avg, hp: maxHpForMon({ ...m, level: avg }) }
-                          : m,
-                      ),
-                    }));
-                    setArceusChoices(null);
-                    setNotice(`${mon.displayName} joined your team/PC!`);
-                  }}
-                >
-                  <img src={mon.sprite} alt="" width={48} height={48} />
-                  {mon.displayName}
-                </button>
-              ))}
-            </div>
-          </div>
-        </div>
-      )}
+      <AnimatePresence>
+        {arceusChoices && (
+          <ArceusBlessingModal
+            key="arceus-blessing"
+            choices={arceusChoices}
+            onSkip={() => {
+              setArceusChoices(null);
+              setNotice('Arceus departed… the blessing was left behind.');
+            }}
+            onChoose={(mon) => {
+              debugAddToParty(mon);
+              const avg =
+                party.length > 0
+                  ? Math.round(party.reduce((s, m) => s + m.level, 0) / party.length)
+                  : 10;
+              useGameStore.setState((state) => ({
+                party: state.party.map((m) =>
+                  m.caughtAt === state.lastCaughtAt
+                    ? { ...m, level: avg, hp: maxHpForMon({ ...m, level: avg }) }
+                    : m,
+                ),
+              }));
+              setArceusChoices(null);
+              setNotice(`${mon.displayName} joined your team/PC!`);
+            }}
+          />
+        )}
+      </AnimatePresence>
 
       {wonderTradeOpen && (
         <div className="battle-modal__backdrop">
@@ -1009,10 +1017,28 @@ export function HubScreen() {
 
       {healModal && <PokeCenterModal variant={healModal} onClose={dismissHealModal} />}
 
+      {profileOpen && <TrainerProfileModal onClose={() => setProfileOpen(false)} />}
+
       {debugOn && (
         <DebugMenu
           onUberSpin={() => setUberSpinOpen(true)}
           onWonderTrade={() => setWonderTradeOpen(true)}
+          onArceusBlessing={async () => {
+            // Play during the click gesture so the browser allows audio.
+            playArceusCry();
+            const pool = filterPoolByMinBst(getRegionAllPokemonPool(region), ARCEUS_BST_MIN);
+            const ids = sampleUnique(pool.length ? pool : getRegionAllPokemonPool(region), 5);
+            const mons = (
+              await Promise.all(ids.map((id) => fetchPokemon(id).catch(() => null)))
+            ).filter((p): p is PokemonData => p !== null);
+            if (mons.length > 0) {
+              setArceusChoices(mons);
+              setActivePathway(null);
+              setCatchMons(null);
+            } else {
+              setNotice("Arceus's Blessing: no eligible Pokémon found.");
+            }
+          }}
         />
       )}
     </motion.div>

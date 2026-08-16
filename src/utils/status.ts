@@ -1,4 +1,11 @@
 import type { CaughtPokemon, StatusAilment, StatusCondition } from '../types/game';
+import {
+  abilityBlocksIndirectDamage,
+  abilityBlocksStatus,
+  abilityHealsFromPoison,
+  getMonAbility,
+} from '../data/abilities';
+import type { BattleWeather } from '../data/battleField';
 import { maxHpForMon } from './stats';
 
 export function createStatus(kind: StatusAilment): StatusCondition {
@@ -22,11 +29,15 @@ export function isStatusImmune(types: string[], kind: StatusAilment): boolean {
 }
 
 export function canApplyStatus(
-  defender: Pick<CaughtPokemon, 'types' | 'status'>,
+  defender: Pick<CaughtPokemon, 'types' | 'status' | 'id' | 'ability'>,
   kind: StatusAilment,
+  weather: BattleWeather = 'none',
+  weatherSuppressed = false,
 ): boolean {
   if (defender.status) return false;
-  return !isStatusImmune(defender.types, kind);
+  if (isStatusImmune(defender.types, kind)) return false;
+  if (abilityBlocksStatus(getMonAbility(defender), kind, weather, weatherSuppressed)) return false;
+  return true;
 }
 
 export function tickStatusDamage(
@@ -34,21 +45,41 @@ export function tickStatusDamage(
 ): { mon: CaughtPokemon; damage: number; message: string } {
   if (!mon.status) return { mon, damage: 0, message: '' };
   const maxHp = maxHpForMon(mon);
+  const ability = getMonAbility(mon);
   let damage = 0;
   let message = '';
   switch (mon.status.kind) {
     case 'burn':
+      if (abilityBlocksIndirectDamage(ability)) return { mon, damage: 0, message: '' };
       damage = Math.max(1, Math.floor(maxHp / 16));
       message = `${mon.displayName} is hurt by its burn!`;
       break;
     case 'poison':
-      damage = Math.max(1, Math.floor(maxHp / 8));
-      message = `${mon.displayName} is hurt by poison!`;
+      if (abilityHealsFromPoison(ability)) {
+        damage = -Math.max(1, Math.floor(maxHp / 8));
+        message = `${mon.displayName} restored HP with Poison Heal!`;
+      } else if (abilityBlocksIndirectDamage(ability)) {
+        return { mon, damage: 0, message: '' };
+      } else {
+        damage = Math.max(1, Math.floor(maxHp / 8));
+        message = `${mon.displayName} is hurt by poison!`;
+      }
       break;
     case 'toxic': {
       const counter = mon.status.toxicCounter ?? 1;
-      damage = Math.max(1, Math.floor((maxHp * counter) / 16));
-      message = `${mon.displayName} is hurt by poison!`;
+      if (abilityHealsFromPoison(ability)) {
+        damage = -Math.max(1, Math.floor(maxHp / 8));
+        message = `${mon.displayName} restored HP with Poison Heal!`;
+      } else if (abilityBlocksIndirectDamage(ability)) {
+        return {
+          mon: { ...mon, status: { kind: 'toxic', toxicCounter: counter + 1 } },
+          damage: 0,
+          message: '',
+        };
+      } else {
+        damage = Math.max(1, Math.floor((maxHp * counter) / 16));
+        message = `${mon.displayName} is hurt by poison!`;
+      }
       return {
         mon: {
           ...mon,

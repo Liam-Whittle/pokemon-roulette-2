@@ -47,8 +47,23 @@ const JOHTO_TRAINERS: TrainerPreset[] = [
   },
 ];
 
+const HOENN_TRAINERS: TrainerPreset[] = [
+  {
+    id: 'boy',
+    label: 'Brendan',
+    sprite: localTrainerSprite('brendan.png'),
+  },
+  {
+    id: 'girl',
+    label: 'May',
+    sprite: localTrainerSprite('may.png'),
+  },
+];
+
 function trainersForRegion(region: RegionId): TrainerPreset[] {
-  return region === 'Johto' ? JOHTO_TRAINERS : KANTO_TRAINERS;
+  if (region === 'Hoenn') return HOENN_TRAINERS;
+  if (region === 'Johto') return JOHTO_TRAINERS;
+  return KANTO_TRAINERS;
 }
 
 export function TrainerSetup() {

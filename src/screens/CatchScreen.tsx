@@ -18,6 +18,7 @@ import {
   catchProbability,
   formatCatchPercent,
 } from '../utils/catchChance';
+import { resolveRegionId } from '../data/pools';
 import type { ActivityType, PokemonData } from '../types/game';
 
 const RUN_BTN_W = 140;
@@ -88,6 +89,7 @@ export function CatchScreen({ variant = 'default' }: CatchScreenProps) {
   const setScreen = useGameStore((s) => s.setScreen);
   const badges = useGameStore((s) => s.badges);
   const muted = useGameStore((s) => s.muted);
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
 
   const [pokemon, setPokemon] = useState<PokemonData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -349,7 +351,9 @@ export function CatchScreen({ variant = 'default' }: CatchScreenProps) {
       ? 'catch-scene--water'
       : currentActivity === 'cave' || currentActivity === 'fossil'
         ? 'catch-scene--cave'
-        : 'catch-scene--grass';
+        : region === 'Hoenn'
+          ? 'catch-scene--grass catch-scene--hoenn'
+          : 'catch-scene--grass';
 
   return (
     <motion.div

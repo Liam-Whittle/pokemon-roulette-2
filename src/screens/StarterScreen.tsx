@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
 import { Confetti } from '../components/Confetti';
 import { SpriteCard } from '../components/SpriteCard';
-import { getRegionStarters, pickRandom } from '../data/pools';
+import { getRegionStarters, pickRandom, resolveRegionId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { asset } from '../utils/asset';
@@ -13,7 +13,7 @@ export function StarterScreen() {
   const addStarterPokemon = useGameStore((state) => state.addStarterPokemon);
   const setScreen = useGameStore((state) => state.setScreen);
   const muted = useGameStore((state) => state.muted);
-  const region = useGameStore((state) => (state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((state) => resolveRegionId(state.trainer?.region));
   const [starter, setStarter] = useState<PokemonData | null>(null);
   const [revealed, setRevealed] = useState(false);
 
@@ -50,9 +50,11 @@ export function StarterScreen() {
       <Confetti active={revealed} />
       <h2 className="screen-title">A {region} Starter Appears!</h2>
       <p className="starter-screen__subtitle">
-        {region === 'Johto'
-          ? 'Professor Elm hands you a random partner.'
-          : 'Professor Oak hands you a random partner.'}
+        {region === 'Hoenn'
+          ? 'Professor Birch hands you a random partner.'
+          : region === 'Johto'
+            ? 'Professor Elm hands you a random partner.'
+            : 'Professor Oak hands you a random partner.'}
       </p>
 
       {!revealed ? (

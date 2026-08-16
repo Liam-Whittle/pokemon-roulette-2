@@ -4,8 +4,9 @@ import { BattleArena } from '../components/BattleArena';
 import { ItemIcon } from '../components/ItemIcon';
 import { PokeDollarAmount } from '../components/PokeDollar';
 import {
-  TEAM_ROCKET_LEADER,
+  getRegionRocketLeader,
   getRegionRocketPool,
+  resolveRegionId,
 } from '../data/pools';
 import { getCachedSpecies } from '../data/speciesCache';
 import { useGameStore } from '../store/useGameStore';
@@ -25,7 +26,7 @@ function buildRocketLeader(region: RegionId, partySize: number): GymLeader {
   }
 
   return {
-    ...TEAM_ROCKET_LEADER,
+    ...getRegionRocketLeader(region),
     pokemon: picked.map((id) => {
       const species = getCachedSpecies(id);
       return {
@@ -39,7 +40,7 @@ function buildRocketLeader(region: RegionId, partySize: number): GymLeader {
 
 export function TeamRocketScreen() {
   const muted = useGameStore((s) => s.muted);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const party = useGameStore((s) => s.party);
   const setScreen = useGameStore((s) => s.setScreen);
   const addMoney = useGameStore((s) => s.addMoney);
@@ -76,7 +77,7 @@ export function TeamRocketScreen() {
 
   useEffect(() => {
     if (!victoryOpen || muted) return;
-    playClip(asset('sounds/gym_victory.mp3'), 0.4);
+    playClip(asset('sounds/gym_victory.mp3'));
   }, [victoryOpen, muted]);
 
   useEffect(() => {

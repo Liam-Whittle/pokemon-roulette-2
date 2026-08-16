@@ -1,4 +1,5 @@
 import { useGameStore } from '../store/useGameStore';
+import { registerSoundDebugClick } from '../utils/debugUnlock';
 import { playSfx } from '../utils/sound';
 
 export function SoundToggle() {
@@ -11,6 +12,7 @@ export function SoundToggle() {
       className="sound-toggle"
       aria-label={muted ? 'Unmute sound' : 'Mute sound'}
       onClick={() => {
+        registerSoundDebugClick();
         setMuted(!muted);
         if (muted) playSfx('click', false);
       }}

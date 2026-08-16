@@ -3,7 +3,7 @@ import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { TypeBadge } from '../components/TypeBadge';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
-import { MISSINGNO_ID } from '../data/missingno';
+import { MISSINGNO_ID, MISSINGNO_SPRITE } from '../data/missingno';
 
 export function PartyScreen() {
   const party = useGameStore((s) => s.party);
@@ -45,7 +45,10 @@ export function PartyScreen() {
                 src={mon.shiny && mon.shinySprite ? mon.shinySprite : mon.sprite}
                 alt={mon.displayName}
                 className={`party-slot__sprite${mon.id === MISSINGNO_ID ? ' party-slot__sprite--missingno' : ''}${mon.id === MISSINGNO_ID && mon.shiny ? ' party-slot__sprite--missingno-shiny' : ''}`}
-                onError={(e) => { (e.target as HTMLImageElement).src = PLACEHOLDER_SPRITE; }}
+                onError={(e) => {
+                  (e.target as HTMLImageElement).src =
+                    mon.id === MISSINGNO_ID ? MISSINGNO_SPRITE : PLACEHOLDER_SPRITE;
+                }}
               />
               <div className="party-slot__info">
                 <span className="party-slot__name">

@@ -1,4 +1,4 @@
-import { useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { useGameStore } from '../store/useGameStore';
 import { TypeBadge } from './TypeBadge';
 import { PokeDollarAmount } from './PokeDollar';
@@ -14,8 +14,8 @@ import { PLACEHOLDER_SPRITE } from '../utils/asset';
 import { currentHp, maxHpForMon, isFainted, MAX_LEVEL } from '../utils/stats';
 import { canEvolveNow, getAvailableEvolutions } from '../utils/evolution';
 import { hasReducedPp } from '../data/moves';
-import { getRegionTotalGyms, resolveBadgeImage } from '../data/pools';
-import { MISSINGNO_ID } from '../data/missingno';
+import { getRegionTotalGyms, resolveBadgeImage, resolveRegionId } from '../data/pools';
+import { MISSINGNO_ID, MISSINGNO_SPRITE } from '../data/missingno';
 import { playSfx } from '../utils/sound';
 import { imgFallback, remoteBadge } from '../utils/localAssets';
 import type { BagItem, CatchBallId, EvolutionInfo, IVs, NatureId, StoredMove } from '../types/game';
@@ -45,6 +45,8 @@ interface SelectedMon {
   nature?: NatureId;
   moves?: StoredMove[];
   pp?: Record<string, number>;
+  ability?: string;
+  gender?: import('../data/speciesGender').PokemonGender | null;
 }
 
 interface SidePanelProps {
@@ -62,6 +64,14 @@ interface SidePanelProps {
   inBattle?: boolean;
   /** Called after a Full Heal is successfully used in battle (spends the turn). */
   onFullHealUsed?: () => void;
+  /** Pickup/Harvest: first item used on this mon is not consumed. */
+  shouldSkipItemConsume?: (caughtAt: number) => boolean;
+  /** Unburden / pickup bookkeeping after an item is used on a mon. */
+  onItemUsedOnMon?: (caughtAt: number) => void;
+  /** Unnerve: Potion does not skip the turn. */
+  shouldSkipPotionTurn?: (caughtAt: number) => boolean;
+  /** Called after Honey is used (battle spends the turn unless Unnerve). */
+  onHoneyUsed?: () => void;
   /** During battle: Swap only sends a bench Pokémon to the active slot (no PC). */
   battleSendOutOnly?: boolean;
   /** Called when the player confirms sending out a bench Pokémon during battle. */
@@ -99,6 +109,10 @@ export function SidePanel({
   onElixirUsed,
   inBattle = false,
   onFullHealUsed,
+  shouldSkipItemConsume,
+  onItemUsedOnMon,
+  shouldSkipPotionTurn,
+  onHoneyUsed,
   battleSendOutOnly = false,
   onBattleSendOut,
   activeBattlerVolatiles,
@@ -118,12 +132,14 @@ export function SidePanel({
   const swapPartyMember = useGameStore((state) => state.swapPartyMember);
   const swapPartyOrder = useGameStore((state) => state.swapPartyOrder);
   const usePotionOnMember = useGameStore((state) => state.usePotionOnMember);
+  const useHoneyOnMember = useGameStore((state) => state.useHoneyOnMember);
   const useMaxElixirOnMember = useGameStore((state) => state.useMaxElixirOnMember);
   const useFullHealAllParty = useGameStore((state) => state.useFullHealAllParty);
   const useHealPowderAllParty = useGameStore((state) => state.useHealPowderAllParty);
   const fullHealUsedInBattle = useGameStore((state) => state.fullHealUsedInBattle);
   const pcExcluded = useGameStore((state) => state.pcExcluded);
-  const region = useGameStore((state) => (state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((state) => resolveRegionId(state.trainer?.region));
+  const ensurePartyInstanceFields = useGameStore((state) => state.ensurePartyInstanceFields);
 
   const [swappingFor, setSwappingFor] = useState<number | null>(null);
   const [evolution, setEvolution] = useState<EvolutionInfo | null>(null);
@@ -136,6 +152,10 @@ export function SidePanel({
   const [selectedMon, setSelectedMon] = useState<SelectedMon | null>(null);
   const [selectedItem, setSelectedItem] = useState<BagItem | null>(null);
 
+  useEffect(() => {
+    ensurePartyInstanceFields();
+  }, [ensurePartyInstanceFields]);
+
   const entries = Object.entries(pokedex)
     .map(([id, entry]) => ({ id: Number(id), ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -144,6 +164,8 @@ export function SidePanel({
   const rareCandyCount = rareCandy?.quantity ?? 0;
   const potionItem = bag.find((item) => item.id === 'potion');
   const potionCount = potionItem?.quantity ?? 0;
+  const honeyItem = bag.find((item) => item.id === 'honey');
+  const honeyCount = honeyItem?.quantity ?? 0;
   const elixirItem = bag.find((item) => item.id === 'maxelixer');
   const elixirCount = elixirItem?.quantity ?? 0;
   const fullHealItem = bag.find((item) => item.id === 'fullheal');
@@ -163,9 +185,14 @@ export function SidePanel({
     .map(([id, entry]) => ({ id: Number(id), ...entry }))
     .sort((a, b) => a.name.localeCompare(b.name));
 
+  function itemOpts(caughtAt: number) {
+    return { skipConsume: shouldSkipItemConsume?.(caughtAt) ?? false };
+  }
+
   function handleRareCandyOnMember(caughtAt: number) {
-    if (useRareCandyOnMember(caughtAt)) {
+    if (useRareCandyOnMember(caughtAt, itemOpts(caughtAt))) {
       playSfx('item', muted);
+      onItemUsedOnMon?.(caughtAt);
     }
   }
 
@@ -233,15 +260,25 @@ export function SidePanel({
   }
 
   function handlePotionHeal(caughtAt: number) {
-    if (usePotionOnMember(caughtAt)) {
+    if (usePotionOnMember(caughtAt, itemOpts(caughtAt))) {
       playSfx('item', muted);
-      onPotionUsed?.();
+      onItemUsedOnMon?.(caughtAt);
+      if (!shouldSkipPotionTurn?.(caughtAt)) onPotionUsed?.();
+    }
+  }
+
+  function handleHoneyHeal(caughtAt: number) {
+    if (useHoneyOnMember(caughtAt, itemOpts(caughtAt))) {
+      playSfx('item', muted);
+      onItemUsedOnMon?.(caughtAt);
+      if (!shouldSkipPotionTurn?.(caughtAt)) onHoneyUsed?.();
     }
   }
 
   function handleMaxElixir(caughtAt: number) {
-    if (useMaxElixirOnMember(caughtAt)) {
+    if (useMaxElixirOnMember(caughtAt, itemOpts(caughtAt))) {
       playSfx('item', muted);
+      onItemUsedOnMon?.(caughtAt);
       onElixirUsed?.();
     }
   }
@@ -300,6 +337,7 @@ export function SidePanel({
                 const canUseCandy =
                   allowItems && rareCandyCount > 0 && !fainted && pokemon.level < MAX_LEVEL;
                 const showPotion = allowItems && potionCount > 0 && !fainted && !fullHp;
+                const showHoney = allowItems && honeyCount > 0 && !fainted && !fullHp;
                 const showElixir = allowItems && elixirCount > 0 && !fainted && ppDrained;
                 const showSwap =
                   allowSwap &&
@@ -378,10 +416,13 @@ export function SidePanel({
                           evs: pokemon.evs,
                           nature: pokemon.nature,
                           moves: pokemon.moves,
+                          ability: pokemon.ability,
+                          gender: pokemon.gender,
                         })
                       }
                       onError={(event) => {
-                        (event.target as HTMLImageElement).src = PLACEHOLDER_SPRITE;
+                        (event.target as HTMLImageElement).src =
+                          pokemon.id === MISSINGNO_ID ? MISSINGNO_SPRITE : PLACEHOLDER_SPRITE;
                       }}
                     />
                   </div>
@@ -448,6 +489,22 @@ export function SidePanel({
                               id="potion"
                               icon={potionItem?.icon ?? '💊'}
                               name="Potion"
+                              className="side-panel__action-chip-icon"
+                            />
+                          </button>
+                        ) : null}
+                        {showHoney ? (
+                          <button
+                            type="button"
+                            className="side-panel__action-chip side-panel__action-chip--item"
+                            title="Use Honey (heal to full HP)"
+                            aria-label="Use Honey"
+                            onClick={() => handleHoneyHeal(pokemon.caughtAt)}
+                          >
+                            <ItemIcon
+                              id="honey"
+                              icon={honeyItem?.icon ?? '🍯'}
+                              name="Honey"
                               className="side-panel__action-chip-icon"
                             />
                           </button>
@@ -684,6 +741,8 @@ export function SidePanel({
           nature={selectedMon.nature}
           moves={selectedMon.moves}
           pp={selectedMon.pp}
+          ability={selectedMon.ability}
+          gender={selectedMon.gender}
           onClose={() => setSelectedMon(null)}
         />
       )}

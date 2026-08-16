@@ -39,6 +39,7 @@ export const ITEM_SPRITES: Record<string, string> = {
   omnistone: itemSprite('intriguing-stone.png'),
   secretkey: itemSprite('secret-key.png'),
   maxrepel: itemSprite('max-repel.png'),
+  honey: itemSprite('honey.png'),
 };
 
 /** Wheel segment sprites keyed by segment id. */

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { fetchPokemon } from '../api/pokeapi';
 import { getCachedSpecies } from '../data/speciesCache';
-import { getRegionAllPokemonPool, getStoneItemIdsForRegion, ITEMS, pickRandom } from '../data/pools';
+import { getRegionAllPokemonPool, getStoneItemIdsForRegion, ITEMS, pickRandom, resolveRegionId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
 import { PLACEHOLDER_SPRITE } from '../utils/asset';
@@ -38,7 +38,7 @@ function emptyReels(): ReelView[] {
 }
 
 export function GameCornerScreen() {
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const money = useGameStore((s) => s.money);
   const spendMoney = useGameStore((s) => s.spendMoney);
   const addMoney = useGameStore((s) => s.addMoney);
@@ -432,8 +432,14 @@ export function GameCornerScreen() {
           className={`gamecorner-btn gamecorner-btn--spin${spinning ? ' gamecorner-btn--spinning' : ''}`}
           disabled={!canSpin}
           onClick={() => void lockIn()}
+          aria-label={spinning ? 'Spinning…' : 'Lock in & spin'}
         >
-          {spinning ? 'SPINNING…' : 'LOCK IN & SPIN'}
+          <span className="gamecorner-btn__spin-label" aria-hidden={spinning}>
+            LOCK IN & SPIN
+          </span>
+          <span className="gamecorner-btn__spin-label" aria-hidden={!spinning}>
+            SPINNING…
+          </span>
         </button>
       </div>
 

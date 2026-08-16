@@ -1,14 +1,12 @@
 import { useState } from 'react';
-import {
-  ITEMS,
+import { ITEMS,
   PATH_MISCHIEF_SEGMENTS,
   PATHWAY_SEGMENTS,
   getRegionEliteFour,
   getRegionGymLeaders,
   getStoneItemIdsForRegion,
   getRegionTotalGyms,
-  pickRandom,
-} from '../data/pools';
+  pickRandom, resolveRegionId } from '../data/pools';
 import { PRESTIGE_UNLOCKS } from '../data/prestige';
 import { GameIcon } from './GameIcon';
 import { ItemIcon } from './ItemIcon';
@@ -17,6 +15,7 @@ import { PokeCenterModal, type HealModalVariant } from './PokeCenterModal';
 import { useGameStore } from '../store/useGameStore';
 import { fetchPokemon, fetchRegionList, type PokemonListEntry } from '../api/pokeapi';
 import { maxHpForMon } from '../utils/stats';
+import { localPokemonSprite } from '../utils/localAssets';
 import type { WheelSegment } from '../types/game';
 
 function titleCase(name: string): string {
@@ -32,9 +31,10 @@ const DEBUG_ITEMS = ITEMS;
 interface DebugMenuProps {
   onUberSpin?: () => void;
   onWonderTrade?: () => void;
+  onArceusBlessing?: () => void;
 }
 
-export function DebugMenu({ onUberSpin, onWonderTrade }: DebugMenuProps) {
+export function DebugMenu({ onUberSpin, onWonderTrade, onArceusBlessing }: DebugMenuProps) {
   const startActivity = useGameStore((s) => s.startActivity);
   const startDebugLegendary = useGameStore((s) => s.startDebugLegendary);
   const setScreen = useGameStore((s) => s.setScreen);
@@ -52,7 +52,7 @@ export function DebugMenu({ onUberSpin, onWonderTrade }: DebugMenuProps) {
   const earnBadge = useGameStore((s) => s.earnBadge);
   const badges = useGameStore((s) => s.badges);
   const bag = useGameStore((s) => s.bag);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const gymLeaders = getRegionGymLeaders(region);
   const eliteFour = getRegionEliteFour(region);
   const totalGyms = getRegionTotalGyms(region);
@@ -121,6 +121,11 @@ export function DebugMenu({ onUberSpin, onWonderTrade }: DebugMenuProps) {
 
   function launchUberSpin() {
     onUberSpin?.();
+    setOpen(false);
+  }
+
+  function launchArceusBlessing() {
+    onArceusBlessing?.();
     setOpen(false);
   }
 
@@ -528,6 +533,16 @@ export function DebugMenu({ onUberSpin, onWonderTrade }: DebugMenuProps) {
               </button>
               <button type="button" className="debug-panel__btn" onClick={launchUberSpin}>
                 <SegmentIcon id="uber" className="game-icon-img game-icon-img--btn" /> Uber Spin
+              </button>
+              <button type="button" className="debug-panel__btn" onClick={launchArceusBlessing}>
+                <img
+                  src={localPokemonSprite(493)}
+                  alt=""
+                  className="game-icon-img game-icon-img--btn"
+                  width={24}
+                  height={24}
+                />{' '}
+                Arceus&apos;s Blessing
               </button>
             </div>
           </div>

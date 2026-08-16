@@ -6,7 +6,7 @@ import { MISSINGNO_DATA } from '../data/missingno';
 import { useGameStore } from '../store/useGameStore';
 import { asset } from '../utils/asset';
 import { parseGifDurationMs } from '../utils/gifDuration';
-import { playClip, setMusicTrack, stopClip } from '../utils/music';
+import { MISSINGNO_CRY_VOLUME_SCALE, playClip, setMusicTrack, stopClip } from '../utils/music';
 
 const SEARCH_GIF = asset('img/missingno_search.gif');
 const FALLBACK_MS = 60_000;
@@ -51,7 +51,7 @@ export function MissingNoScreen() {
       }
       setFrozen(true);
       setPhase('wipe');
-      cryRef.current = playClip(asset('sounds/missingno_cry.mp3'));
+      cryRef.current = playClip(asset('sounds/missingno_cry.mp3'), MISSINGNO_CRY_VOLUME_SCALE);
 
       setCurrentPokemon(MISSINGNO_DATA);
       useGameStore.setState({

@@ -44,6 +44,7 @@ import { MetaAnimatedBg } from './components/MetaAnimatedBg';
 import { primeMusic, unlockMusic, setMusicMuted, setMusicTrack, setMusicVolume } from './utils/music';
 import { asset } from './utils/asset';
 import './styles/global.css';
+import { resolveRegionId } from './data/pools';
 
 function ScreenRouter() {
   const screen = useGameStore((s) => s.screen);
@@ -126,11 +127,16 @@ export default function App() {
   const setMuted = useGameStore((s) => s.setMuted);
   const screen = useGameStore((s) => s.screen);
   const currentActivity = useGameStore((s) => s.currentActivity);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const [showMusicPrompt, setShowMusicPrompt] = useState(true);
+  const ensurePartyInstanceFields = useGameStore((s) => s.ensurePartyInstanceFields);
   const bgRef = useRef<HTMLDivElement>(null);
   const target = useRef({ x: 0, y: 0 });
   const current = useRef({ x: 0, y: 0 });
+
+  useEffect(() => {
+    ensurePartyInstanceFields();
+  }, [ensurePartyInstanceFields]);
 
   useEffect(() => {
     // Parallax is only active on the title screen (same base scale as other screens).
@@ -198,7 +204,7 @@ export default function App() {
 
   useEffect(() => {
     if (screen === 'teamrocket') {
-      setMusicTrack('teamrocket');
+      setMusicTrack(region === 'Hoenn' ? 'teamaqua' : 'teamrocket');
     } else if (screen === 'giovanni') {
       setMusicTrack('giovanni');
     } else if (screen === 'trainerbattle') {
@@ -225,14 +231,21 @@ export default function App() {
       setMusicTrack('titleExtra');
     } else if (screen === 'title' || screen === 'hall') {
       setMusicTrack('title');
+    } else if (screen === 'setup' || screen === 'starter' || screen === 'hardcore-draft') {
+      // Keep create_trainer.mp3 through starter / hardcore draft pick.
+      setMusicTrack('createTrainer');
     } else if (screen === 'catch' || screen === 'fishing' || screen === 'fossil' || screen === 'cave') {
       setMusicTrack('pokemon');
     } else if (screen === 'hub') {
-      setMusicTrack(region === 'Johto' ? 'johto' : 'kanto');
+      setMusicTrack(
+        region === 'Hoenn' ? 'hoenn' : region === 'Johto' ? 'johto' : 'kanto',
+      );
     } else {
       setMusicTrack('main');
     }
   }, [screen, region, isMetaMenu]);
+
+  const hubBg = asset(region === 'Hoenn' ? 'img/hoenn.png' : 'img/main.png');
 
   // On the catch screen, match the background to the activity that triggered the
   // encounter (fishing/fossil/cave) instead of always showing the main hub art.
@@ -243,11 +256,11 @@ export default function App() {
         ? asset('img/cave.png')
         : currentActivity === 'fossil'
           ? asset('img/fossil.png')
-          : asset('img/main.png');
+          : hubBg;
 
   const bgImage =
     screen === 'teamrocket'
-      ? asset('img/team_rocket.png')
+      ? asset(region === 'Hoenn' ? 'img/team_aqua.png' : 'img/team_rocket.png')
       : screen === 'gym' || screen === 'champion' || screen === 'chadpion'
         ? asset('img/battle_day.png')
         : screen === 'elite'
@@ -268,25 +281,36 @@ export default function App() {
                         ? asset('img/fossil.png')
                         : screen === 'catch'
                           ? catchBg
-                          : asset('img/main.png');
+                          : screen === 'hub'
+                            ? hubBg
+                            : asset('img/main.png');
 
   const isFossilBg = screen === 'fossil' || (screen === 'catch' && currentActivity === 'fossil');
+  const isHoennHub = screen === 'hub' && region === 'Hoenn';
   const overlayTop =
-    screen === 'cave'
-      ? 0.25
-      : screen === 'gamecorner'
-        ? 0.35
-        : screen === 'shop' || screen === 'elite'
-          ? 0.4
+    isHoennHub
+      ? 0.40
+      : screen === 'cave'
+        ? 0.25
+        : screen === 'gamecorner'
+          ? 0.35
+          : screen === 'elite'
+            ? 0.52
+            : screen === 'shop'
+              ? 0.4
+              : isFossilBg
+                ? 0.35
+                : 0.55;
+  const overlayBottom =
+    isHoennHub
+      ? 0.10
+      : screen === 'elite'
+        ? 0.4
+        : screen === 'shop' || screen === 'cave' || screen === 'gamecorner'
+          ? 0.25
           : isFossilBg
             ? 0.35
             : 0.55;
-  const overlayBottom =
-    screen === 'shop' || screen === 'elite' || screen === 'cave' || screen === 'gamecorner'
-      ? 0.25
-      : isFossilBg
-        ? 0.35
-        : 0.55;
 
   const isTitleBg = screen === 'title';
   const titleOverlayTop = isTitleBg ? 0.35 : overlayTop;
@@ -305,7 +329,9 @@ export default function App() {
               ? 'app-bg--meta app-bg--giovanni'
               : isTitleBg
                 ? 'app-bg--title'
-                : '';
+                : isHoennHub
+                  ? 'app-bg--hub'
+                  : '';
 
   return (
     <div className="app">

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
-import { GIOVANNI_LEADER, getRegionLegendaryPool, pickRandom } from '../data/pools';
+import { GIOVANNI_LEADER, getRegionLegendaryPool, pickRandom, resolveRegionId } from '../data/pools';
 import { fetchPokemon } from '../api/pokeapi';
 import { useGameStore } from '../store/useGameStore';
 import { createCaughtAtLevel } from '../utils/pokemonInstance';
@@ -27,7 +27,7 @@ function buildGiovanniCloneTeam(partyLevels: number[]): GymLeader {
 
 export function GiovanniScreen() {
   const party = useGameStore((s) => s.party);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const setScreen = useGameStore((s) => s.setScreen);
   const muted = useGameStore((s) => s.muted);
   const addMoney = useGameStore((s) => s.addMoney);
@@ -55,7 +55,7 @@ export function GiovanniScreen() {
   useEffect(() => {
     if (done !== 'win') return;
     stopMusic();
-    if (!muted) playClip(asset('sounds/giovanni_defeated.mp3'), 0.5);
+    if (!muted) playClip(asset('sounds/giovanni_defeated.mp3'));
     return () => stopClips();
   }, [done, muted]);
 

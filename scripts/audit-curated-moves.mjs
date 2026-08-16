@@ -37,7 +37,7 @@ const curatedSlugs = new Set(
 );
 
 const moveCounts = new Map();
-for (const file of ['speciesMovesGen1.ts', 'speciesMovesGen2.ts']) {
+for (const file of ['speciesMovesGen1.ts', 'speciesMovesGen2.ts', 'speciesMovesGen3.ts']) {
   for (const [slug, count] of parseSpeciesRows(file)) {
     moveCounts.set(slug, (moveCounts.get(slug) ?? 0) + count);
   }

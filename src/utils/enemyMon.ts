@@ -1,4 +1,6 @@
 import { assignMoves } from '../data/moves';
+import { rollAbilityForSpecies } from '../data/abilities';
+import { rollGenderForSpecies } from '../data/speciesGender';
 import type { CaughtPokemon, PokemonData } from '../types/game';
 import { maxHpForMon, randomIVs, randomNature, zeroEVs } from './stats';
 
@@ -18,6 +20,8 @@ export function buildEnemyMon(species: PokemonData, level: number): CaughtPokemo
     nature: randomNature(),
     moves: assignMoves(species.id, species.types, level, true),
     evolvesToId: species.evolvesToId ?? null,
+    ability: rollAbilityForSpecies(species.id),
+    gender: rollGenderForSpecies(species.id),
   };
   mon.hp = maxHpForMon(mon);
   return mon;

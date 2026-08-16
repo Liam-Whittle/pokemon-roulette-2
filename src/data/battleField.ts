@@ -1,11 +1,21 @@
 /** Battle-wide field state (weather, hazards, per-mon Hidden Power types). */
-export type BattleWeather = 'none' | 'sunny' | 'rain';
+export type BattleWeather = 'none' | 'sunny' | 'rain' | 'hail' | 'sandstorm';
+
+export type DelayedHit = {
+  target: 'player' | 'enemy';
+  turnsLeft: number;
+  damage: number;
+  name: string;
+};
 
 export type BattleField = {
   weather: BattleWeather;
   weatherTurns: number;
   spikesActive: boolean;
   hiddenPowerTypes: Record<number, string>;
+  delayedHits: DelayedHit[];
+  mudSport?: boolean;
+  waterSport?: boolean;
 };
 
 export const EMPTY_BATTLE_FIELD: BattleField = {
@@ -13,6 +23,7 @@ export const EMPTY_BATTLE_FIELD: BattleField = {
   weatherTurns: 0,
   spikesActive: false,
   hiddenPowerTypes: {},
+  delayedHits: [],
 };
 
 export function clearBattleField(): BattleField {
@@ -62,7 +73,7 @@ export function initHiddenPowerTypes(
   return initBattleHiddenPowerTypes(party);
 }
 
-export function spikesChipDamage(maxHp: number, types: string[]): number {
-  if (types.includes('flying')) return 0;
+export function spikesChipDamage(maxHp: number, types: string[], ability?: string): number {
+  if (types.includes('flying') || ability === 'levitate' || ability === 'magic-guard') return 0;
   return Math.max(1, Math.floor(maxHp * 0.125));
 }

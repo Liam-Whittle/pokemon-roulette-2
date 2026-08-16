@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { asset } from '../utils/asset';
-import { playClip, stopClip } from '../utils/music';
+import { CRY_VOLUME_SCALE, playClip, stopClip } from '../utils/music';
 
 export type HealModalVariant = 'pokecenter' | 'picnic';
 
@@ -55,8 +55,7 @@ export function PokeCenterModal({ onClose, variant = 'pokecenter' }: PokeCenterM
   useEffect(() => {
     if (variant !== 'picnic' || lineIndex < 1 || cryPlayedRef.current || !config.exitCry) return;
     cryPlayedRef.current = true;
-    // 60% quieter than default one-shot clips
-    cryClipRef.current = playClip(config.exitCry, 0.4);
+    cryClipRef.current = playClip(config.exitCry, CRY_VOLUME_SCALE);
   }, [variant, lineIndex, config.exitCry]);
 
   const currentLine = config.lines[lineIndex] ?? '';

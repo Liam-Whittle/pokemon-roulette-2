@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, useSpring } from 'framer-motion';
 import { fetchPokemon, fetchPokemonDetail, type PokemonDetail } from '../api/pokeapi';
@@ -8,10 +8,12 @@ import { ItemIcon } from './ItemIcon';
 import { GlitchText } from './GlitchText';
 import { asset, PLACEHOLDER_SPRITE } from '../utils/asset';
 import { useGameStore } from '../store/useGameStore';
-import { playClip, stopClip } from '../utils/music';
-import { getCryStyleForRegion } from '../data/pools';
+import { CRY_VOLUME_SCALE, MISSINGNO_CRY_VOLUME_SCALE, playClip, stopClip } from '../utils/music';
+import { getCryStyleForRegion, resolveRegionId } from '../data/pools';
 import { applyRegionMoveType } from '../data/gen2MoveTypes';
 import { MAGIKARP_ID, describeMove, formatMoveCategory, formatMovePowerDisplay } from '../data/moves';
+import { getAbilityInfo, getMonAbility, isHiddenAbilityForSpecies } from '../data/abilities';
+import { rollGenderForSpecies, type PokemonGender } from '../data/speciesGender';
 import { MISSINGNO_DATA, MISSINGNO_ID, MISSINGNO_SPRITE } from '../data/missingno';
 import {
   getBaseStatsForSpecies,
@@ -52,6 +54,8 @@ interface PokemonDetailModalProps {
   nature?: NatureId;
   moves?: StoredMove[];
   pp?: Record<string, number>;
+  ability?: string;
+  gender?: PokemonGender | null;
   /** When false, hide the left battle-stats / moveset panels. */
   showSidePanel?: boolean;
   onClose: () => void;
@@ -71,6 +75,83 @@ function deltaClass(value: number): string {
   if (value > 0) return 'mon-detail-side__delta--pos';
   if (value < 0) return 'mon-detail-side__delta--neg';
   return 'mon-detail-side__delta--neutral';
+}
+
+interface AbilityChipRow {
+  slug: string;
+  name: string;
+  shortEffect: string;
+  kind: 'standard' | 'hidden';
+  active: boolean;
+}
+
+function AbilityChip({ row }: { row: AbilityChipRow }) {
+  const chipRef = useRef<HTMLSpanElement>(null);
+  const tipRef = useRef<HTMLSpanElement>(null);
+  const [open, setOpen] = useState(false);
+  const [tipStyle, setTipStyle] = useState<CSSProperties>({});
+
+  useLayoutEffect(() => {
+    if (!open) return;
+
+    const place = () => {
+      const chip = chipRef.current;
+      const tip = tipRef.current;
+      if (!chip || !tip) return;
+      const cr = chip.getBoundingClientRect();
+      const tw = tip.offsetWidth;
+      const th = tip.offsetHeight;
+      const gap = 8;
+      const pad = 10;
+      let left = cr.left;
+      if (left + tw > window.innerWidth - pad) left = cr.right - tw;
+      if (left < pad) left = pad;
+      let top = cr.bottom + gap;
+      if (top + th > window.innerHeight - pad) top = cr.top - th - gap;
+      if (top < pad) top = pad;
+      setTipStyle({ top, left });
+    };
+
+    place();
+    window.addEventListener('resize', place);
+    window.addEventListener('scroll', place, true);
+    return () => {
+      window.removeEventListener('resize', place);
+      window.removeEventListener('scroll', place, true);
+    };
+  }, [open]);
+
+  return (
+    <span
+      ref={chipRef}
+      className={`mon-detail__ability-chip mon-detail__ability-chip--${row.kind}${
+        row.active ? ' mon-detail__ability-chip--active' : ''
+      }`}
+      tabIndex={0}
+      onMouseEnter={() => setOpen(true)}
+      onMouseLeave={() => setOpen(false)}
+      onFocus={() => setOpen(true)}
+      onBlur={() => setOpen(false)}
+    >
+      <span className="mon-detail__ability-kind">
+        {row.kind === 'hidden' ? 'Hidden' : 'Ability'}
+      </span>
+      <span className="mon-detail__ability-name">{row.name}</span>
+      {open &&
+        createPortal(
+          <span
+            ref={tipRef}
+            className={`mon-detail__ability-tip mon-detail__ability-tip--${row.kind}`}
+            role="tooltip"
+            style={tipStyle}
+          >
+            <strong className="mon-detail__ability-tip-name">{row.name}</strong>
+            <span className="mon-detail__ability-tip-desc">{row.shortEffect}</span>
+          </span>,
+          document.body,
+        )}
+    </span>
+  );
 }
 
 /** Sparkle positions (percent within the art frame) for the shiny shimmer. */
@@ -130,6 +211,8 @@ export function PokemonDetailModal({
   nature,
   moves,
   pp,
+  ability,
+  gender,
   showSidePanel = true,
   onClose,
 }: PokemonDetailModalProps) {
@@ -149,9 +232,11 @@ export function PokemonDetailModal({
         }
       : null,
   );
+  const partyGender = useGameStore((s) => s.party.find((m) => m.id === id)?.gender);
+  const shownGender = gender !== undefined ? gender : partyGender !== undefined ? partyGender : rollGenderForSpecies(id);
   const muted = useGameStore((s) => s.muted);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
-  const cryStyle = useGameStore((s) => getCryStyleForRegion(s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
+  const cryStyle = useGameStore((s) => getCryStyleForRegion(resolveRegionId(s.trainer?.region)));
   const isMagichad = shiny && id === MAGIKARP_ID;
   const [introDone, setIntroDone] = useState(!shiny);
   const cryPlayedRef = useRef(false);
@@ -184,6 +269,19 @@ export function PokemonDetailModal({
       ? null
       : statDeltasFromBase(id, displayLevel, displayIvs, displayEvs, displayNature);
   const displayMoves = showSidePanel ? (moves?.slice(0, 4) ?? []) : [];
+  const activeAbilitySlug = ability ?? getMonAbility({ id, ability });
+  const assignedInfo = activeAbilitySlug ? getAbilityInfo(activeAbilitySlug) : null;
+  const abilityRows = isMissingNo
+    ? [{ slug: 'glitch', name: 'Glitch', shortEffect: 'Corrupted data. Effects are unpredictable.', kind: 'standard' as const, active: true }]
+    : isMagichad
+      ? [{ slug: 'chad', name: 'Chad Energy', shortEffect: 'This Magikarp answers to no ability.', kind: 'standard' as const, active: true }]
+      : assignedInfo
+        ? [{
+            ...assignedInfo,
+            kind: (isHiddenAbilityForSpecies(id, assignedInfo.slug) ? 'hidden' : 'standard') as 'hidden' | 'standard',
+            active: true,
+          }]
+        : [];
 
   const handlePointerMove = (e: React.PointerEvent<HTMLDivElement>) => {
     if (!shiny) return;
@@ -249,7 +347,7 @@ export function PokemonDetailModal({
   // MissingNo cry is its own effect so a later `data` update can't stopClip mid-play.
   useEffect(() => {
     if (!isMissingNo || muted || !introDone) return;
-    const clip = playClip(asset('sounds/missingno_cry.mp3'), 0.6);
+    const clip = playClip(asset('sounds/missingno_cry.mp3'), MISSINGNO_CRY_VOLUME_SCALE);
     return () => stopClip(clip);
   }, [isMissingNo, muted, introDone]);
 
@@ -260,7 +358,7 @@ export function PokemonDetailModal({
 
     if (isMagichad) {
       cryPlayedRef.current = true;
-      clip = playClip(asset('sounds/magikarp_detail.mp3'), 0.6);
+      clip = playClip(asset('sounds/magikarp_detail.mp3'), CRY_VOLUME_SCALE);
     } else if (data) {
       const crySrc =
         (cryStyle === 'legacy' ? data.cryLegacy : data.cryLatest) ??
@@ -268,7 +366,7 @@ export function PokemonDetailModal({
         data.cryLegacy;
       if (crySrc) {
         cryPlayedRef.current = true;
-        clip = playClip(crySrc, 0.6);
+        clip = playClip(crySrc, CRY_VOLUME_SCALE);
       }
     }
 
@@ -510,6 +608,12 @@ export function PokemonDetailModal({
                   {displayName}
                 </span>
               )}
+              {shownGender === 'male' && (
+                <span className="mon-detail__gender mon-detail__gender--male" aria-label="Male">♂</span>
+              )}
+              {shownGender === 'female' && (
+                <span className="mon-detail__gender mon-detail__gender--female" aria-label="Female">♀</span>
+              )}
               {caughtWithBall && (
                 <ItemIcon
                   id={caughtWithBall}
@@ -563,6 +667,14 @@ export function PokemonDetailModal({
               types.map((t) => <TypeBadge key={t} type={t} size="sm" />)
             )}
           </div>
+
+          {abilityRows.length > 0 && (
+            <div className="mon-detail__abilities" aria-label="Abilities">
+              {abilityRows.map((row) => (
+                <AbilityChip key={`${row.kind}-${row.slug}`} row={row} />
+              ))}
+            </div>
+          )}
 
           <div className="mon-detail__stats">
             <div className="mon-detail__stat">

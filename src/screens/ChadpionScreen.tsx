@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { Confetti } from '../components/Confetti';
 import { useGameStore } from '../store/useGameStore';
+import { resolveRegionId } from '../data/pools';
 
 /**
  * Easter-egg end screen reached via shiny Magikarp's "Hollow Purple". Identical to
@@ -8,7 +9,7 @@ import { useGameStore } from '../store/useGameStore';
  */
 export function ChadpionScreen() {
   const resetGame = useGameStore((s) => s.resetGame);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
 
   return (
     <motion.div
@@ -44,9 +45,11 @@ export function ChadpionScreen() {
           animate={{ opacity: 1 }}
           transition={{ delay: 0.9 }}
         >
-          {region === 'Johto'
-            ? 'You conquered the Johto League!'
-            : 'New regions coming soon'}
+          {region === 'Hoenn'
+            ? 'You conquered the Hoenn League!'
+            : region === 'Johto'
+              ? 'You conquered the Johto League!'
+              : 'Johto awaits — clear Kanto to unlock it!'}
         </motion.p>
 
         <motion.button

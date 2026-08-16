@@ -24,7 +24,7 @@ export function isRainy(weather: BattleWeather): boolean {
 /** Heal fraction for Morning Sun / Synthesis / Moonlight by weather. */
 export function weatherHealFraction(weather: BattleWeather): number {
   if (weather === 'sunny') return 0.66;
-  if (weather === 'rain') return 0.25;
+  if (weather === 'rain' || weather === 'hail' || weather === 'sandstorm') return 0.25;
   return 0.5;
 }
 
@@ -34,6 +34,10 @@ export function weatherLabel(weather: BattleWeather): string {
       return 'Harsh sunlight';
     case 'rain':
       return 'Rain';
+    case 'hail':
+      return 'Hail';
+    case 'sandstorm':
+      return 'A sandstorm';
     default:
       return '';
   }
@@ -42,7 +46,17 @@ export function weatherLabel(weather: BattleWeather): string {
 export function setWeatherFromMove(slug: string): { weather: BattleWeather; turns: number } | null {
   if (slug === 'sunny-day') return { weather: 'sunny', turns: 5 };
   if (slug === 'rain-dance') return { weather: 'rain', turns: 5 };
+  if (slug === 'hail') return { weather: 'hail', turns: 5 };
+  if (slug === 'sandstorm') return { weather: 'sandstorm', turns: 5 };
   return null;
+}
+
+export function weatherSetMessage(slug: string): string {
+  if (slug === 'sunny-day') return 'The sunlight turned harsh!';
+  if (slug === 'rain-dance') return 'It started to rain!';
+  if (slug === 'hail') return 'It started to hail!';
+  if (slug === 'sandstorm') return 'A sandstorm kicked up!';
+  return '';
 }
 
 export function tickWeather(

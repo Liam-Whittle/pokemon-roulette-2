@@ -1,7 +1,7 @@
 import type { RegionId } from './pools';
 import { ITEM_SPRITES, SEGMENT_SPRITES, UI_SPRITES } from './icons';
 import { MISSINGNO_SPRITE } from './missingno';
-import { localPokemonSprite, remotePokemonSprite } from '../utils/localAssets';
+import { localPokemonSprite } from '../utils/localAssets';
 
 export type PrestigeUnlockId =
   | 'arceusBlessing'
@@ -28,7 +28,7 @@ export interface PrestigeUnlockDef {
 
 /** Thematic icons for each unlock (gen 1–2 Pokémon + item sprites). */
 export const PRESTIGE_UNLOCK_ICONS: Record<PrestigeUnlockId, string> = {
-  arceusBlessing: remotePokemonSprite(493), // Arceus (not in local 1–251 set)
+  arceusBlessing: localPokemonSprite(493),
   hardcore: UI_SPRITES.life, // heart scale — one-life runs
   onTheHouse: ITEM_SPRITES.shinycharm,
   shinyCharmPlus: ITEM_SPRITES.shinycharm, // gold-tinted in Prestige Shop CSS
@@ -114,7 +114,7 @@ export const PRESTIGE_UNLOCKS: PrestigeUnlockDef[] = [
   },
 ];
 
-export const ALL_REGION_IDS: RegionId[] = ['Kanto', 'Johto'];
+export const ALL_REGION_IDS: RegionId[] = ['Kanto', 'Johto', 'Hoenn'];
 
 /** Not shown on New Game toggles — meta feature toggled only in Prestige Shop. */
 export const META_ONLY_UNLOCKS: PrestigeUnlockId[] = ['hundredPercenter'];
@@ -148,7 +148,7 @@ export function clearedRegionsFromHall(
 ): RegionId[] {
   const set = new Set<RegionId>();
   for (const entry of hall) {
-    if (entry.region === 'Kanto' || entry.region === 'Johto') {
+    if (entry.region === 'Kanto' || entry.region === 'Johto' || entry.region === 'Hoenn') {
       set.add(entry.region);
     }
   }

@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { Wheel } from '../components/Wheel';
 import { TypeBadge } from '../components/TypeBadge';
 import { ItemIcon } from '../components/ItemIcon';
-import { SHINY_WHEEL_CHARM_SEGMENTS, SHINY_WHEEL_SEGMENTS } from '../data/pools';
+import { SHINY_WHEEL_CHARM_SEGMENTS, SHINY_WHEEL_SEGMENTS, resolveRegionId } from '../data/pools';
 import { CHAOS_WHEEL_SEGMENTS, chaosOutcomeLabel } from '../multiplayer/chaosWheel';
 import type { ChaosEffectId } from '../multiplayer/protocol';
 import { useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
@@ -19,7 +19,7 @@ import type { BattleMove } from '../types/game';
 export function MpGuestScreen() {
   const muted = useGameStore((s) => s.muted);
   const setScreen = useGameStore((s) => s.setScreen);
-  const battleRegion = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const battleRegion = useGameStore((s) => resolveRegionId(s.trainer?.region));
   const spectate = useMultiplayerStore((s) => s.spectate);
   const awaitingGuest = useMultiplayerStore((s) => s.awaitingGuest);
   const outcome = useMultiplayerStore((s) => s.outcome);

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { BattleArena } from '../components/BattleArena';
 import { PokeDollarAmount } from '../components/PokeDollar';
-import { TRAINER_BATTLE_LEADER } from '../data/pools';
+import { TRAINER_BATTLE_LEADER, resolveRegionId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 import { asset } from '../utils/asset';
 import { playClip } from '../utils/music';
@@ -14,7 +14,7 @@ const TRAINER_REWARD = 80;
 
 export function TrainerBattleScreen() {
   const muted = useGameStore((s) => s.muted);
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto')) as RegionId;
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region)) as RegionId;
   const party = useGameStore((s) => s.party);
   const setScreen = useGameStore((s) => s.setScreen);
   const addMoney = useGameStore((s) => s.addMoney);
@@ -50,7 +50,7 @@ export function TrainerBattleScreen() {
 
   useEffect(() => {
     if (!victoryOpen || muted) return;
-    playClip(asset('sounds/gym_victory.mp3'), 0.4);
+    playClip(asset('sounds/gym_victory.mp3'));
   }, [victoryOpen, muted]);
 
   function dismissVictory() {

@@ -1,4 +1,5 @@
 import type { PokemonData } from '../types/game';
+import { MISSINGNO_DATA, MISSINGNO_ID } from '../data/missingno';
 import { getCachedSpecies } from '../data/speciesCache';
 import {
   localPokemonArtwork,
@@ -120,9 +121,12 @@ export interface PokemonListEntry {
   name: string;
 }
 
-export async function fetchRegionList(region: 'Kanto' | 'Johto'): Promise<PokemonListEntry[]> {
-  const maxId = region === 'Johto' ? 251 : 151;
-  const cacheKey = region === 'Johto' ? 'gen12-list' : 'gen1-list';
+export async function fetchRegionList(
+  region: 'Kanto' | 'Johto' | 'Hoenn',
+): Promise<PokemonListEntry[]> {
+  const maxId = region === 'Hoenn' ? 386 : region === 'Johto' ? 251 : 151;
+  const cacheKey =
+    region === 'Hoenn' ? 'gen123-list' : region === 'Johto' ? 'gen12-list' : 'gen1-list';
   return cachedFetch(cacheKey, async () => {
     const entries: PokemonListEntry[] = [];
     for (let id = 1; id <= maxId; id++) {
@@ -177,6 +181,8 @@ export async function fetchPokemonDetail(id: number): Promise<PokemonDetail> {
 }
 
 export function getPlaceholderPokemon(id: number): PokemonData {
+  // MissingNo. is synthetic (id 0) and not in the species cache.
+  if (id === MISSINGNO_ID) return { ...MISSINGNO_DATA };
   const cached = getCachedSpecies(id);
   if (cached) return speciesToPokemonData(cached);
   return {

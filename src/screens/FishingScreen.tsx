@@ -1,9 +1,9 @@
 import { EncounterWheel } from '../components/EncounterWheel';
-import { getRegionFishingPool } from '../data/pools';
+import { getRegionFishingPool, resolveRegionId } from '../data/pools';
 import { useGameStore } from '../store/useGameStore';
 
 export function FishingScreen() {
-  const region = useGameStore((s) => (s.trainer?.region === 'Johto' ? 'Johto' : 'Kanto'));
+  const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
   return (
     <EncounterWheel
       title="Fishing"

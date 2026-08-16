@@ -8,7 +8,7 @@ import { currentHp, maxHpForMon, XP_PER_LEVEL } from '../utils/stats';
 import { clearAllStatuses } from '../utils/status';
 import { applyXp, applyXpToAll, encounterLevelForBadges } from '../utils/xp';
 import { getAvailableEvolutions } from '../utils/evolution';
-import { createCaughtPokemon, createCaughtAtLevel, migrateCaughtPokemon } from '../utils/pokemonInstance';
+import { createCaughtPokemon, createCaughtAtLevel, ensurePartyFields, migrateCaughtPokemon } from '../utils/pokemonInstance';
 import { getCachedSpecies } from '../data/speciesCache';
 import { filterEncounterPoolByEvolutionLevel } from '../utils/encounterPool';
 import {
@@ -24,6 +24,7 @@ import {
   resolveBadgeImage,
   pickRandom,
   pickRandomPokemonId,
+  resolveRegionId,
 } from '../data/pools';
 import type { RegionId } from '../data/pools';
 import {
@@ -35,7 +36,7 @@ import {
   clearedRegionsFromHall,
   type PrestigeUnlockId,
 } from '../data/prestige';
-import { MISSINGNO_ID } from '../data/missingno';
+import { MISSINGNO_DATA, MISSINGNO_ID } from '../data/missingno';
 import { createShopStock, pickHiddenStoneId, type ShopStockMap } from '../utils/shopCatalog';
 import type {
   ActivityResult,
@@ -164,8 +165,8 @@ interface GameState {
   swapPartyMember: (caughtAt: number, pokemonId: number) => void;
   swapPartyOrder: (caughtAtA: number, caughtAtB: number) => void;
   addItem: (itemId: string, quantity?: number) => void;
-  consumeItem: (itemId: string, quantity?: number) => boolean;
-  useRareCandyOnMember: (caughtAt: number) => boolean;
+  consumeItem: (itemId: string, quantity?: number, opts?: { skipConsume?: boolean }) => boolean;
+  useRareCandyOnMember: (caughtAt: number, opts?: { skipConsume?: boolean }) => boolean;
   evolvePartyMember: (caughtAt: number, toId?: number) => Promise<EvolveResult>;
   restorePartyHpSnapshot: (snapshot: Record<number, number>) => void;
   stealRandomPartyPokemon: () => string | null;
@@ -191,14 +192,17 @@ interface GameState {
   getAttackTypes: () => string[];
   makeRandomPartyShiny: () => void;
   debugAddToParty: (pokemon: PokemonData) => void;
+  /** Backfill ability/gender on party mons acquired before those fields existed. */
+  ensurePartyInstanceFields: () => void;
   healPartyMember: (caughtAt: number, amount: number) => void;
   damagePartyMember: (caughtAt: number, amount: number) => void;
   setActivePartyMember: (caughtAt: number) => boolean;
   reviveHealAllParty: () => void;
   restorePartyPp: () => void;
-  usePotionOnMember: (caughtAt: number) => boolean;
+  usePotionOnMember: (caughtAt: number, opts?: { skipConsume?: boolean }) => boolean;
+  useHoneyOnMember: (caughtAt: number, opts?: { skipConsume?: boolean }) => boolean;
   useMovePp: (caughtAt: number, slug: string, maxPp: number) => void;
-  useMaxElixirOnMember: (caughtAt: number) => boolean;
+  useMaxElixirOnMember: (caughtAt: number, opts?: { skipConsume?: boolean }) => boolean;
   /** Restore PP on a party member without consuming an item (chaos elixir). */
   restoreMemberPp: (caughtAt: number) => boolean;
   useFullHealAllParty: (inBattle?: boolean) => boolean;
@@ -281,7 +285,11 @@ function dailyEncounterPool(dex: Record<number, PokedexEntry>): number[] {
       .filter(([, entry]) => entry.caught)
       .map(([id]) => Number(id)),
   );
-  return [...getRegionAllPokemonPool('Kanto'), ...getRegionAllPokemonPool('Johto')].filter(
+  return [
+    ...getRegionAllPokemonPool('Kanto'),
+    ...getRegionAllPokemonPool('Johto'),
+    ...getRegionAllPokemonPool('Hoenn'),
+  ].filter(
     (id) => id !== MISSINGNO_ID && id > 0 && !caught.has(id),
   );
 }
@@ -341,6 +349,7 @@ async function performEvolution(
     ivs: member.ivs,
     evs: member.evs,
     nature: member.nature,
+    ...(member.gender !== undefined ? { gender: member.gender } : {}),
     pp: member.pp,
     status: member.status,
   };
@@ -396,7 +405,7 @@ function filteredPoolForBadges(pool: number[], badgeCount: number): number[] {
 }
 
 function getActiveRegion(state: Pick<GameState, 'trainer'>): RegionId {
-  return state.trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
+  return resolveRegionId(state.trainer?.region);
 }
 
 function upsertBagItem(bag: BagItem[], itemId: string, quantity: number): BagItem[] {
@@ -567,7 +576,7 @@ export const useGameStore = create<GameState>()(
       addStarterPokemon: (pokemon, shiny = false) => {
         const caught = { ...createCaughtPokemon(pokemon, { level: 5, shiny }), shiny };
         set((state) => ({
-          party: [caught],
+          party: ensurePartyFields([caught]),
           pcExcluded: state.pcExcluded.filter((id) => id !== pokemon.id),
           starterClaimed: true,
           shiniesCaught: shiny ? state.shiniesCaught + 1 : state.shiniesCaught,
@@ -618,7 +627,7 @@ export const useGameStore = create<GameState>()(
           nickname: pokemon.displayName,
         };
         set((s) => ({
-          party: [...s.party, caught],
+          party: ensurePartyFields([...s.party, caught]),
           pcExcluded: s.pcExcluded.filter((id) => id !== pokemon.id),
           pokedex: {
             ...s.pokedex,
@@ -688,8 +697,9 @@ export const useGameStore = create<GameState>()(
 
           const caught = createCaughtAtLevel(pokemon, state.badges.length, nickname, caughtWithBall);
           const maxParty = getMaxPartySize(state.activeUnlocks.includes('biggerBetter'));
-          const nextParty =
-            state.party.length < maxParty ? [...state.party, caught] : state.party;
+          const nextParty = ensurePartyFields(
+            state.party.length < maxParty ? [...state.party, caught] : state.party,
+          );
 
           const priorDex = state.pokedex[pokemon.id];
           const dexEntry: PokedexEntry = {
@@ -792,14 +802,22 @@ export const useGameStore = create<GameState>()(
         });
       },
 
+      ensurePartyInstanceFields: () => {
+        set((state) => {
+          const party = ensurePartyFields(state.party);
+          return party === state.party ? state : { party };
+        });
+      },
+
       debugAddToParty: (pokemon) => {
         const caught = createCaughtPokemon(pokemon, { level: 5 });
         set((state) => {
           const maxParty = getMaxPartySize(state.activeUnlocks.includes('biggerBetter'));
-          const party =
+          const next =
             state.party.length < maxParty
               ? [...state.party, caught]
               : [...state.party.slice(0, maxParty - 1), caught];
+          const party = ensurePartyFields(next);
           const dexEntry = {
             seen: true,
             caught: true,
@@ -839,27 +857,39 @@ export const useGameStore = create<GameState>()(
           if (outgoing?.guestOwned) return state;
           const saved = state.pcStats[pokemonId];
           const cached = getCachedSpecies(pokemonId);
-          const baseMon = createCaughtPokemon(
-            cached
+          const speciesData =
+            pokemonId === MISSINGNO_ID
               ? {
-                  id: pokemonId,
-                  name: cached.name,
-                  displayName: cached.name,
-                  types: cached.types,
-                  sprite: entry.sprite,
-                  artwork: entry.sprite,
-                  shinySprite: entry.shinySprite,
-                  shinyArtwork: entry.shinySprite,
-                  catchRate: cached.catchRate,
-                  isLegendary: cached.isLegendary,
-                  baseStats: cached.baseStats,
-                  baseStatTotal: cached.baseStatTotal,
-                  evolvesToId: cached.evolvesToIds[0] ?? null,
-                  evolvesToIds: cached.evolvesToIds,
+                  ...MISSINGNO_DATA,
+                  sprite: entry.sprite || MISSINGNO_DATA.sprite,
+                  artwork: entry.sprite || MISSINGNO_DATA.artwork,
+                  shinySprite: entry.shinySprite ?? MISSINGNO_DATA.shinySprite,
+                  shinyArtwork: entry.shinySprite ?? MISSINGNO_DATA.shinyArtwork,
                 }
-              : getPlaceholderPokemon(pokemonId),
-            { level: entry.level, shiny: entry.shiny, caughtWithBall: entry.caughtWithBall, caughtAt: Date.now() },
-          );
+              : cached
+                ? {
+                    id: pokemonId,
+                    name: cached.name,
+                    displayName: cached.name,
+                    types: cached.types,
+                    sprite: entry.sprite,
+                    artwork: entry.sprite,
+                    shinySprite: entry.shinySprite,
+                    shinyArtwork: entry.shinySprite,
+                    catchRate: cached.catchRate,
+                    isLegendary: cached.isLegendary,
+                    baseStats: cached.baseStats,
+                    baseStatTotal: cached.baseStatTotal,
+                    evolvesToId: cached.evolvesToIds[0] ?? null,
+                    evolvesToIds: cached.evolvesToIds,
+                  }
+                : getPlaceholderPokemon(pokemonId);
+          const baseMon = createCaughtPokemon(speciesData, {
+            level: entry.level,
+            shiny: entry.shiny,
+            caughtWithBall: entry.caughtWithBall,
+            caughtAt: Date.now(),
+          });
           const replacement: CaughtPokemon = {
             ...baseMon,
             hp: saved ? Math.min(saved.hp, maxHpForMon(baseMon)) : maxHpForMon(baseMon),
@@ -896,10 +926,11 @@ export const useGameStore = create<GameState>()(
         set((state) => ({ bag: upsertBagItem(state.bag, itemId, quantity) }));
       },
 
-      consumeItem: (itemId, quantity = 1) => {
+      consumeItem: (itemId, quantity = 1, opts) => {
         const bag = get().bag;
         const existing = bag.find((item) => item.id === itemId);
         if (!existing || existing.quantity < quantity) return false;
+        if (opts?.skipConsume) return true;
         set((state) => ({
           bag: upsertBagItem(state.bag, itemId, -quantity),
           itemsUsed: itemId === 'maxrevive' ? state.itemsUsed : state.itemsUsed + quantity,
@@ -907,8 +938,8 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      useRareCandyOnMember: (caughtAt) => {
-        if (!get().consumeItem('rarecandy', 1)) return false;
+      useRareCandyOnMember: (caughtAt, opts) => {
+        if (!get().consumeItem('rarecandy', 1, opts)) return false;
         const member = get().party.find((m) => m.caughtAt === caughtAt);
         if (!member) return false;
         const { mon } = applyXp(member, XP_PER_LEVEL);
@@ -1196,11 +1227,11 @@ export const useGameStore = create<GameState>()(
         }));
       },
 
-      useMaxElixirOnMember: (caughtAt) => {
+      useMaxElixirOnMember: (caughtAt, opts) => {
         const state = get();
         const member = state.party.find((m) => m.caughtAt === caughtAt);
         if (!member || !hasReducedPp(member.pp, member.moves)) return false;
-        if (!get().consumeItem('maxelixer', 1)) return false;
+        if (!get().consumeItem('maxelixer', 1, opts)) return false;
         set((s) => ({
           party: s.party.map((m) => (m.caughtAt === caughtAt ? { ...m, pp: {} } : m)),
         }));
@@ -1217,15 +1248,27 @@ export const useGameStore = create<GameState>()(
         return true;
       },
 
-      usePotionOnMember: (caughtAt) => {
+      usePotionOnMember: (caughtAt, opts) => {
         const state = get();
         const member = state.party.find((m) => m.caughtAt === caughtAt);
         if (!member) return false;
         const hp = currentHp(member);
         const max = maxHpForMon(member);
         if (hp <= 0 || hp >= max) return false;
-        if (!get().consumeItem('potion', 1)) return false;
+        if (!get().consumeItem('potion', 1, opts)) return false;
         get().healPartyMember(caughtAt, Math.round(max / 2));
+        return true;
+      },
+
+      useHoneyOnMember: (caughtAt, opts) => {
+        const state = get();
+        const member = state.party.find((m) => m.caughtAt === caughtAt);
+        if (!member) return false;
+        const hp = currentHp(member);
+        const max = maxHpForMon(member);
+        if (hp <= 0 || hp >= max) return false;
+        if (!get().consumeItem('honey', 1, opts)) return false;
+        get().healPartyMember(caughtAt, max);
         return true;
       },
 
@@ -1550,7 +1593,8 @@ export const useGameStore = create<GameState>()(
       debugUnlockAllRegions: () => {
         /* Hall entries unlock regions; grant fake clears via prestige helper by adding minimal HoF */
         const hall = get().hallOfChampions;
-        const needed: RegionId[] = ['Kanto'];
+        // Clearing prior regions unlocks the next; grant Kanto+Johto so Hoenn opens.
+        const needed: RegionId[] = ['Kanto', 'Johto'];
         const extras = needed.filter((r) => !hall.some((h) => h.region === r));
         if (extras.length === 0) return;
         set((state) => ({
@@ -1687,7 +1731,9 @@ export const useGameStore = create<GameState>()(
       migrate: (persisted: unknown) => {
         const state = persisted as Record<string, unknown>;
         if (Array.isArray(state.party)) {
-          state.party = state.party.map((m) => migrateCaughtPokemon(m as Record<string, unknown>));
+          state.party = ensurePartyFields(
+            state.party.map((m) => migrateCaughtPokemon(m as Record<string, unknown>)),
+          );
         }
         if (state.pokedex && typeof state.pokedex === 'object') {
           const dex = state.pokedex as Record<string, Record<string, unknown>>;
@@ -1698,6 +1744,15 @@ export const useGameStore = create<GameState>()(
             };
             delete dex[id].powerLevel;
             delete dex[id].proteinUsed;
+            // Repair MissingNo. dex entries corrupted by id-0 placeholder swaps.
+            if (Number(id) === MISSINGNO_ID) {
+              dex[id] = {
+                ...dex[id],
+                name: MISSINGNO_DATA.displayName,
+                sprite: MISSINGNO_DATA.sprite,
+                types: [...MISSINGNO_DATA.types],
+              };
+            }
           }
         }
         if (Array.isArray(state.hallOfChampions)) {
@@ -1755,7 +1810,7 @@ export const useGameStore = create<GameState>()(
         if (typeof state.mewMischiefAtSpin !== 'number') state.mewMischiefAtSpin = -1;
         if (Array.isArray(state.badges)) {
           const trainer = state.trainer as { region?: string } | null;
-          const region = trainer?.region === 'Johto' ? 'Johto' : 'Kanto';
+          const region = resolveRegionId(trainer?.region);
           state.badges = (state.badges as Badge[]).map((badge) => {
             const image = resolveBadgeImage(badge, region);
             return image ? { ...badge, image } : badge;
@@ -1763,7 +1818,10 @@ export const useGameStore = create<GameState>()(
         }
         return state;
       },
-      version: 12,
+      version: 13,
+      onRehydrateStorage: () => (state) => {
+        state?.ensurePartyInstanceFields();
+      },
     },
   ),
 );

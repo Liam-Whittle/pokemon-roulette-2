@@ -21,6 +21,33 @@ export type BattleVolatiles = {
   cursed?: boolean;
   /** Set while charging Fly/Dig — attacks against this battler miss. */
   semiInvulnerable?: string;
+  protected?: boolean;
+  protectStreak?: number;
+  usedProtectThisTurn?: boolean;
+  substituteHp?: number;
+  tauntTurns?: number;
+  infatuated?: boolean;
+  yawnTurns?: number;
+  wishTurns?: number;
+  destinyBond?: boolean;
+  perishTurns?: number;
+  tookDamageThisTurn?: boolean;
+  unburdenSpeed?: boolean;
+  flinched?: boolean;
+  truantLoafing?: boolean;
+  /** True the turn this battler was sent out. Fake Out only works while this is set. */
+  enteredThisTurn?: boolean;
+  endured?: boolean;
+  identified?: boolean;
+  mistTurns?: number;
+  ingrained?: boolean;
+  nightmared?: boolean;
+  chargedElectric?: boolean;
+  magicCoat?: boolean;
+  stockpileCount?: number;
+  torment?: boolean;
+  rageActive?: boolean;
+  grudge?: boolean;
 };
 
 export const EMPTY_VOLATILES: BattleVolatiles = {
@@ -46,6 +73,11 @@ export function clearVolatiles(): BattleVolatiles {
   return { ...EMPTY_VOLATILES };
 }
 
+/** Fresh volatiles for a Pokémon that just entered the field. */
+export function volatilesOnSendOut(): BattleVolatiles {
+  return { ...clearVolatiles(), enteredThisTurn: true };
+}
+
 export function tickVolatileTurns(v: BattleVolatiles): BattleVolatiles {
   const next = { ...v };
   if (next.reflectTurns > 0) next.reflectTurns -= 1;
@@ -62,11 +94,60 @@ export function tickVolatileTurns(v: BattleVolatiles): BattleVolatiles {
     next.encoreTurns -= 1;
     if (next.encoreTurns <= 0) next.encoreMoveSlug = null;
   }
+  if ((next.tauntTurns ?? 0) > 0) {
+    next.tauntTurns = (next.tauntTurns ?? 0) - 1;
+  }
+  if ((next.mistTurns ?? 0) > 0) {
+    next.mistTurns = (next.mistTurns ?? 0) - 1;
+  }
   return next;
+}
+
+export function isProtected(volatiles: BattleVolatiles): boolean {
+  return volatiles.protected === true;
+}
+
+export function hasSubstitute(volatiles: BattleVolatiles): boolean {
+  return (volatiles.substituteHp ?? 0) > 0;
+}
+
+export function isTaunted(volatiles: BattleVolatiles): boolean {
+  return (volatiles.tauntTurns ?? 0) > 0;
+}
+
+export function absorbSubstituteHit(
+  volatiles: BattleVolatiles,
+  damage: number,
+): { volatiles: BattleVolatiles; damageToMon: number; broke: boolean } {
+  const hp = volatiles.substituteHp ?? 0;
+  if (hp <= 0) return { volatiles, damageToMon: damage, broke: false };
+  if (damage >= hp) {
+    return { volatiles: { ...volatiles, substituteHp: undefined }, damageToMon: 0, broke: true };
+  }
+  return { volatiles: { ...volatiles, substituteHp: hp - damage }, damageToMon: 0, broke: false };
+}
+
+export function endOfTurnProtectReset(volatiles: BattleVolatiles): BattleVolatiles {
+  return {
+    ...volatiles,
+    protected: false,
+    usedProtectThisTurn: false,
+    protectStreak: volatiles.usedProtectThisTurn ? volatiles.protectStreak : 0,
+    tookDamageThisTurn: false,
+    destinyBond: false,
+    flinched: false,
+    enteredThisTurn: false,
+    endured: false,
+    magicCoat: false,
+  };
 }
 
 export function hasSafeguard(volatiles: BattleVolatiles): boolean {
   return volatiles.safeguardTurns > 0;
+}
+
+export function hasMist(volatiles: BattleVolatiles): boolean {
+  return (volatiles.mistTurns ?? 0) > 0;
 }
 
 /** Physical damage multiplier from Reflect (0.5) or Barrier (+20% def = /1.2). No stacking: Reflect wins. */
@@ -86,7 +167,7 @@ export function physicalDefenseMultiplier(volatiles: BattleVolatiles, category: 
 }
 
 export function isTrapped(volatiles: BattleVolatiles): boolean {
-  return volatiles.trappedTurns > 0;
+  return volatiles.trappedTurns > 0 || volatiles.ingrained === true;
 }
 
 export function isThrashLocked(volatiles: BattleVolatiles): boolean {
