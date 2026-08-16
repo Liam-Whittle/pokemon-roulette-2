@@ -1014,7 +1014,7 @@ export function abilityOnKnockOut(opts: {
 
 export type MoodyPick = { plus: StageKey; minus: StageKey };
 
-export function abilityMoodyDelta(rng: () => number = Math.random): MoodyPick | null {
+export function abilityMoodyDelta(rng: () => number = Math.random): MoodyPick {
   const stats: StageKey[] = ['atk', 'def', 'spa', 'spd', 'spe'];
   const plus = stats[Math.min(stats.length - 1, Math.floor(rng() * stats.length))]!;
   const rest = stats.filter((s) => s !== plus);

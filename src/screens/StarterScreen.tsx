@@ -36,7 +36,7 @@ export function StarterScreen() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       setRevealed(true);
-      playSfx('catch', muted);
+      playSfx('sparkle', muted);
     }, 1800);
     return () => clearTimeout(timer);
   }, [muted]);

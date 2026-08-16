@@ -120,6 +120,7 @@ import {
   partyHasAbilityAlive,
   pickStolenCommonItem,
   resolveEndOfTurnAbility,
+  rollHoneyGather,
   shouldAutoImposter,
   stickyHoldBlocksSteal,
   weatherIsSuppressed,
@@ -1717,7 +1718,7 @@ export function BattleArena({
         setPlayerVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
         say(`${mon.displayName} fell asleep!`);
         await delay(600);
-      } else if (enemy && currentEnemyHp > 0 && !enemy.status && canApplyStatus({ ...enemy, hp: currentEnemyHp }, 'sleep', weather, wxOff)) {
+      } else if (enemy && currentEnemyHp > 0 && !enemy.status && canApplyStatus(enemy, 'sleep', weather, wxOff)) {
         const sleep = createStatus('sleep');
         patchEnemy({ status: sleep });
         setEnemyVolatiles((v) => applyVolatilesPatch(v, volatilesPatchOnSleep(v)));
@@ -3297,7 +3298,7 @@ export function BattleArena({
             say(`${attacker.displayName} was hurt by ${abilityLabel(getMonAbility(enemy))}!`);
           }
           const touch = abilityOnContactAttack(getMonAbility(attacker));
-          if (touch?.kind === 'status' && Math.random() < touch.chance && canApplyStatus({ ...enemy, hp: newEnemyHp }, touch.status, battleField.weather, weatherOffPlayer)) {
+          if (touch?.kind === 'status' && Math.random() < touch.chance && canApplyStatus(enemy, touch.status, battleField.weather, weatherOffPlayer)) {
             patchEnemy({ status: createStatus(touch.status) });
             say(`${enemy.displayName} was poisoned by Poison Touch!`);
           }
