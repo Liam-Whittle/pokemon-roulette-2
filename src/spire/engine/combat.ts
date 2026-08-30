@@ -1543,6 +1543,7 @@ function beginPlayerTurn(state: CombatState, rng: Rng): void {
   runRelicHooks(state, 'turnStart', rng);
   state.energy = state.energyMax;
   applyBonusEnergy(state);
+  drawCards(state, state.drawCount, rng);
   for (const card of state.discardPile) {
     const extra = num(resolveCard(card).discardEnergy);
     if (extra > 0) {
@@ -1550,7 +1551,6 @@ function beginPlayerTurn(state: CombatState, rng: Rng): void {
       pushLog(state, `${resolveCard(card).name}: +${extra} Energy.`);
     }
   }
-  drawCards(state, state.drawCount, rng);
   state.turn += 1;
 }
 
@@ -1598,9 +1598,7 @@ export function closePlayerTurn(state: CombatState, rng: Rng): CombatState {
   autoDiscardPending(next, rng);
   autoPickFreePlay(next, rng);
   while (next.hand.length > 0) {
-    const leftover = next.hand.pop()!;
-    resolveOnDiscard(next, leftover, rng);
-    next.discardPile.push(leftover);
+    next.discardPile.push(next.hand.pop()!);
   }
   autoPickZeroCost(next, rng);
   next.freePlayIds = [];

@@ -1197,6 +1197,23 @@ describe('spire combat', () => {
     expect(state.playerBlock).toBe(before + 8);
   });
 
+  it('synthesis leftover at end of turn does not grant discard block', () => {
+    const rng = mulberry32(56);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(['synthesis', 'vine-whip', 'wrap', 'wrap', 'wrap', 'wrap']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('pidgey')],
+      playerTypes: ['grass'],
+      rng,
+    });
+    state = seat(state, 'synthesis');
+    state = closePlayerTurn(state, rng);
+    expect(state.playerBlock).toBe(0);
+  });
+
   it('razor leaf adds a petal after the discard', () => {
     const rng = mulberry32(57);
     let state = createCombat({
@@ -1388,14 +1405,25 @@ describe('spire combat', () => {
 
   it('poke doll grants energy from the discard pile', () => {
     let { state, rng } = start(
-      ['poke-doll', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      ['poke-doll', 'ember', 'ember', 'ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
       'pidgey',
     );
     state = seat(state, 'poke-doll');
     state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
     expect(state.discardPile.some((c) => c.defId === 'poke-doll')).toBe(true);
     state = endTurn(state, rng);
+    expect(state.discardPile.some((c) => c.defId === 'poke-doll')).toBe(true);
     expect(state.energy).toBe(state.energyMax + 1);
+  });
+
+  it('poke doll does not grant energy after it shuffles into the draw pile', () => {
+    let { state, rng } = start(['poke-doll', 'ember'], 'pidgey');
+    state = seat(state, 'poke-doll');
+    state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
+    expect(state.discardPile.some((c) => c.defId === 'poke-doll')).toBe(true);
+    state = endTurn(state, rng);
+    expect(state.discardPile.some((c) => c.defId === 'poke-doll')).toBe(false);
+    expect(state.energy).toBe(state.energyMax);
   });
 
   it('guard spec spends all energy for X block hits', () => {
