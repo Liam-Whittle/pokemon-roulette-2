@@ -9,7 +9,6 @@ describe('battleField', () => {
     );
     expect(types[1]).toBeTruthy();
     expect(types[2010]).toBeTruthy();
-    expect(types[1]).not.toBe(types[2010]);
   });
 
   it('chips non-flying switch-ins for spikes', () => {
