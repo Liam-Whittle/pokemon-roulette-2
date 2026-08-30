@@ -740,7 +740,7 @@ export function CombatView() {
 
   return (
     <div
-      className={`spire-view spire-view--combat${drag?.dragging ? ' is-targeting' : ''}${enemyPhase ? ' is-enemy-turn' : ''}${pendingDiscard || pendingChoiceBand || pendingFree ? ' is-discard-pick' : ''}`}
+      className={`spire-view spire-view--combat${drag?.dragging ? ' is-targeting' : ''}${enemyPhase ? ' is-enemy-turn' : ''}${pendingDiscard ? ' is-discard-pick' : ''}${pendingChoiceBand || pendingFree ? ' is-hand-confirm' : ''}`}
     >
       <header className="spire-hud">
         <div className="spire-hud__start">

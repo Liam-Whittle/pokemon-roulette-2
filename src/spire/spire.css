@@ -1265,6 +1265,25 @@
   pointer-events: none;
 }
 
+.spire-view--combat.is-hand-confirm .spire-combat-dock {
+  z-index: 80;
+}
+
+.spire-view--combat.is-hand-confirm .spire-combat-main {
+  z-index: 85;
+}
+
+.spire-view--combat.is-hand-confirm .spire-combat-left {
+  opacity: 0.28;
+  pointer-events: none;
+}
+
+.spire-view--combat.is-hand-confirm .spire-combat-right {
+  z-index: 86;
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .spire-discard-veil {
   position: fixed;
   inset: 0;
