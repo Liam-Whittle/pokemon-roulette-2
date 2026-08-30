@@ -4,6 +4,7 @@ import { GameIcon } from '../components/GameIcon';
 import { TitleAmbient } from '../components/TitleAmbient';
 import { useGameStore } from '../store/useGameStore';
 import { useMultiplayerStore } from '../multiplayer/useMultiplayerStore';
+import { hasActiveSpireRun, useSpireStore } from '../spire/store/useSpireStore';
 import { playSfx } from '../utils/sound';
 import { asset } from '../utils/asset';
 
@@ -54,6 +55,8 @@ export function TitleScreen() {
   );
   const resetMultiplayer = useMultiplayerStore((s) => s.resetMultiplayer);
   const startHost = useMultiplayerStore((s) => s.startHost);
+  const spireRun = useSpireStore((s) => s.run);
+  const canContinueSpire = hasActiveSpireRun(spireRun);
   const ballControls = useAnimationControls();
   const heroControls = useAnimationControls();
   const [ballClicks, setBallClicks] = useState(0);
@@ -363,6 +366,33 @@ export function TitleScreen() {
             </motion.div>
         </motion.div>
       </motion.div>
+
+      <motion.button
+        type="button"
+        className={`title-spire-fab${canContinueSpire ? ' is-continue' : ''}`}
+        initial={{ opacity: 0, y: 10 }}
+        animate={{ opacity: 1, y: 0 }}
+        whileHover={{ y: -3, scale: 1.02 }}
+        whileTap={{ scale: 0.98 }}
+        transition={{ delay: 0.7, duration: 0.4 }}
+        onClick={() => {
+          playSfx('click', muted);
+          if (!canContinueSpire) {
+            useSpireStore.getState().startNewRun();
+          }
+          setScreen('spire');
+        }}
+      >
+        <span className="title-spire-fab__mark" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </span>
+        <span className="title-spire-fab__copy">
+          <span className="title-spire-fab__kicker">Battle Tower</span>
+          <strong>{canContinueSpire ? 'Continue Spire' : 'Poké Spire'}</strong>
+        </span>
+      </motion.button>
     </motion.div>
   );
 }

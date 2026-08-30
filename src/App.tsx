@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { useGameStore } from './store/useGameStore';
+import { useSpireStore } from './spire/store/useSpireStore';
 import { SoundToggle } from './components/SoundToggle';
 import { VolumeSlider } from './components/VolumeSlider';
 import { SettingsMenu } from './components/SettingsMenu';
@@ -38,6 +39,9 @@ import { HardcoreDraftScreen } from './screens/HardcoreDraftScreen';
 import { MpHostLobbyScreen } from './screens/MpHostLobbyScreen';
 import { MpJoinScreen } from './screens/MpJoinScreen';
 import { MpGuestScreen } from './screens/MpGuestScreen';
+import { SpireScreen } from './spire/SpireScreen';
+import { isSpireBossNode, spireBackgroundUrl } from './spire/backgrounds';
+import { spireMusicTrack } from './spire/music';
 import { HostSync } from './multiplayer/HostSync';
 import { MpOverlay } from './components/MpOverlay';
 import { MetaAnimatedBg } from './components/MetaAnimatedBg';
@@ -116,6 +120,8 @@ function ScreenRouter() {
       return <MissingNoScreen key="missingno" />;
     case 'coming-soon':
       return <ComingSoonScreen key="coming-soon" />;
+    case 'spire':
+      return <SpireScreen key="spire" />;
     default:
       return <TitleScreen key="title-fallback" />;
   }
@@ -128,6 +134,11 @@ export default function App() {
   const screen = useGameStore((s) => s.screen);
   const currentActivity = useGameStore((s) => s.currentActivity);
   const region = useGameStore((s) => resolveRegionId(s.trainer?.region));
+  const spireView = useSpireStore((s) => s.run?.view);
+  const spireBossFight = useSpireStore((s) =>
+    isSpireBossNode(s.run?.currentNodeId ?? null, s.run?.map?.nodes),
+  );
+  const spireTrack = useSpireStore((s) => spireMusicTrack(s.run));
   const [showMusicPrompt, setShowMusicPrompt] = useState(true);
   const ensurePartyInstanceFields = useGameStore((s) => s.ensurePartyInstanceFields);
   const bgRef = useRef<HTMLDivElement>(null);
@@ -229,6 +240,8 @@ export default function App() {
     } else if (isMetaMenu) {
       // Shared track across Prestige / Global Pokédex / Daily — keeps playing on switch.
       setMusicTrack('titleExtra');
+    } else if (screen === 'spire') {
+      setMusicTrack(spireTrack);
     } else if (screen === 'title' || screen === 'hall') {
       setMusicTrack('title');
     } else if (screen === 'setup' || screen === 'starter' || screen === 'hardcore-draft') {
@@ -243,7 +256,7 @@ export default function App() {
     } else {
       setMusicTrack('main');
     }
-  }, [screen, region, isMetaMenu]);
+  }, [screen, region, isMetaMenu, spireTrack]);
 
   const hubBg = asset(region === 'Hoenn' ? 'img/hoenn.png' : 'img/main.png');
 
@@ -283,34 +296,44 @@ export default function App() {
                           ? catchBg
                           : screen === 'hub'
                             ? hubBg
-                            : asset('img/main.png');
+                            : screen === 'spire'
+                              ? spireBackgroundUrl(spireView, spireBossFight)
+                              : asset('img/main.png');
 
   const isFossilBg = screen === 'fossil' || (screen === 'catch' && currentActivity === 'fossil');
   const isHoennHub = screen === 'hub' && region === 'Hoenn';
   const overlayTop =
-    isHoennHub
-      ? 0.40
-      : screen === 'cave'
-        ? 0.25
-        : screen === 'gamecorner'
-          ? 0.35
+    screen === 'spire' && spireView === 'shop'
+      ? 0.34
+      : screen === 'spire'
+        ? 0.18
+        : isHoennHub
+          ? 0.40
+          : screen === 'cave'
+            ? 0.25
+            : screen === 'gamecorner'
+              ? 0.35
+              : screen === 'elite'
+                ? 0.52
+                : screen === 'shop'
+                  ? 0.4
+                  : isFossilBg
+                    ? 0.35
+                    : 0.55;
+  const overlayBottom =
+    screen === 'spire' && spireView === 'shop'
+      ? 0.42
+      : screen === 'spire'
+        ? 0.32
+        : isHoennHub
+          ? 0.10
           : screen === 'elite'
-            ? 0.52
-            : screen === 'shop'
-              ? 0.4
+            ? 0.4
+            : screen === 'shop' || screen === 'cave' || screen === 'gamecorner'
+              ? 0.25
               : isFossilBg
                 ? 0.35
                 : 0.55;
-  const overlayBottom =
-    isHoennHub
-      ? 0.10
-      : screen === 'elite'
-        ? 0.4
-        : screen === 'shop' || screen === 'cave' || screen === 'gamecorner'
-          ? 0.25
-          : isFossilBg
-            ? 0.35
-            : 0.55;
 
   const isTitleBg = screen === 'title';
   const titleOverlayTop = isTitleBg ? 0.35 : overlayTop;

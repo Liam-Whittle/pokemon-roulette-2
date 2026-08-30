@@ -22,7 +22,15 @@ export type MusicTrack =
   | 'giovanni'
   | 'gamecorner'
   | 'cinnabar'
-  | 'missingnoCatch';
+  | 'missingnoCatch'
+  | 'spireAct1'
+  | 'spireAct2'
+  | 'spireAct3'
+  | 'spireBoss'
+  | 'spireShop'
+  | 'spireHallway1'
+  | 'spireHallway2'
+  | 'spireHallway3';
 
 const TRACKS: Record<MusicTrack, string> = {
   title: asset('sounds/title_new.mp3'),
@@ -46,6 +54,14 @@ const TRACKS: Record<MusicTrack, string> = {
   gamecorner: asset('sounds/game_corner.mp3'),
   cinnabar: asset('sounds/cinnabar_island.mp3'),
   missingnoCatch: asset('sounds/missingno_catch.mp3'),
+  spireAct1: asset('sounds/pokespire/pokespire_act1_initial_music.mp3'),
+  spireAct2: asset('sounds/pokespire/pokespire_act2.mp3'),
+  spireAct3: asset('sounds/pokespire/pokespire_act3.mp3'),
+  spireBoss: asset('sounds/pokespire/actboss.mp3'),
+  spireShop: asset('sounds/pokespire/pokespire_shop_and_events.mp3'),
+  spireHallway1: asset('sounds/pokespire/hallway_fight_1.mp3'),
+  spireHallway2: asset('sounds/pokespire/hallway_fight_2.mp3'),
+  spireHallway3: asset('sounds/pokespire/hallway_fight_3.mp3'),
 };
 
 /**

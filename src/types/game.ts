@@ -32,7 +32,8 @@ export type Screen =
   | 'daily'
   | 'mp-host-lobby'
   | 'mp-join'
-  | 'mp-guest';
+  | 'mp-guest'
+  | 'spire';
 
 export type ActivityType =
   | 'wild'
