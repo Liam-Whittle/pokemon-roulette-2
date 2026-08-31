@@ -1,22 +1,36 @@
 import type { MusicTrack } from '../utils/music';
-import { isSpireBossNode } from './backgrounds';
+import { spireCurrentNodeKind } from './backgrounds';
 import type { SpireRun } from './types';
 
-const HALLWAY: Record<1 | 2 | 3, MusicTrack> = {
+const HALLWAY: Record<1 | 2, MusicTrack> = {
   1: 'spireHallway1',
   2: 'spireHallway2',
-  3: 'spireHallway3',
 };
+const ELITE: Record<1 | 2, MusicTrack> = {
+  1: 'spireElite1',
+  2: 'spireElite2',
+};
+const BOSS: Record<1 | 2 | 3, MusicTrack> = {
+  1: 'spireBoss1',
+  2: 'spireBoss2',
+  3: 'spireBoss3',
+};
+
+function fightTheme(run: SpireRun | null | undefined): 1 | 2 {
+  return run?.hallwayTheme === 2 ? 2 : 1;
+}
 
 export function spireMusicTrack(run: SpireRun | null | undefined): MusicTrack {
   const view = run?.view ?? 'select';
   if (view === 'combat') {
-    if (isSpireBossNode(run?.currentNodeId ?? null, run?.map?.nodes)) return 'spireBoss';
-    return HALLWAY[run?.hallwayTheme ?? 1];
+    const kind = spireCurrentNodeKind(run?.currentNodeId ?? null, run?.map?.nodes);
+    if (kind === 'boss') return BOSS[run?.act === 2 || run?.act === 3 ? run.act : 1];
+    if (kind === 'elite') return ELITE[fightTheme(run)];
+    return HALLWAY[fightTheme(run)];
   }
-  if (view === 'shop' || view === 'event' || view === 'treasure' || view === 'rest') {
-    return 'spireShop';
-  }
+  if (view === 'shop') return 'spireShop';
+  if (view === 'event' || view === 'treasure') return 'spireEvent';
+  if (view === 'rest') return 'spirePokecenter';
   if (view === 'victory') return 'gamewin';
   if (view === 'defeat') return 'gamelose';
   if (run?.act === 2) return 'spireAct2';

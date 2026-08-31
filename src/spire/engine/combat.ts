@@ -244,7 +244,7 @@ export function liveCardDescription(inst: CardInstance, state: CombatState, enem
   const previewEnemy = enemy
     ? { ...enemy, statuses: { ...(enemy.statuses ?? {}) } }
     : undefined;
-  const liveEffects = def.effects.map((effect) => {
+  const previewOp = (effect: (typeof def.effects)[number]) => {
     if (effect.op === 'status' && previewEnemy && !effect.self) {
       if (!effect.all) {
         previewEnemy.statuses = {
@@ -268,8 +268,9 @@ export function liveCardDescription(inst: CardInstance, state: CombatState, enem
       return { ...effect, amount: previewPlayerBlock(state, effect.amount) };
     }
     return effect;
-  });
-  return rewriteDescription(def.description, def.effects, liveEffects);
+  };
+  const printed = [...def.effects, ...(def.onDiscard ?? [])];
+  return rewriteDescription(def.description, printed, printed.map(previewOp));
 }
 
 export function previewEnemyActions(state: CombatState): EnemyActionPreview[] {
@@ -927,6 +928,12 @@ function followupCtx(state: CombatState): {
 function resolveOnDiscard(state: CombatState, inst: CardInstance, rng: Rng): void {
   const def = resolveCard(inst);
   if (def.onDiscard?.length) applyEffects(state, def.onDiscard, rng, followupCtx(state));
+  if (!def.exhaustOnDiscard) return;
+  const idx = state.discardPile.findIndex((c) => c.instanceId === inst.instanceId);
+  if (idx >= 0) state.discardPile.splice(idx, 1);
+  state.exhaustPile.push(inst);
+  onExhaust(state, rng);
+  routeExhaustedCard(state, inst, rng);
 }
 
 function finishDiscardBatch(state: CombatState, rng: Rng): void {
@@ -1440,7 +1447,7 @@ function enemyActs(state: CombatState, enemy: CombatEnemy): void {
       pushLog(state, `${enemy.name} healed ${intent.amount}.`);
       break;
     case 'summon': {
-      if (enemy.summoned || livingCount(state) >= MAX_ENEMIES) {
+      if ((!enemy.traits?.repeatSummon && enemy.summoned) || livingCount(state) >= MAX_ENEMIES) {
         const fallback = Math.max(6, num(intent.amount));
         const dmg = scaleAttackDamage(
           fallback + num(enemy.strength),
@@ -1602,6 +1609,7 @@ export function closePlayerTurn(state: CombatState, rng: Rng): CombatState {
   }
   autoPickZeroCost(next, rng);
   next.freePlayIds = [];
+  next.freeNextKind = null;
   next.pendingFreePick = 0;
   next.tempStrength = 0;
   triggerCharges(next, rng);

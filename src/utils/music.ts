@@ -26,11 +26,16 @@ export type MusicTrack =
   | 'spireAct1'
   | 'spireAct2'
   | 'spireAct3'
-  | 'spireBoss'
+  | 'spireBoss1'
+  | 'spireBoss2'
+  | 'spireBoss3'
   | 'spireShop'
+  | 'spireEvent'
+  | 'spirePokecenter'
   | 'spireHallway1'
   | 'spireHallway2'
-  | 'spireHallway3';
+  | 'spireElite1'
+  | 'spireElite2';
 
 const TRACKS: Record<MusicTrack, string> = {
   title: asset('sounds/title_new.mp3'),
@@ -57,11 +62,16 @@ const TRACKS: Record<MusicTrack, string> = {
   spireAct1: asset('sounds/pokespire/pokespire_act1_initial_music.mp3'),
   spireAct2: asset('sounds/pokespire/pokespire_act2.mp3'),
   spireAct3: asset('sounds/pokespire/pokespire_act3.mp3'),
-  spireBoss: asset('sounds/pokespire/actboss.mp3'),
-  spireShop: asset('sounds/pokespire/pokespire_shop_and_events.mp3'),
+  spireBoss1: asset('sounds/pokespire/act1boss.mp3'),
+  spireBoss2: asset('sounds/pokespire/act2boss.mp3'),
+  spireBoss3: asset('sounds/pokespire/act3boss.mp3'),
+  spireShop: asset('sounds/pokespire/pokespire_shop.mp3'),
+  spireEvent: asset('sounds/pokespire/pokespire_event.mp3'),
+  spirePokecenter: asset('sounds/pokespire/pokespire_pokecenter.mp3'),
   spireHallway1: asset('sounds/pokespire/hallway_fight_1.mp3'),
   spireHallway2: asset('sounds/pokespire/hallway_fight_2.mp3'),
-  spireHallway3: asset('sounds/pokespire/hallway_fight_3.mp3'),
+  spireElite1: asset('sounds/pokespire/pokespire_elite_1.mp3'),
+  spireElite2: asset('sounds/pokespire/pokespire_elite_2.mp3'),
 };
 
 /**

@@ -102,6 +102,7 @@ export interface CardDef {
   character?: CharacterId;
   effects: EffectOp[];
   exhaust?: boolean;
+  exhaustOnDiscard?: boolean;
   token?: boolean;
   xCost?: boolean;
   discardEnergy?: number;
@@ -112,6 +113,7 @@ export interface CardDef {
       CardDef,
       | 'cost'
       | 'exhaust'
+      | 'exhaustOnDiscard'
       | 'description'
       | 'effects'
       | 'kind'
@@ -198,6 +200,7 @@ export interface EnemyTraits {
   phaseIntents?: EnemyIntentPattern[];
   phaseSummonId?: string;
   reviveOnce?: number;
+  repeatSummon?: boolean;
 }
 
 export interface EnemyDef {

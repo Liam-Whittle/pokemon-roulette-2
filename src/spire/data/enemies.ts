@@ -646,6 +646,7 @@ const ALL: EnemyDef[] = [
       { kind: 'status', amount: 0, status: 'toxic', statusStacks: 3 },
       { kind: 'attack', amount: 18 },
     ],
+    traits: { repeatSummon: true },
   }),
   enemy({
     id: 'raikou',

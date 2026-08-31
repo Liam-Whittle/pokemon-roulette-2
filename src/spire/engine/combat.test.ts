@@ -1195,6 +1195,18 @@ describe('spire combat', () => {
     const before = state.playerBlock;
     state = discardFromHand(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, rng);
     expect(state.playerBlock).toBe(before + 8);
+    expect(state.discardPile.some((c) => c.defId === 'synthesis')).toBe(true);
+  });
+
+  it('synthesis discard block scales with dexterity in live text', () => {
+    const { state } = start(
+      ['synthesis', 'vine-whip', 'wrap', 'wrap', 'wrap', 'wrap'],
+      'pidgey',
+    );
+    const synth = seat(state, 'synthesis').hand[0]!;
+    expect(liveCardDescription(synth, state)).toBe('Gain 5 Block. If this is discarded, gain 8 Block.');
+    const buffed = { ...state, dexterity: 3 };
+    expect(liveCardDescription(synth, buffed)).toBe('Gain 8 Block. If this is discarded, gain 11 Block.');
   });
 
   it('synthesis leftover at end of turn does not grant discard block', () => {
@@ -1375,6 +1387,7 @@ describe('spire combat', () => {
     const added = [...state.hand, ...state.discardPile].filter((c) => powerIds.has(c.defId));
     expect(added.length).toBe(1);
     expect(resolveCard(added[0]!).cost).toBe(0);
+    expect(state.exhaustPile.some((c) => c.defId === 'poke-flute')).toBe(true);
   });
 
   it('escape rope flags combat card rewards as upgraded', () => {
@@ -1792,5 +1805,69 @@ describe('spire relics', () => {
     expect(resolveCard({ instanceId: 'pf+', defId: 'poke-flute', upgraded: true }).cost).toBe(2);
     expect(resolveCard({ instanceId: 'at', defId: 'aqua-tail', upgraded: false }).cost).toBe(3);
     expect(resolveCard({ instanceId: 'at+', defId: 'aqua-tail', upgraded: true }).cost).toBe(2);
+  });
+
+  it('super potion plus still exhausts', () => {
+    const plus = resolveCard({ instanceId: 'sp+', defId: 'super-potion-card', upgraded: true });
+    expect(plus.exhaust).toBe(true);
+  });
+
+  it('leaf blade free skill does not carry into the next turn', () => {
+    let { state, rng } = start(
+      ['leaf-blade', 'leech-seed', 'vine-whip', 'wrap', 'wrap', 'wrap'],
+      'pidgey',
+    );
+    state = seat(state, 'leaf-blade', 'leech-seed');
+    state.energy = 3;
+    state = playCard(state, state.hand.find((c) => c.defId === 'leaf-blade')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.freeNextKind).toBe('skill');
+    state = endTurn(state, rng);
+    expect(state.freeNextKind).toBeNull();
+  });
+
+  it('celebi can summon another time sprout while one is already out', () => {
+    let { state, rng } = start(
+      ['protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze'],
+      'celebi',
+      [],
+      3,
+    );
+    expect(state.enemies[0]!.intent.kind).toBe('summon');
+    state = endTurn(state, rng);
+    expect(state.enemies.filter((e) => e.defId === 'time-sprout' && e.hp > 0)).toHaveLength(1);
+    const celebi = state.enemies.find((e) => e.defId === 'celebi')!;
+    celebi.intent = { kind: 'summon', amount: 14, summonId: 'time-sprout' };
+    state = endTurn(state, rng);
+    expect(state.enemies.filter((e) => e.defId === 'time-sprout' && e.hp > 0).length).toBeGreaterThanOrEqual(2);
+  });
+
+  it('growth discards exhaust the card and grant next-turn strength', () => {
+    const rng = mulberry32(55);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(['poison-powder', 'growth', 'vine-whip', 'wrap', 'wrap', 'wrap']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('pidgey')],
+      playerTypes: ['grass'],
+      rng,
+    });
+    state = seat(state, 'poison-powder', 'growth');
+    state.energy = 3;
+    state = playCard(state, state.hand.find((c) => c.defId === 'poison-powder')!.instanceId, state.enemies[0]!.id, rng);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'growth')!.instanceId, rng);
+    expect(state.pendingNextTurnStrength).toBe(2);
+    expect(state.exhaustPile.some((c) => c.defId === 'growth')).toBe(true);
+    expect(state.discardPile.some((c) => c.defId === 'growth')).toBe(false);
+  });
+
+  it('giga drain exhausts and toxic plus applies 15', () => {
+    expect(resolveCard({ instanceId: 'gd', defId: 'giga-drain', upgraded: false }).exhaust).toBe(true);
+    expect(resolveCard({ instanceId: 'gd+', defId: 'giga-drain', upgraded: true }).exhaust).toBe(true);
+    const toxic = resolveCard({ instanceId: 'tx+', defId: 'toxic-bloom', upgraded: true });
+    expect(toxic.description).toBe('Apply 6 Toxic. If the enemy is already Toxic, Apply 15 instead.');
+    const beam = resolveCard({ instanceId: 'sb+', defId: 'solar-beam', upgraded: true });
+    expect(beam.description).toBe('Deal 13 damage. If the enemy is Frail, deal 33 damage instead.');
   });
 });

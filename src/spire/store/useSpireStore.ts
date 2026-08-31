@@ -162,7 +162,7 @@ function startNodeCombat(run: SpireRun, encounterId: string, rng: ReturnType<typ
     permDexterity: run.permDexterity,
   });
   const node = run.currentNodeId && run.map ? getNode(run.map, run.currentNodeId) : undefined;
-  run.hallwayTheme = node?.kind === 'boss' ? null : ((pickIndex(rng, 3) + 1) as 1 | 2 | 3);
+  run.hallwayTheme = node?.kind === 'boss' ? null : ((pickIndex(rng, 2) + 1) as 1 | 2);
   run.view = 'combat';
 }
 

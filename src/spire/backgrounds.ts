@@ -1,9 +1,16 @@
 import { asset } from '../utils/asset';
 import type { SpireView } from './types';
 
+export function spireCurrentNodeKind(
+  currentNodeId: string | null,
+  mapNodes: { id: string; kind: string }[] | undefined,
+): string | null {
+  if (!currentNodeId || !mapNodes) return null;
+  return mapNodes.find((node) => node.id === currentNodeId)?.kind ?? null;
+}
+
 export function isSpireBossNode(currentNodeId: string | null, mapNodes: { id: string; kind: string }[] | undefined): boolean {
-  if (!currentNodeId || !mapNodes) return false;
-  return mapNodes.some((node) => node.id === currentNodeId && node.kind === 'boss');
+  return spireCurrentNodeKind(currentNodeId, mapNodes) === 'boss';
 }
 
 export function spireBackgroundUrl(view: SpireView | undefined, bossFight: boolean): string {

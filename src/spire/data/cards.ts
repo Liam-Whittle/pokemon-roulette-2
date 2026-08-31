@@ -1122,18 +1122,20 @@ const ALL: CardDef[] = [
   card({
     id: 'growth',
     name: 'Growth',
-    description: 'Gain 1 Strength. If this is discarded, gain 2 Strength next turn.',
+    description: 'Gain 1 Strength. If this is discarded, gain 2 Strength next turn and exhaust this card.',
     type: 'grass',
     kind: 'skill',
     cost: 1,
     rarity: 'common',
     character: 'bloom',
+    exhaustOnDiscard: true,
     effects: [{ op: 'strength', amount: 1, self: true }],
     onDiscard: [{ op: 'strengthNextTurn', amount: 2 }],
     upgrade: {
-      description: 'Gain 2 Strength. If this is discarded, gain 2 Strength next turn.',
-      effects: [{ op: 'strength', amount: 2, self: true }],
-      onDiscard: [{ op: 'strengthNextTurn', amount: 2 }],
+      description: 'Gain 1 Strength. If this is discarded, gain 3 Strength next turn and exhaust this card.',
+      exhaustOnDiscard: true,
+      effects: [{ op: 'strength', amount: 1, self: true }],
+      onDiscard: [{ op: 'strengthNextTurn', amount: 3 }],
     },
   }),
   card({
@@ -1179,19 +1181,21 @@ const ALL: CardDef[] = [
   card({
     id: 'giga-drain',
     name: 'Giga Drain',
-    description: 'Deal 28 damage. Gain 3 Max HP permanently.',
+    description: 'Deal 28 damage. Gain 3 Max HP permanently. Exhaust.',
     type: 'grass',
     kind: 'attack',
     cost: 3,
     rarity: 'uncommon',
     character: 'bloom',
+    exhaust: true,
     effects: [
       { op: 'damage', amount: 28 },
       { op: 'gainMaxHp', amount: 3 },
     ],
     upgrade: {
       cost: 3,
-      description: 'Deal 30 damage. Gain 3 Max HP permanently. If the enemy is attacking this turn, gain 5 Max HP.',
+      exhaust: true,
+      description: 'Deal 30 damage. Gain 3 Max HP permanently. If the enemy is attacking this turn, gain 5 Max HP. Exhaust.',
       effects: [
         { op: 'damage', amount: 30 },
         { op: 'gainMaxHp', amount: 3 },
@@ -1210,8 +1214,8 @@ const ALL: CardDef[] = [
     character: 'bloom',
     effects: [{ op: 'toxicIfAlready', apply: 6, already: 10 }],
     upgrade: {
-      description: 'Apply 6 Toxic. If the enemy is already Toxic, double their Toxic.',
-      effects: [{ op: 'toxicIfAlready', apply: 6, already: 'double' }],
+      description: 'Apply 6 Toxic. If the enemy is already Toxic, Apply 15 instead.',
+      effects: [{ op: 'toxicIfAlready', apply: 6, already: 15 }],
     },
   }),
   card({
@@ -1226,10 +1230,10 @@ const ALL: CardDef[] = [
     effects: [{ op: 'damage', amount: 13 }],
     upgrade: {
       cost: 0,
-      description: 'Deal 13 damage. If the enemy is Frail, deal 20 damage.',
+      description: 'Deal 13 damage. If the enemy is Frail, deal 33 damage instead.',
       effects: [
         { op: 'damage', amount: 13 },
-        { op: 'damageIfStatus', status: 'frail', amount: 7 },
+        { op: 'damageIfStatus', status: 'frail', amount: 20 },
       ],
     },
   }),
@@ -1287,7 +1291,7 @@ const ALL: CardDef[] = [
   card({
     id: 'leaf-blade',
     name: 'Leaf Blade',
-    description: 'Deal 8 damage. Discard a card. The next Skill you play costs 0.',
+    description: 'Deal 8 damage. Discard a card. The next Skill you play this turn costs 0.',
     type: 'grass',
     kind: 'attack',
     cost: 1,
@@ -1299,7 +1303,7 @@ const ALL: CardDef[] = [
       { op: 'freeNext', kind: 'skill' },
     ],
     upgrade: {
-      description: 'Deal 8 damage. Discard a card. The next Power you play costs 0.',
+      description: 'Deal 8 damage. Discard a card. The next Power you play this turn costs 0.',
       effects: [
         { op: 'damage', amount: 8 },
         { op: 'discard', amount: 1 },
@@ -1449,15 +1453,17 @@ const ALL: CardDef[] = [
   card({
     id: 'poke-flute',
     name: 'Poké Flute',
-    description: 'Add a random Power from your class to your hand. It costs 0.',
+    description: 'Add a random Power from your class to your hand. It costs 0. Exhaust.',
     type: 'colorless',
     kind: 'skill',
     cost: 3,
     rarity: 'common',
+    exhaust: true,
     effects: [{ op: 'addClassPower', costOverride: 0 }],
     upgrade: {
       cost: 2,
-      description: 'Add a random Power from your class to your hand. It costs 0.',
+      exhaust: true,
+      description: 'Add a random Power from your class to your hand. It costs 0. Exhaust.',
       effects: [{ op: 'addClassPower', costOverride: 0 }],
     },
   }),
@@ -1547,8 +1553,8 @@ const ALL: CardDef[] = [
       { op: 'heal', amount: 7 },
     ],
     upgrade: {
-      exhaust: false,
-      description: 'Gain 15 Block. Heal 7 HP.',
+      exhaust: true,
+      description: 'Gain 15 Block. Heal 7 HP. Exhaust.',
       effects: [
         { op: 'block', amount: 15 },
         { op: 'heal', amount: 7 },
@@ -1621,16 +1627,18 @@ function effectMagnitude(effect: EffectOp): number | undefined {
 }
 
 export function rewriteDescription(text: string, fromEffects: EffectOp[], toEffects: EffectOp[]): string {
-  let next = text;
+  let result = '';
+  let remaining = text;
   fromEffects.forEach((before, i) => {
-    const after = toEffects[i];
-    if (!after) return;
     const from = effectMagnitude(before);
-    const to = effectMagnitude(after);
-    if (from == null || to == null || from === to) return;
-    next = next.replace(new RegExp(`\\b${from}\\b`), String(to));
+    const to = effectMagnitude(toEffects[i] ?? before);
+    if (from == null || to == null) return;
+    const match = remaining.match(new RegExp(`\\b${from}\\b`));
+    if (!match || match.index == null) return;
+    result += remaining.slice(0, match.index) + String(to);
+    remaining = remaining.slice(match.index + String(from).length);
   });
-  return next;
+  return result + remaining;
 }
 
 export function resolveCard(inst: CardInstance): CardDef {
