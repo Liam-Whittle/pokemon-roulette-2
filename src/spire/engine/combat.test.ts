@@ -3,9 +3,11 @@ import { classPowerDefs, resolveCard } from '../data/cards';
 import { getEnemyDef } from '../data/enemies';
 import {
   applyPotion,
+  applyEnemyIntentRest,
   canPlayCard,
   chargePotency,
   closePlayerTurn,
+  completeEnemyRound,
   combatOutcome,
   confirmChoiceBand,
   createCombat,
@@ -1792,6 +1794,25 @@ describe('spire relics', () => {
     state.enemies[0]!.intent = { kind: 'block', amount: 5 };
     state = endTurn(state, rng);
     expect(state.enemies[0]!.block).toBe(5);
+  });
+
+  it('keeps healed hp after a heal intent through the next player turn', () => {
+    let { state, rng } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'pidgey',
+      [],
+      3,
+    );
+    const enemy = state.enemies[0]!;
+    const missing = 20;
+    enemy.hp = enemy.maxHp - missing;
+    enemy.intent = { kind: 'heal', amount: 12 };
+    const id = enemy.id;
+    state = closePlayerTurn(state, rng);
+    state = applyEnemyIntentRest(state, id);
+    expect(state.enemies[0]!.hp).toBe(enemy.maxHp - 8);
+    state = completeEnemyRound(state, rng);
+    expect(state.enemies[0]!.hp).toBe(enemy.maxHp - 8);
   });
 
   it('forest curse plus does not exhaust', () => {

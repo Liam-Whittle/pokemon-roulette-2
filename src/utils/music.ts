@@ -34,6 +34,7 @@ export type MusicTrack =
   | 'spirePokecenter'
   | 'spireHallway1'
   | 'spireHallway2'
+  | 'spireHallway3'
   | 'spireElite1'
   | 'spireElite2';
 
@@ -70,6 +71,7 @@ const TRACKS: Record<MusicTrack, string> = {
   spirePokecenter: asset('sounds/pokespire/pokespire_pokecenter.mp3'),
   spireHallway1: asset('sounds/pokespire/hallway_fight_1.mp3'),
   spireHallway2: asset('sounds/pokespire/hallway_fight_2.mp3'),
+  spireHallway3: asset('sounds/pokespire/hallway_fight_3.mp3'),
   spireElite1: asset('sounds/pokespire/pokespire_elite_1.mp3'),
   spireElite2: asset('sounds/pokespire/pokespire_elite_2.mp3'),
 };

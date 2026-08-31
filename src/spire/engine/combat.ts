@@ -1442,10 +1442,13 @@ function enemyActs(state: CombatState, enemy: CombatEnemy): void {
         pushLog(state, `${enemy.name} applied ${intent.status}.`);
       }
       break;
-    case 'heal':
-      enemy.hp = Math.min(enemy.maxHp, enemy.hp + intent.amount);
-      pushLog(state, `${enemy.name} healed ${intent.amount}.`);
+    case 'heal': {
+      const amount = num(intent.amount);
+      const nextHp = Math.min(num(enemy.maxHp), num(enemy.hp) + amount);
+      enemy.hp = nextHp;
+      pushLog(state, `${enemy.name} healed ${amount}.`);
       break;
+    }
     case 'summon': {
       if ((!enemy.traits?.repeatSummon && enemy.summoned) || livingCount(state) >= MAX_ENEMIES) {
         const fallback = Math.max(6, num(intent.amount));
