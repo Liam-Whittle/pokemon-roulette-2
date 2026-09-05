@@ -332,13 +332,6 @@ function synthBlock() {
   setTimeout(() => playTone(1680, 0.04, 'sine', 0.05), 12);
 }
 
-/** pret/pokeemerald `SE_HARDEN` — rising metallic squares. */
-function synthHarden() {
-  playTone(392, 0.05, 'square', 0.09);
-  setTimeout(() => playTone(523, 0.06, 'square', 0.1), 40);
-  setTimeout(() => playTone(659, 0.1, 'square', 0.09), 85);
-}
-
 /** pret/pokeemerald `SE_M_DOUBLE_TEAM` — quick shimmering copies. */
 function synthDoubleTeam() {
   playTone(880, 0.04, 'square', 0.08);
