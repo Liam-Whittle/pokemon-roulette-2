@@ -1,10 +1,30 @@
-import { allObtainableRelics, findRelicDef, pickupGoldFor } from '../data/relics';
-import { getCardDef } from '../data/cards';
-import { POTION_IDS, getPotionDef } from '../data/potions';
-import { addPotion, makeCard, rollCardDefId, rollCardOffer, rollRelicId } from './rewards';
+import { getEventDef } from '../data/events';
+import { allObtainableRelics, findRelicDef } from '../data/relics';
+import { POTION_IDS } from '../data/potions';
+import { grantCard, grantPotion, grantRelic } from './acquire';
+import { makeCard, rollCardDefId, rollCardOffer, rollRelicId } from './rewards';
 import { chance, pickOne } from './rng';
-import type { EventResult, LootRevealItem, SpireRun } from '../types';
+import type { EventResult, SpireRun } from '../types';
 import type { Rng } from './rng';
+
+function resultGrantsRareCard(result: EventResult): boolean {
+  if (result.type === 'card') return result.rarity === 'rare';
+  if (result.type === 'chooseCards') return result.rarity === 'rare';
+  if (result.type === 'combo') return result.results.some(resultGrantsRareCard);
+  if (result.type === 'chance') {
+    return resultGrantsRareCard(result.success) || resultGrantsRareCard(result.fail);
+  }
+  return false;
+}
+
+export function eventGrantsRareCard(eventId: string): boolean {
+  return getEventDef(eventId).choices.some((choice) => resultGrantsRareCard(choice.result));
+}
+
+export function pickEventId(ids: string[], rng: Rng, allowRareCardEvents = true): string {
+  const pool = allowRareCardEvents ? ids : ids.filter((id) => !eventGrantsRareCard(id));
+  return pickOne(rng, pool.length > 0 ? pool : ids);
+}
 
 function seqOf(run: SpireRun): { n: number } {
   return { n: run.instanceSeq };
@@ -14,24 +34,8 @@ function commitSeq(run: SpireRun, seq: { n: number }): void {
   run.instanceSeq = seq.n;
 }
 
-function giveRelic(run: SpireRun, id: string): void {
-  if (run.relics.includes(id)) return;
-  run.relics.push(id);
-  run.gold += pickupGoldFor(id);
-}
-
 export function tradeableRelicIds(run: SpireRun): string[] {
   return run.relics.filter((id) => !findRelicDef(id)?.starter);
-}
-
-function pushLoot(run: SpireRun, item: LootRevealItem): void {
-  if (run.eventFollowup?.kind === 'lootReveal') {
-    run.eventFollowup.items.push(item);
-    return;
-  }
-  if (!run.eventFollowup) {
-    run.eventFollowup = { kind: 'lootReveal', items: [item] };
-  }
 }
 
 export function finishEvent(run: SpireRun): void {
@@ -58,21 +62,14 @@ export function applyEventResult(run: SpireRun, result: EventResult, rng: Rng): 
     }
     case 'relic': {
       const id = rollRelicId(rng, run.relics);
-      if (id) {
-        giveRelic(run, id);
-        const def = findRelicDef(id);
-        if (def) pushLoot(run, { type: 'relic', id, name: def.name, description: def.description });
-      }
+      if (id) grantRelic(run, id);
       break;
     }
     case 'card': {
       if (!run.characterId) break;
       const seq = seqOf(run);
-      const defId = rollCardDefId(run.characterId, rng, result.rarity);
-      run.deck.push(makeCard(defId, seq));
+      grantCard(run, makeCard(rollCardDefId(run.characterId, rng, result.rarity), seq));
       commitSeq(run, seq);
-      const def = getCardDef(defId);
-      pushLoot(run, { type: 'card', id: defId, name: def.name, description: def.description });
       break;
     }
     case 'removeRandom': {
@@ -91,10 +88,7 @@ export function applyEventResult(run: SpireRun, result: EventResult, rng: Rng): 
       break;
     }
     case 'potion': {
-      const potionId = pickOne(rng, POTION_IDS);
-      run.potions = addPotion(run.potions, potionId);
-      const def = getPotionDef(potionId);
-      pushLoot(run, { type: 'potion', id: potionId, name: def.name, description: def.description });
+      grantPotion(run, pickOne(rng, POTION_IDS));
       break;
     }
     case 'combo':
@@ -103,7 +97,7 @@ export function applyEventResult(run: SpireRun, result: EventResult, rng: Rng): 
     case 'chance': {
       const ok = chance(rng, result.chance ?? 0.5);
       applyEventResult(run, ok ? result.success : result.fail, rng);
-      if (run.eventFollowup?.kind === 'lootReveal') {
+      if (run.pendingAcquire?.length) {
         break;
       }
       if (!run.eventFollowup || run.eventFollowup.kind === 'message') {
@@ -155,7 +149,7 @@ export function resolveEventTrade(run: SpireRun, givingId: string, rng: Rng): vo
   const nextId = pool.length > 0 ? pickOne(rng, pool) : undefined;
   const givenName = findRelicDef(givingId)?.name ?? 'a relic';
   run.relics = run.relics.filter((id) => id !== givingId);
-  if (nextId) giveRelic(run, nextId);
+  if (nextId) grantRelic(run, nextId);
   const gainedName = nextId ? (findRelicDef(nextId)?.name ?? 'a relic') : null;
   run.eventFollowup = {
     kind: 'message',

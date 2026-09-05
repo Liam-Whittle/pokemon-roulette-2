@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { getCardDef } from '../data/cards';
 import { EVENTS } from '../data/events';
-import { applyEventResult, resolveEventTrade } from './events';
+import { applyEventResult, eventGrantsRareCard, pickEventId, resolveEventTrade } from './events';
 import { rollCardOffer } from './rewards';
 import { mulberry32 } from './rng';
 import type { SpireRun } from '../types';
@@ -37,6 +37,8 @@ function stubRun(over: Partial<SpireRun> = {}): SpireRun {
     smithUsed: false,
     smithedCardId: null,
     restHealUsed: false,
+    restDexUsed: false,
+    restStrUsed: false,
     hallwayTheme: null,
     permStrength: 0,
     permDexterity: 0,
@@ -47,13 +49,15 @@ function stubRun(over: Partial<SpireRun> = {}): SpireRun {
     blessingFollowup: null,
     lastMonsterEncounterId: null,
     lastEliteEncounterId: null,
+    pendingAcquire: null,
+    actRareTaken: false,
     ...over,
   };
 }
 
 describe('spire events', () => {
   it('drops the Leave choice from Mysterious Shrine', () => {
-    expect(EVENTS['mysterious-shrine']!.choices.map((c) => c.label)).toEqual(['Pray', 'Take the relic']);
+    expect(EVENTS['mysterious-shrine']!.choices.map((c) => c.label)).toEqual(['Pray', 'Take the offering']);
   });
 
   it('sneak by succeeds for 50 gold when the roll is low', () => {
@@ -119,13 +123,25 @@ describe('spire events', () => {
     expect(run.eventFollowup?.kind).toBe('message');
   });
 
-  it('taking a relic from an event reveals the loot before the map', () => {
+  it('taking a relic from an event queues an acquire reveal', () => {
     const run = stubRun({ relics: ['charcoal'] });
     applyEventResult(run, { type: 'relic' }, mulberry32(4));
-    expect(run.eventFollowup?.kind).toBe('lootReveal');
-    if (run.eventFollowup?.kind !== 'lootReveal') return;
-    expect(run.eventFollowup.items[0]?.type).toBe('relic');
+    expect(run.eventFollowup).toBeNull();
+    expect(run.pendingAcquire?.[0]?.type).toBe('relic');
     expect(run.relics.length).toBeGreaterThan(1);
+  });
+
+  it('hides rare-card events after the act rare has been taken', () => {
+    expect(eventGrantsRareCard('cursed-rod')).toBe(true);
+    expect(eventGrantsRareCard('mysterious-shrine')).toBe(false);
+    const pool = ['mysterious-shrine', 'cursed-rod', 'abandoned-mart'];
+    for (let seed = 1; seed < 40; seed += 1) {
+      expect(pickEventId(pool, mulberry32(seed), false)).not.toBe('cursed-rod');
+    }
+    const run = stubRun();
+    applyEventResult(run, EVENTS['cursed-rod']!.choices[0]!.result, mulberry32(6));
+    expect(run.actRareTaken).toBe(true);
+    expect(run.deck.some((c) => getCardDef(c.defId).rarity === 'rare')).toBe(true);
   });
 
   it('rollCardOffer can fill a 10-common safari pack', () => {

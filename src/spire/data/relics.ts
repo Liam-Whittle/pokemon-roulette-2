@@ -91,9 +91,9 @@ const ALL: RelicDef[] = [
   {
     id: 'kings-rock',
     name: "King's Rock",
-    description: 'Whenever you play 2 Attacks in a turn, gain 4 Block.',
+    description: 'Whenever you play 2 Attacks in a turn, gain 2 Block.',
     rarity: 'uncommon',
-    hooks: [{ when: 'everyNAttacks', n: 2, effects: [{ op: 'block', amount: 4 }] }],
+    hooks: [{ when: 'everyNAttacks', n: 2, effects: [{ op: 'block', amount: 2 }] }],
   },
   {
     id: 'scope-lens',
@@ -126,8 +126,8 @@ const ALL: RelicDef[] = [
         when: 'onPlay',
         kind: 'attack',
         effects: [
-          { op: 'damage', amount: 4 },
           { op: 'loseHp', amount: 1 },
+          { op: 'damage', amount: 4 },
         ],
       },
     ],
@@ -166,14 +166,14 @@ const ALL: RelicDef[] = [
   {
     id: 'eviolite',
     name: 'Eviolite',
-    description: 'At Pokémon Centers, you may gain 1 permanent Dexterity (up to 3 times).',
+    description: 'At Pokémon Centers, you may gain 1 permanent Dexterity once per visit (up to 3 times).',
     rarity: 'rare',
     hooks: [{ when: 'restPermDex', maxUses: 3 }],
   },
   {
     id: 'lucarionite',
     name: 'Mega Stone',
-    description: 'At Pokémon Centers, you may gain 1 permanent Strength (up to 3 times).',
+    description: 'At Pokémon Centers, you may gain 1 permanent Strength once per visit (up to 3 times).',
     rarity: 'rare',
     hooks: [{ when: 'restPermStr', maxUses: 3 }],
   },

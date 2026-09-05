@@ -41,6 +41,10 @@ function living(state: CombatState): CombatEnemy[] {
   return state.enemies.filter((e) => num(e.hp) > 0);
 }
 
+export function combatPunishesPowers(state: CombatState): boolean {
+  return living(state).some((e) => num(e.traits?.punishOnPower) > 0);
+}
+
 export interface EnemyActionPreview {
   enemyId: string;
   name: string;
@@ -104,8 +108,11 @@ function smokeReduce(state: CombatState, enemy: CombatEnemy, dmg: number): numbe
   return Math.max(0, Math.floor(dmg * (1 - smoke / 100)));
 }
 
-export function incomingAttackDamage(state: CombatState, enemy: CombatEnemy): number {
-  const intent = enemy.intent;
+export function incomingAttackDamage(
+  state: CombatState,
+  enemy: CombatEnemy,
+  intent: EnemyIntentPattern | undefined = enemy.intent,
+): number {
   if (!intent || !isStrikeIntent(intent.kind)) return 0;
   const base = num(intent.amount) + num(enemy.strength);
   const scaled = scaleAttackDamage(base, num(bagOf(enemy).weak) > 0, num(state.statuses?.vulnerable) > 0);
@@ -116,17 +123,22 @@ export function incomingAttackDamage(state: CombatState, enemy: CombatEnemy): nu
   return smokeReduce(state, enemy, reduced);
 }
 
-export function incomingBlockGain(enemy: CombatEnemy): number {
-  const intent = enemy.intent;
+export function incomingBlockGain(
+  enemy: CombatEnemy,
+  intent: EnemyIntentPattern | undefined = enemy.intent,
+): number {
   if (!intent || intent.kind !== 'block') return 0;
   return scaleBlockGain(intent.amount);
 }
 
-export function displayedIntentAmount(state: CombatState, enemy: CombatEnemy): number {
-  const intent = enemy.intent;
+export function displayedIntentAmount(
+  state: CombatState,
+  enemy: CombatEnemy,
+  intent: EnemyIntentPattern | undefined = enemy.intent,
+): number {
   if (!intent) return 0;
-  if (isStrikeIntent(intent.kind)) return incomingAttackDamage(state, enemy);
-  if (intent.kind === 'block') return incomingBlockGain(enemy);
+  if (isStrikeIntent(intent.kind)) return incomingAttackDamage(state, enemy, intent);
+  if (intent.kind === 'block') return incomingBlockGain(enemy, intent);
   return num(intent.amount);
 }
 
@@ -155,16 +167,25 @@ export function previewPlayerDeal(
   enemy: CombatEnemy | undefined,
   sourceType: string,
   kind?: string,
-  extras?: { cardId?: string; cost?: number; perOtherZeroCost?: number },
+  extras?: { cardId?: string; cost?: number; perOtherZeroCost?: number; ignoreStrength?: boolean },
 ): number {
-  const ignoreStrength = extras?.cardId === 'petal';
+  const ignoreStrength = extras?.ignoreStrength || extras?.cardId === 'petal' || extras?.cardId === 'frenzy-plant';
   let dmg = num(rawAmount) + (ignoreStrength ? 0 : num(state.strength) + num(state.tempStrength));
+  if (
+    kind === 'attack' &&
+    num(state.powers?.overgrow) > 0 &&
+    num(state.playerHp) * 2 < num(state.playerMaxHp)
+  ) {
+    dmg += num(state.powers.overgrow);
+  }
   if (extras?.cardId === 'aqua-jet') dmg += num(state.powers?.['aqua-jet']);
   if (extras?.cardId === 'petal') {
     dmg += num(state.powers?.spore);
     if (enemy && num(bagOf(enemy).toxic) > 0) dmg += num(state.powers?.sporeToxic);
   }
-  if (extras?.cost === 0) dmg += num(state.powers?.zeroCostDamage);
+  if (extras?.cost === 0) {
+    dmg += num(state.powers?.zeroCostDamage) + num(state.powers?.zeroCostDamageThisTurn);
+  }
   if (extras?.perOtherZeroCost) dmg += extras.perOtherZeroCost * num(state.zeroCostPlayed);
   dmg += relicBonusIfStatus(state, enemy, sourceType, kind);
   dmg = scaleAttackDamage(dmg, num(state.statuses?.weak) > 0, enemy ? num(bagOf(enemy).vulnerable) > 0 : false);
@@ -226,6 +247,7 @@ export function energyCostToPlay(state: CombatState, inst: CardInstance, def = r
   const free = (state.freePlayIds ?? []).includes(inst.instanceId);
   const kindFree = state.freeNextKind != null && state.freeNextKind === def.kind;
   if (free || kindFree) return 0;
+  if (def.freeIfDiscardedThisTurn && num(state.discardedThisTurn) > 0) return 0;
   if (def.xCost) return num(state.energy);
   return def.cost;
 }
@@ -236,10 +258,56 @@ export function liveCardDescription(inst: CardInstance, state: CombatState, enem
     const petals = (state.exhaustPile ?? []).filter((card) => card.defId === 'petal').length;
     const per = previewPlayerDeal(state, 5, enemy, 'grass', 'attack', { cardId: 'petal', cost: 0 });
     const total = petals * per;
-    if (inst.upgraded) {
-      return `Play ${petals} Petal${petals === 1 ? '' : 's'} on ALL enemies (${total} damage each). Gain ${petals} Block.`;
-    }
     return `Play ${petals} Petal${petals === 1 ? '' : 's'} on the enemy (${total} damage).`;
+  }
+  if (def.id === 'baneful-bunker') {
+    const toxic = enemy ? num(bagOf(enemy).toxic) : 0;
+    return `Gain ${previewPlayerBlock(state, toxic)} Block equal to the enemy's Toxic. Exhaust.`;
+  }
+  if (def.id === 'seed-bomb') {
+    const hit = def.effects.find((effect) => effect.op === 'damage' && effect.plusBlockIfStatus);
+    const base = hit && hit.op === 'damage' ? hit.amount : 7;
+    const dealt = previewPlayerDeal(state, base, enemy, def.type, def.kind, {
+      cardId: def.id,
+      cost: def.cost,
+    });
+    const toxic = def.effects.some((effect) => effect.op === 'statusIfStatus');
+    const frail = enemy && num(bagOf(enemy).frail) > 0;
+    const bonus = frail
+      ? previewPlayerDeal(state, num(enemy.block), enemy, def.type, def.kind, {
+          cardId: def.id,
+          cost: def.cost,
+        })
+      : null;
+    if (bonus == null) {
+      return toxic
+        ? `Deal ${dealt} damage. If the enemy is Frail, deal damage equal to their Block and apply 3 Toxic.`
+        : `Deal ${dealt} damage. If the enemy is Frail, deal damage equal to their Block.`;
+    }
+    return toxic
+      ? `Deal ${dealt} damage. If the enemy is Frail, deal ${bonus} damage equal to their Block and apply 3 Toxic.`
+      : `Deal ${dealt} damage. If the enemy is Frail, deal ${bonus} damage equal to their Block.`;
+  }
+  if (def.id === 'harvest') {
+    const seeds = [...(state.hand ?? []), ...(state.discardPile ?? [])].filter((card) => card.defId === 'seed').length;
+    const extra = seeds * 2;
+    return `Play ${seeds} Seed${seeds === 1 ? '' : 's'} in your hand and discard pile, then Exhaust them. Heal ${extra} extra. Exhaust.`;
+  }
+  if (def.id === 'power-whip') {
+    const hit = def.effects.find((effect) => effect.op === 'damage' && effect.perGardenToken);
+    const base = hit && hit.op === 'damage' ? hit.amount : 10;
+    const per = hit && hit.op === 'damage' ? (hit.perGardenToken ?? 4) : 4;
+    const tokens = gardenTokensInHand(state);
+    const total = previewPlayerDeal(state, base + per * tokens, enemy, def.type, def.kind, {
+      cardId: def.id,
+      cost: def.cost,
+    });
+    return `Deal ${total} damage. Deal ${per} more for each Seed and Petal in your hand (${tokens}).`;
+  }
+  if (def.id === 'bloom-doom') {
+    const times = Math.max(0, num(state.energy) + (def.effects.some((effect) => effect.op === 'status' && effect.plus) ? 1 : 0));
+    const frail = num(state.energy) >= 3;
+    return `Apply 3 Toxic ${times} time${times === 1 ? '' : 's'}.${frail ? ' Apply 2 Frail.' : ''} Exhaust.`;
   }
   const previewEnemy = enemy
     ? { ...enemy, statuses: { ...(enemy.statuses ?? {}) } }
@@ -264,7 +332,7 @@ export function liveCardDescription(inst: CardInstance, state: CombatState, enem
         }),
       };
     }
-    if (effect.op === 'block') {
+    if (effect.op === 'block' || effect.op === 'blockTimes') {
       return { ...effect, amount: previewPlayerBlock(state, effect.amount) };
     }
     return effect;
@@ -281,9 +349,11 @@ export function previewEnemyActions(state: CombatState): EnemyActionPreview[] {
     const amount = num(enemy.intent?.amount);
     let playerDamage = 0;
     let blocked = 0;
-    if (isStrikeIntent(kind)) {
-      const hits = kind === 'multiAttack' ? Math.max(1, num(enemy.intent?.times, 1)) : 1;
-      const dmg = incomingAttackDamage(state, enemy);
+    const intents = [enemy.intent, ...(enemy.extraIntents ?? [])];
+    for (const intent of intents) {
+      if (!isStrikeIntent(intent?.kind)) continue;
+      const hits = intent.kind === 'multiAttack' ? Math.max(1, num(intent.times, 1)) : 1;
+      const dmg = incomingAttackDamage(state, enemy, intent);
       for (let i = 0; i < hits; i += 1) {
         if (state.preventAllDamage) {
           blocked += dmg;
@@ -313,7 +383,7 @@ function getEnemy(state: CombatState, id: string | null): CombatEnemy | undefine
 }
 
 function pushLog(state: CombatState, line: string): void {
-  state.log = [...state.log.slice(-18), line];
+  state.log = [...state.log.slice(-80), line];
 }
 
 function addStatus(
@@ -381,25 +451,45 @@ function dealToEnemy(
   rawAmount: number,
   sourceType: string,
   kind?: string,
-  extras?: { cardId?: string; cost?: number; perOtherZeroCost?: number },
+  extras?: {
+    cardId?: string;
+    cost?: number;
+    perOtherZeroCost?: number;
+    ignoreStrength?: boolean;
+    ignoreThorns?: boolean;
+    flat?: boolean;
+    logAs?: string;
+  },
 ): { dmg: number; hpLoss: number } {
-  const dmg = previewPlayerDeal(state, rawAmount, enemy, sourceType, kind, extras);
+  const dmg = extras?.flat
+    ? Math.max(0, Math.floor(num(rawAmount)))
+    : previewPlayerDeal(state, rawAmount, enemy, sourceType, kind, extras);
   if (dmg <= 0) return { dmg: 0, hpLoss: 0 };
   const hit = hitThroughBlock(num(enemy.block), dmg, num(bagOf(enemy).frail) > 0);
   enemy.block = hit.block;
   enemy.hp = Math.max(0, num(enemy.hp) - hit.hpLoss);
   const fxKind =
     extras?.cardId === 'petal' ? 'petal' : extras?.cardId === 'flare-blitz' ? 'flare' : 'hitEnemy';
-  pushFx(state, { kind: fxKind, targetId: enemy.id, amount: dmg, cardId: extras?.cardId });
-  pushLog(state, `${dmg} damage to ${enemy.name}.`);
+  pushFx(state, {
+    kind: fxKind,
+    targetId: enemy.id,
+    amount: dmg,
+    hp: enemy.hp,
+    block: enemy.block,
+    cardId: extras?.cardId,
+  });
+  pushLog(
+    state,
+    extras?.logAs ? `${extras.logAs}: ${dmg} damage to ${enemy.name}.` : `${dmg} damage to ${enemy.name}.`,
+  );
   if (hit.hpLoss > 0) {
     const curl = num(enemy.traits?.curlUp);
     if (curl > 0 && !enemy.curlUpUsed) {
       enemy.curlUpUsed = true;
-      enemy.block = num(enemy.block) + curl;
+      gainEnemyBlock(state, enemy, curl);
       pushLog(state, `${enemy.name} curled up and gained ${curl} Block.`);
     }
-    const thorns = num(enemy.traits?.thorns);
+    const thorns = extras?.ignoreThorns ? 0 : num(enemy.traits?.thorns);
     if (thorns > 0 && num(enemy.hp) > 0) {
       const reflectDmg = smokeReduce(state, enemy, thorns);
       const reflect = hitThroughBlock(num(state.playerBlock), reflectDmg, num(state.statuses?.frail) > 0);
@@ -413,12 +503,32 @@ function dealToEnemy(
   return { dmg, hpLoss: hit.hpLoss };
 }
 
-function pickIntent(intents: EnemyIntentPattern[], index: number): { intent: EnemyIntentPattern; next: number } {
+function pickIntent(
+  intents: EnemyIntentPattern[],
+  index: number,
+  skip: readonly EnemyIntentKind[] = [],
+): { intent: EnemyIntentPattern; next: number } {
   if (!intents.length) {
     return { intent: { kind: 'attack', amount: 6 }, next: 1 };
   }
-  const i = Math.abs(index) % intents.length;
-  return { intent: intents[i]!, next: i + 1 };
+  const n = intents.length;
+  let i = Math.abs(index) % n;
+  if (!skip.length) {
+    return { intent: intents[i]!, next: i + 1 };
+  }
+  const blocked = new Set(skip);
+  for (let step = 0; step < n; step += 1) {
+    const candidate = intents[i]!;
+    if (!blocked.has(candidate.kind)) {
+      return { intent: candidate, next: i + 1 };
+    }
+    i = (i + 1) % n;
+  }
+  return { intent: { kind: 'attack', amount: 6 }, next: (Math.abs(index) % n) + 1 };
+}
+
+function skipAllyBuff(state: CombatState, enemy: CombatEnemy): EnemyIntentKind[] {
+  return living(state).some((other) => other.id !== enemy.id) ? [] : ['buffAlly'];
 }
 
 function intentsOf(enemy: CombatEnemy): EnemyIntentPattern[] {
@@ -426,13 +536,76 @@ function intentsOf(enemy: CombatEnemy): EnemyIntentPattern[] {
   return ENEMIES[enemy.defId]?.intents ?? [];
 }
 
+function hashChance(key: string): boolean {
+  let h = 2166136261;
+  for (let i = 0; i < key.length; i += 1) {
+    h ^= key.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return (h >>> 0) % 2 === 0;
+}
+
+function kitStatus(enemy: CombatEnemy): { status: CombatStatus; stacks: number } | undefined {
+  for (const pattern of [...intentsOf(enemy), ...(enemy.traits?.phaseIntents ?? [])]) {
+    if (pattern.status && num(pattern.statusStacks) > 0) {
+      return { status: pattern.status, stacks: Math.min(2, num(pattern.statusStacks)) };
+    }
+  }
+  return undefined;
+}
+
+function typeStatus(types: string[]): { status: CombatStatus; stacks: number } {
+  if (types.includes('poison')) return { status: 'toxic', stacks: 2 };
+  if (types.includes('fire')) return { status: 'burn', stacks: 2 };
+  if (types.includes('ice') || types.includes('water')) return { status: 'frail', stacks: 1 };
+  if (types.includes('electric')) return { status: 'vulnerable', stacks: 1 };
+  if (types.includes('flying') || types.includes('bug')) return { status: 'weak', stacks: 1 };
+  return { status: 'vulnerable', stacks: 1 };
+}
+
+function linkedStatusIntent(enemy: CombatEnemy): EnemyIntentPattern {
+  const pick = kitStatus(enemy) ?? typeStatus(enemy.types);
+  return { kind: 'status', amount: 0, status: pick.status, statusStacks: pick.stacks };
+}
+
+function typicalStrikeAmount(enemy: CombatEnemy): number {
+  const strikes = intentsOf(enemy).filter((intent) => isStrikeIntent(intent.kind));
+  if (!strikes.length) return 6;
+  return Math.min(...strikes.map((intent) => num(intent.amount, 6)));
+}
+
+function linkedAttackIntent(enemy: CombatEnemy): EnemyIntentPattern {
+  return { kind: 'attack', amount: Math.max(1, Math.floor(typicalStrikeAmount(enemy) * 0.5)) };
+}
+
+function linkedExtras(enemy: CombatEnemy, intent: EnemyIntentPattern, turn: number): EnemyIntentPattern[] {
+  if (!hashChance(`${enemy.id}|${enemy.intentIndex}|${turn}|${intent.kind}`)) return [];
+  if (intent.kind === 'block') {
+    if (enemy.traits?.blockLinksAttack) return [linkedAttackIntent(enemy)];
+    return [linkedStatusIntent(enemy)];
+  }
+  if (intent.kind === 'heal') return [linkedAttackIntent(enemy)];
+  return [];
+}
+
+function assignIntent(enemy: CombatEnemy, intent: EnemyIntentPattern, nextIndex: number, turn: number): void {
+  enemy.intent = intent;
+  enemy.intentIndex = nextIndex;
+  enemy.extraIntents = linkedExtras(enemy, intent, turn);
+}
+
 function copyTraits(traits: EnemyTraits | undefined): EnemyTraits | undefined {
   return traits ? clone(traits) : undefined;
 }
 
-function makeCombatEnemy(def: EnemyDef, seq: number): CombatEnemy {
-  const { intent, next } = pickIntent(def.intents, 0);
-  return {
+function makeCombatEnemy(
+  def: EnemyDef,
+  seq: number,
+  turn = 1,
+  skip: readonly EnemyIntentKind[] = [],
+): CombatEnemy {
+  const { intent, next } = pickIntent(def.intents, 0, skip);
+  const enemy: CombatEnemy = {
     id: `enemy-${def.id}-${seq}`,
     defId: def.id,
     name: def.name,
@@ -443,14 +616,18 @@ function makeCombatEnemy(def: EnemyDef, seq: number): CombatEnemy {
     block: num(def.traits?.startBlock),
     strength: 0,
     intent,
+    extraIntents: [],
     intentIndex: next,
     statuses: {},
     traits: copyTraits(def.traits),
   };
+  assignIntent(enemy, intent, next, turn);
+  return enemy;
 }
 
 function spawnEnemies(defs: EnemyDef[]): CombatEnemy[] {
-  return defs.map((def, i) => makeCombatEnemy(def, i));
+  const skip = defs.length > 1 ? [] : (['buffAlly'] as const);
+  return defs.map((def, i) => makeCombatEnemy(def, i, 1, skip));
 }
 
 function livingCount(state: CombatState): number {
@@ -463,7 +640,8 @@ function spawnEnemy(state: CombatState, defId: string): CombatEnemy | null {
   if (!def) return null;
   const seq = num(state.spawnSeq);
   state.spawnSeq = seq + 1;
-  const spawned = makeCombatEnemy(def, seq);
+  const skip = livingCount(state) > 0 ? [] : (['buffAlly'] as const);
+  const spawned = makeCombatEnemy(def, seq, num(state.turn, 1), skip);
   state.enemies.push(spawned);
   pushLog(state, `${def.name} appeared!`);
   return spawned;
@@ -481,9 +659,8 @@ function checkPhase(state: CombatState, enemy: CombatEnemy): void {
   if (num(enemy.hp) > num(enemy.maxHp) * pct) return;
   enemy.phased = true;
   if (enemy.traits?.phaseIntents?.length) {
-    const { intent, next } = pickIntent(enemy.traits.phaseIntents, 0);
-    enemy.intent = intent;
-    enemy.intentIndex = next;
+    const { intent, next } = pickIntent(enemy.traits.phaseIntents, 0, skipAllyBuff(state, enemy));
+    assignIntent(enemy, intent, next, num(state.turn, 1));
   }
   if (enemy.traits?.phaseSummonId) spawnEnemy(state, enemy.traits.phaseSummonId);
   pushLog(state, `${enemy.name} entered a new phase!`);
@@ -501,17 +678,21 @@ function resolveDeaths(state: CombatState): void {
       continue;
     }
     enemy.deathResolved = true;
+    const cryDef = ENEMIES[enemy.defId];
     pushFx(state, {
       kind: 'faint',
       targetId: enemy.id,
-      speciesId: enemy.speciesId,
-      speciesName: enemy.name,
+      defId: enemy.defId,
+      speciesId: cryDef?.speciesId ?? enemy.speciesId,
+      speciesName: cryDef?.name ?? enemy.name,
     });
     const boom = num(enemy.traits?.explodeOnDeath);
-    if (boom > 0) {
+    const allyAlive = state.enemies.some((other) => other.id !== enemy.id && num(other.hp) > 0);
+    if (boom > 0 && allyAlive) {
       const boomDmg = smokeReduce(state, enemy, boom);
       const hit = hitThroughBlock(num(state.playerBlock), boomDmg, num(state.statuses?.frail) > 0);
       state.playerBlock = hit.block;
+      pushFx(state, { kind: 'hitPlayer', targetId: enemy.id, amount: hit.hpLoss || boomDmg });
       if (hit.hpLoss > 0) applyPlayerHpLoss(state, hit.hpLoss);
       pushLog(state, `${enemy.name} exploded for ${boomDmg}!`);
     }
@@ -524,7 +705,51 @@ function resolveDeaths(state: CombatState): void {
 }
 
 function gainBlock(state: CombatState, amount: number): void {
-  state.playerBlock = num(state.playerBlock) + previewPlayerBlock(state, amount);
+  const gained = previewPlayerBlock(state, amount);
+  if (gained <= 0) return;
+  state.playerBlock = num(state.playerBlock) + gained;
+  pushFx(state, { kind: 'blockGain', targetId: 'player', amount: gained });
+}
+
+function gainEnemyBlock(state: CombatState, enemy: CombatEnemy, amount: number): void {
+  const gained = scaleBlockGain(amount);
+  if (gained <= 0) return;
+  enemy.block = num(enemy.block) + gained;
+  pushFx(state, { kind: 'blockGain', targetId: enemy.id, amount: gained });
+  const spikes = num(state.powers?.toxicSpikes);
+  if (spikes > 0) {
+    enemy.statuses = addStatus(enemy.statuses, 'toxic', spikes);
+    pushFx(state, { kind: 'status', targetId: enemy.id, status: 'toxic', amount: spikes });
+    pushLog(state, `Toxic Spikes: ${enemy.name} gained ${spikes} toxic.`);
+  }
+}
+
+function gardenTokensInHand(state: CombatState): number {
+  return (state.hand ?? []).filter((card) => card.defId === 'seed' || card.defId === 'petal').length;
+}
+
+function applyEnemyStatus(
+  state: CombatState,
+  enemy: CombatEnemy,
+  status: CombatStatus,
+  stacks: number,
+): void {
+  enemy.statuses = addStatus(enemy.statuses, status, stacks);
+  pushFx(state, { kind: 'status', targetId: enemy.id, status, amount: stacks });
+  pushLog(state, `${enemy.name} gained ${stacks} ${status}.`);
+  if (status !== 'frail') return;
+  const toxic = num(state.powers?.effectSpore);
+  if (toxic > 0) {
+    enemy.statuses = addStatus(enemy.statuses, 'toxic', toxic);
+    pushFx(state, { kind: 'status', targetId: enemy.id, status: 'toxic', amount: toxic });
+    pushLog(state, `Effect Spore: ${enemy.name} gained ${toxic} toxic.`);
+  }
+  const weak = num(state.powers?.effectSporeWeak);
+  if (weak > 0) {
+    enemy.statuses = addStatus(enemy.statuses, 'weak', weak);
+    pushFx(state, { kind: 'status', targetId: enemy.id, status: 'weak', amount: weak });
+    pushLog(state, `Effect Spore: ${enemy.name} gained ${weak} weak.`);
+  }
 }
 
 function pickRandomLiving(state: CombatState, rng?: Rng): CombatEnemy | undefined {
@@ -599,6 +824,32 @@ function addPetals(state: CombatState, amount: number): void {
   for (let i = 0; i < num(amount); i += 1) addGainedCard(state, 'petal');
 }
 
+function addSeeds(state: CombatState, amount: number): void {
+  for (let i = 0; i < num(amount); i += 1) addGainedCard(state, 'seed');
+}
+
+function triggerRootNetwork(state: CombatState): void {
+  const toxic = num(state.powers?.rootNetwork);
+  if (toxic <= 0) return;
+  for (const enemy of living(state)) {
+    enemy.statuses = addStatus(enemy.statuses, 'toxic', toxic);
+    pushFx(state, { kind: 'status', targetId: enemy.id, status: 'toxic', amount: toxic });
+  }
+  const block = num(state.powers?.rootNetworkBlock);
+  if (block > 0) gainBlock(state, block);
+  pushLog(state, `Root Network: ${toxic} Toxic to ALL enemies.`);
+}
+
+function healFromCard(state: CombatState, amount: number): number {
+  const heal = Math.max(0, num(amount));
+  if (heal <= 0) return 0;
+  const before = num(state.playerHp);
+  state.playerHp = Math.min(num(state.playerMaxHp), before + heal);
+  const gained = num(state.playerHp) - before;
+  if (gained > 0) triggerRootNetwork(state);
+  return gained;
+}
+
 function offerZeroCostCards(state: CombatState, rng: Rng, mode: 'random' | 'choose'): void {
   const defs = zeroCostCardDefs();
   if (defs.length === 0) return;
@@ -639,22 +890,39 @@ function applyEffects(
           cost: ctx.cost,
           perOtherZeroCost: effect.perOtherZeroCost,
         };
-        const raw = effect.amount;
-        for (let t = 0; t < times; t += 1) {
-          for (const enemy of targets) {
-            if (!enemy || enemy.hp <= 0) continue;
+        if (
+          effect.ifAnyStatus &&
+          !living(state).some((foe) => num(bagOf(foe)[effect.ifAnyStatus!]) > 0)
+        ) {
+          break;
+        }
+        const raw = effect.amount + num(effect.perGardenToken) * gardenTokensInHand(state);
+        for (const enemy of targets) {
+          if (!enemy || enemy.hp <= 0) continue;
+          const blockSnap = num(enemy.block);
+          const bonusBlock = !!(
+            effect.plusBlockIfStatus && num(bagOf(enemy)[effect.plusBlockIfStatus]) > 0
+          );
+          for (let t = 0; t < times; t += 1) {
+            if (enemy.hp <= 0) break;
+            const hadBlock = num(enemy.block) > 0;
             const hit = dealToEnemy(state, enemy, raw, ctx.sourceType, ctx.kind, extras);
             dealt += hit.dmg;
-            if (effect.repeatIfUnblocked && hit.hpLoss > 0) {
-              dealt += dealToEnemy(state, enemy, raw, ctx.sourceType, ctx.kind, extras).dmg;
+            if (effect.repeatIfUnblocked && !hadBlock) {
+              const bonus = effect.unblockedBonus ?? raw;
+              dealt += dealToEnemy(state, enemy, bonus, ctx.sourceType, ctx.kind, extras).dmg;
             }
+          }
+          if (bonusBlock && blockSnap > 0 && enemy.hp > 0) {
+            dealt += dealToEnemy(state, enemy, blockSnap, ctx.sourceType, ctx.kind, extras).dmg;
           }
         }
         if (effect.blockEqualToDamage && dealt > 0) {
           state.playerBlock = num(state.playerBlock) + dealt;
+          pushFx(state, { kind: 'blockGain', targetId: 'player', amount: dealt });
         }
         if (effect.healEqualToDamage && dealt > 0) {
-          state.playerHp = Math.min(state.playerMaxHp, num(state.playerHp) + dealt);
+          healFromCard(state, dealt);
           pushLog(state, `Healed ${dealt} HP.`);
         }
         break;
@@ -667,7 +935,7 @@ function applyEffects(
             cost: ctx.cost,
           });
           if (effect.heal) {
-            state.playerHp = Math.min(state.playerMaxHp, num(state.playerHp) + effect.heal);
+            healFromCard(state, effect.heal);
             pushLog(state, `Healed ${effect.heal} HP.`);
           }
         }
@@ -689,17 +957,24 @@ function applyEffects(
         state.energy += effect.amount;
         break;
       case 'status': {
+        const times = effect.timesFromX ? Math.max(0, num(ctx.xValue) + num(effect.plus)) : 1;
+        const stacks = effect.stacks * Math.max(1, times);
+        if (effect.timesFromX && times <= 0) break;
         if (effect.self) {
-          state.statuses = addStatus(state.statuses, effect.status, effect.stacks);
+          state.statuses = addStatus(state.statuses, effect.status, stacks);
           break;
         }
         const targets = effect.all ? living(state) : [getEnemy(state, ctx.targetId)].filter(Boolean);
         for (const enemy of targets) {
           if (!enemy) continue;
-          enemy.statuses = addStatus(enemy.statuses, effect.status, effect.stacks);
-          pushFx(state, { kind: 'status', targetId: enemy.id, status: effect.status, amount: effect.stacks });
-          pushLog(state, `${enemy.name} gained ${effect.stacks} ${effect.status}.`);
+          applyEnemyStatus(state, enemy, effect.status, effect.timesFromX ? stacks : effect.stacks);
         }
+        break;
+      }
+      case 'statusIfX': {
+        if (num(ctx.xValue) < effect.min) break;
+        const enemy = getEnemy(state, ctx.targetId);
+        if (enemy) applyEnemyStatus(state, enemy, effect.status, effect.stacks);
         break;
       }
       case 'strength':
@@ -731,16 +1006,16 @@ function applyEffects(
         break;
       }
       case 'heal':
-        state.playerHp = Math.min(state.playerMaxHp, state.playerHp + effect.amount);
+        healFromCard(state, effect.amount);
         break;
       case 'healPercent': {
         const amount = Math.floor(num(state.playerMaxHp) * (effect.percent / 100));
-        state.playerHp = Math.min(state.playerMaxHp, num(state.playerHp) + amount);
+        healFromCard(state, amount);
         pushLog(state, `Healed ${amount} HP.`);
         break;
       }
       case 'healFull':
-        state.playerHp = num(state.playerMaxHp);
+        healFromCard(state, Math.max(0, num(state.playerMaxHp) - num(state.playerHp)));
         pushLog(state, 'Healed to full.');
         break;
       case 'blockTimes': {
@@ -837,6 +1112,53 @@ function applyEffects(
       case 'addPetal':
         addPetals(state, effect.amount);
         break;
+      case 'addSeed':
+        addSeeds(state, effect.amount);
+        break;
+      case 'statusIfStatus': {
+        const enemy = getEnemy(state, ctx.targetId);
+        if (enemy && num(bagOf(enemy)[effect.ifStatus]) > 0) {
+          applyEnemyStatus(state, enemy, effect.status, effect.stacks);
+        }
+        break;
+      }
+      case 'discardAny':
+        state.pendingOptionalDiscard = true;
+        state.optionalDiscardPicks = [];
+        state.optionalDiscardPer = [...(effect.thenPer ?? [])];
+        state.optionalDiscardFilter = effect.filter ?? null;
+        state.optionalDiscardExhaust = !!effect.exhaust;
+        state.optionalDiscardCardId = ctx.cardId ?? null;
+        pushLog(
+          state,
+          effect.exhaust
+            ? `Choose any number of ${effect.filter === 'seed' ? 'Seeds' : 'cards'} to Exhaust.`
+            : 'Choose any number of cards to discard.',
+        );
+        break;
+      case 'harvestSeeds': {
+        const fromHand = state.hand.filter((card) => card.defId === 'seed');
+        const fromDiscard = state.discardPile.filter((card) => card.defId === 'seed');
+        const seeds = [...fromHand, ...fromDiscard];
+        state.hand = state.hand.filter((card) => card.defId !== 'seed');
+        state.discardPile = state.discardPile.filter((card) => card.defId !== 'seed');
+        const seedDef = resolveCard({ instanceId: 'seed-play', defId: 'seed', upgraded: false });
+        for (const seed of seeds) {
+          applyEffects(state, seedDef.effects, rng, {
+            sourceType: seedDef.type,
+            targetId: ctx.targetId,
+            kind: seedDef.kind,
+            cardId: 'seed',
+            cost: 0,
+          });
+          state.exhaustPile.push(seed);
+          onExhaust(state, rng);
+          routeExhaustedCard(state, seed, rng);
+        }
+        if (seeds.length > 0 && effect.healPer > 0) healFromCard(state, effect.healPer * seeds.length);
+        if (seeds.length) pushLog(state, `Harvested ${seeds.length} Seed${seeds.length === 1 ? '' : 's'}.`);
+        break;
+      }
       case 'freeNext':
         state.freeNextKind = effect.kind;
         pushLog(state, `The next ${effect.kind} you play costs 0.`);
@@ -881,18 +1203,32 @@ function applyEffects(
       }
       case 'gainMaxHpIfAttacking': {
         const enemy = getEnemy(state, ctx.targetId);
-        if (enemy && isStrikeIntent(enemy.intent?.kind)) {
-          state.playerMaxHp = num(state.playerMaxHp) + effect.amount;
-          state.playerHp = Math.min(state.playerMaxHp, num(state.playerHp) + effect.amount);
-          pushLog(state, `Max HP increased by ${effect.amount}.`);
+        const attacking = !!(enemy && isStrikeIntent(enemy.intent?.kind));
+        const amount = attacking ? effect.amount : num(effect.otherwise);
+        if (amount > 0) {
+          state.playerMaxHp = num(state.playerMaxHp) + amount;
+          state.playerHp = Math.min(state.playerMaxHp, num(state.playerHp) + amount);
+          pushLog(state, `Max HP increased by ${amount}.`);
         }
+        break;
+      }
+      case 'blockEqualToStatus': {
+        const enemy = getEnemy(state, ctx.targetId);
+        const stacks = enemy ? num(bagOf(enemy)[effect.status]) : 0;
+        if (stacks > 0) gainBlock(state, stacks);
+        else pushLog(state, `No ${effect.status} to convert into Block.`);
         break;
       }
       case 'playExhaustedPetals': {
         const petals = state.exhaustPile.filter((c) => c.defId === 'petal');
         const petalDef = resolveCard({ instanceId: 'petal-play', defId: 'petal', upgraded: false });
-        const targets = effect.all ? living(state) : [getEnemy(state, ctx.targetId)].filter(Boolean);
+        const lockedId = effect.all ? null : (ctx.targetId ?? living(state)[0]?.id ?? null);
+        let played = 0;
         for (const _petal of petals) {
+          const targets = effect.all
+            ? living(state)
+            : [state.enemies.find((e) => e.id === lockedId && num(e.hp) > 0)].filter(Boolean);
+          if (!targets.length) break;
           for (const enemy of targets) {
             if (!enemy) continue;
             applyEffects(state, petalDef.effects, rng, {
@@ -904,8 +1240,9 @@ function applyEffects(
             });
           }
           if (effect.blockPerPetal) gainBlock(state, effect.blockPerPetal);
+          played += 1;
         }
-        if (petals.length) pushLog(state, `Blooming played ${petals.length} Petal${petals.length === 1 ? '' : 's'}.`);
+        if (played) pushLog(state, `Blooming played ${played} Petal${played === 1 ? '' : 's'}.`);
         break;
       }
       case 'strengthNextTurn':
@@ -926,6 +1263,7 @@ function followupCtx(state: CombatState): {
 }
 
 function resolveOnDiscard(state: CombatState, inst: CardInstance, rng: Rng): void {
+  state.discardedThisTurn = num(state.discardedThisTurn) + 1;
   const def = resolveCard(inst);
   if (def.onDiscard?.length) applyEffects(state, def.onDiscard, rng, followupCtx(state));
   if (!def.exhaustOnDiscard) return;
@@ -955,7 +1293,25 @@ function triggerFrenzyPlant(state: CombatState, rng: Rng): void {
   const foes = living(state);
   if (foes.length === 0) return;
   const enemy = foes[pickIndex(rng, foes.length)]!;
-  dealToEnemy(state, enemy, dmg, 'grass');
+  dealToEnemy(state, enemy, dmg, 'grass', undefined, {
+    cardId: 'frenzy-plant',
+    ignoreStrength: true,
+    ignoreThorns: true,
+  });
+}
+
+function triggerLifeOrb(state: CombatState): void {
+  applyPlayerHpLoss(state, 1);
+  pushLog(state, 'Life Orb saps 1 HP.');
+  pushFx(state, { kind: 'relicGlow', relicId: 'life-orb' });
+  const enemy = getEnemy(state, state.selectedEnemyId) ?? living(state)[0];
+  if (!enemy || enemy.hp <= 0) return;
+  dealToEnemy(state, enemy, 4, 'colorless', undefined, {
+    ignoreStrength: true,
+    ignoreThorns: true,
+    flat: true,
+    logAs: 'Life Orb',
+  });
 }
 
 function runRelicHooks(
@@ -983,6 +1339,10 @@ function runRelicHooks(
       if (!('effects' in hook)) continue;
       if (hook.when === 'onPlay' && hook.oncePerTurn) {
         state.relicsUsedThisTurn = [...(state.relicsUsedThisTurn ?? []), relicId];
+      }
+      if (relicId === 'life-orb' && when === 'onPlay') {
+        triggerLifeOrb(state);
+        continue;
       }
       applyEffects(state, hook.effects, rng, {
         sourceType: 'colorless',
@@ -1038,7 +1398,7 @@ function onExhaust(state: CombatState, rng: Rng): void {
   const combust = num(state.powers.combust);
   if (combust > 0) {
     for (const enemy of living(state)) {
-      dealToEnemy(state, enemy, combust, 'fire');
+      dealToEnemy(state, enemy, combust, 'fire', undefined, { ignoreThorns: true });
     }
   }
   runRelicHooks(state, 'onExhaust', rng);
@@ -1121,6 +1481,13 @@ export function createCombat(opts: {
     turn: 1,
     log: ['Combat start!'],
     pendingDiscard: 0,
+    pendingOptionalDiscard: false,
+    optionalDiscardPicks: [],
+    optionalDiscardPer: [],
+    optionalDiscardFilter: null,
+    optionalDiscardExhaust: false,
+    optionalDiscardCardId: null,
+    discardedThisTurn: 0,
     pendingFreePick: 0,
     freePlayIds: [],
     freeNextKind: null,
@@ -1179,7 +1546,7 @@ export function playCard(
   rng: Rng,
 ): CombatState {
   const next = clone(state);
-  if (next.pendingChoiceBand) return next;
+  if (next.pendingChoiceBand || next.pendingOptionalDiscard) return next;
   if (num(next.pendingDiscard) > 0 || num(next.pendingFreePick) > 0) return next;
   if ((next.pendingZeroCostOffer ?? []).length > 0) return next;
   const index = next.hand.findIndex((c) => c.instanceId === instanceId);
@@ -1202,7 +1569,16 @@ export function playCard(
 
   const replay = num(inst.replay);
   inst.replay = 0;
-  const exhaust = def.exhaust || def.kind === 'power' || def.effects.some((e) => e.op === 'exhaust');
+  const attackingTarget = (() => {
+    const enemy = getEnemy(next, next.selectedEnemyId);
+    return !!(enemy && isStrikeIntent(enemy.intent?.kind));
+  })();
+  const exhaust =
+    def.exhaust ||
+    def.kind === 'power' ||
+    def.effects.some((e) => e.op === 'exhaust') ||
+    (attackingTarget &&
+      def.effects.some((e) => e.op === 'gainMaxHpIfAttacking' && e.exhaust));
   const ctx = {
     sourceType: def.type,
     targetId: next.selectedEnemyId,
@@ -1228,8 +1604,22 @@ export function playCard(
       const rage = num(enemy.traits?.enrageOnSkill);
       if (rage > 0) {
         enemy.strength += rage;
-        pushLog(next, `${enemy.name} enraged! +${rage} Strength.`);
+        enemy.enrageStrength = num(enemy.enrageStrength) + rage;
+        pushLog(next, `${enemy.name} enraged! +${rage} Strength this turn.`);
       }
+    }
+  }
+
+  if (def.kind === 'power') {
+    for (const enemy of living(next)) {
+      const punish = num(enemy.traits?.punishOnPower);
+      if (punish <= 0) continue;
+      const dmg = smokeReduce(next, enemy, punish);
+      const hit = hitThroughBlock(num(next.playerBlock), dmg, num(next.statuses?.frail) > 0);
+      next.playerBlock = hit.block;
+      pushFx(next, { kind: 'hitPlayer', targetId: enemy.id, amount: hit.hpLoss || dmg });
+      if (hit.hpLoss > 0) applyPlayerHpLoss(next, hit.hpLoss);
+      pushLog(next, `${enemy.name} punished the Power for ${dmg}!`);
     }
   }
 
@@ -1388,25 +1778,22 @@ function prepareEnemyAct(enemy: CombatEnemy): void {
   enemy.acted = true;
 }
 
-function enemyActs(state: CombatState, enemy: CombatEnemy): void {
-  if (num(enemy.hp) <= 0) return;
-  prepareEnemyAct(enemy);
-  const intent = enemy.intent;
-  if (!intent) return;
+function resolveIntent(state: CombatState, enemy: CombatEnemy, intent: EnemyIntentPattern): void {
   switch (intent.kind) {
     case 'attack':
     case 'attackDebuff': {
-      const dmg = incomingAttackDamage(state, enemy);
+      const dmg = incomingAttackDamage(state, enemy, intent);
       strikePlayer(state, enemy, dmg);
       pushLog(state, `${enemy.name} hits for ${dmg}.`);
       if (intent.status && intent.statusStacks) {
         state.statuses = addStatus(state.statuses, intent.status, intent.statusStacks);
+        pushFx(state, { kind: 'status', targetId: 'player', status: intent.status, amount: intent.statusStacks });
       }
       break;
     }
     case 'multiAttack': {
       const hits = Math.max(1, num(intent.times, 2));
-      const dmg = incomingAttackDamage(state, enemy);
+      const dmg = incomingAttackDamage(state, enemy, intent);
       for (let i = 0; i < hits; i += 1) {
         if (num(enemy.hp) <= 0 || num(state.playerHp) <= 0) break;
         strikePlayer(state, enemy, dmg);
@@ -1415,9 +1802,8 @@ function enemyActs(state: CombatState, enemy: CombatEnemy): void {
       break;
     }
     case 'block': {
-      const gained = incomingBlockGain(enemy);
-      enemy.block = num(enemy.block) + gained;
-      pushFx(state, { kind: 'blockGain', targetId: enemy.id, amount: gained });
+      const gained = incomingBlockGain(enemy, intent);
+      gainEnemyBlock(state, enemy, gained);
       pushLog(state, `${enemy.name} gained ${gained} Block.`);
       break;
     }
@@ -1439,6 +1825,7 @@ function enemyActs(state: CombatState, enemy: CombatEnemy): void {
     case 'status':
       if (intent.status && intent.statusStacks) {
         state.statuses = addStatus(state.statuses, intent.status, intent.statusStacks);
+        pushFx(state, { kind: 'status', targetId: 'player', status: intent.status, amount: intent.statusStacks });
         pushLog(state, `${enemy.name} applied ${intent.status}.`);
       }
       break;
@@ -1468,6 +1855,18 @@ function enemyActs(state: CombatState, enemy: CombatEnemy): void {
     default:
       break;
   }
+}
+
+function enemyActs(state: CombatState, enemy: CombatEnemy): void {
+  if (num(enemy.hp) <= 0) return;
+  prepareEnemyAct(enemy);
+  const intent = enemy.intent;
+  if (!intent) return;
+  resolveIntent(state, enemy, intent);
+  for (const extra of enemy.extraIntents ?? []) {
+    if (num(enemy.hp) <= 0 || num(state.playerHp) <= 0) break;
+    resolveIntent(state, enemy, extra);
+  }
   resolveDeaths(state);
 }
 
@@ -1490,7 +1889,17 @@ function triggerCharges(state: CombatState, rng: Rng): void {
   }
 }
 
+function clearEnrage(state: CombatState): void {
+  for (const enemy of state.enemies) {
+    const rage = num(enemy.enrageStrength);
+    if (rage <= 0) continue;
+    enemy.strength = Math.max(0, num(enemy.strength) - rage);
+    enemy.enrageStrength = 0;
+  }
+}
+
 function beginPlayerTurn(state: CombatState, rng: Rng): void {
+  clearEnrage(state);
   state.playerBlock = 0;
   state.smokeScreen = 0;
   state.freePlayIds = [];
@@ -1501,6 +1910,7 @@ function beginPlayerTurn(state: CombatState, rng: Rng): void {
   state.powersPlayedThisTurn = 0;
   state.relicsUsedThisTurn = [];
   state.freePickSelected = null;
+  state.discardedThisTurn = 0;
   const surf = num(state.pendingSurfDamage);
   if (surf > 0) {
     state.pendingSurfDamage = 0;
@@ -1546,6 +1956,8 @@ function beginPlayerTurn(state: CombatState, rng: Rng): void {
   }
   const petals = num(state.powers?.ingrainPetal);
   if (petals > 0) addPetals(state, petals);
+  const terrain = num(state.powers?.grassyTerrain);
+  if (terrain > 0) addSeeds(state, terrain);
   if (num(state.powers?.brutality) > 0) {
     drawCards(state, 1, rng);
     applyPlayerHpLoss(state, 1);
@@ -1560,6 +1972,13 @@ function beginPlayerTurn(state: CombatState, rng: Rng): void {
       state.energy += extra;
       pushLog(state, `${resolveCard(card).name}: +${extra} Energy.`);
     }
+  }
+  const chloro = num(state.powers?.chlorophyll);
+  if (chloro > 0) {
+    state.pendingDiscard += chloro;
+    state.discardThen = [...(state.discardThen ?? []), { op: 'draw', amount: chloro }];
+    completeDiscardIfEmpty(state, rng);
+    pushLog(state, 'Chlorophyll: discard a card, then draw.');
   }
   state.turn += 1;
 }
@@ -1603,7 +2022,7 @@ function autoPickZeroCost(state: CombatState, rng: Rng): void {
 export function closePlayerTurn(state: CombatState, rng: Rng): CombatState {
   if (state.playerTurnClosed) return clone(state);
   const next = clone(state);
-  if (next.pendingChoiceBand) return next;
+  if (next.pendingChoiceBand || next.pendingOptionalDiscard) return next;
   next.forceEndTurn = false;
   autoDiscardPending(next, rng);
   autoPickFreePlay(next, rng);
@@ -1619,6 +2038,9 @@ export function closePlayerTurn(state: CombatState, rng: Rng): CombatState {
   if (num(next.playerBlock) <= 0) runRelicHooks(next, 'turnEndNoBlock', rng);
   runRelicHooks(next, 'turnEnd', rng);
   next.tempFocus = 0;
+  if (next.powers?.zeroCostDamageThisTurn) {
+    delete next.powers.zeroCostDamageThisTurn;
+  }
   next.statuses = tickDurationStatuses(next.statuses);
   for (const enemy of next.enemies) {
     if (num(enemy.hp) > 0) tickEnemyStatuses(enemy, next);
@@ -1641,9 +2063,8 @@ export function resolveEnemyTurn(state: CombatState, rng: Rng): CombatState {
   }
   for (const enemy of next.enemies) {
     if (num(enemy.hp) <= 0) continue;
-    const { intent, next: ni } = pickIntent(intentsOf(enemy), num(enemy.intentIndex));
-    enemy.intent = intent;
-    enemy.intentIndex = ni;
+    const { intent, next: ni } = pickIntent(intentsOf(enemy), num(enemy.intentIndex), skipAllyBuff(next, enemy));
+    assignIntent(enemy, intent, ni, num(next.turn, 1));
   }
   if (combatOutcome(next) !== 'ongoing') return next;
   next.playerTurnClosed = false;
@@ -1651,34 +2072,45 @@ export function resolveEnemyTurn(state: CombatState, rng: Rng): CombatState {
   return next;
 }
 
-export function applyEnemyHit(state: CombatState, enemyId: string): CombatState {
+export function applyEnemyHit(
+  state: CombatState,
+  enemyId: string,
+  intentOverride?: EnemyIntentPattern,
+): CombatState {
   const next = clone(state);
   const enemy = next.enemies.find((e) => e.id === enemyId && num(e.hp) > 0);
   if (!enemy) return next;
   if (!enemy.acted) prepareEnemyAct(enemy);
-  const dmg = incomingAttackDamage(next, enemy);
+  const intent = intentOverride ?? enemy.intent;
+  if (!intent || !isStrikeIntent(intent.kind)) return next;
+  const dmg = incomingAttackDamage(next, enemy, intent);
   strikePlayer(next, enemy, dmg);
   pushLog(next, `${enemy.name} hits for ${dmg}.`);
   resolveDeaths(next);
   return next;
 }
 
-export function applyEnemyIntentRest(state: CombatState, enemyId: string): CombatState {
+export function applyEnemyIntentRest(
+  state: CombatState,
+  enemyId: string,
+  intentOverride?: EnemyIntentPattern,
+): CombatState {
   const next = clone(state);
   const enemy = next.enemies.find((e) => e.id === enemyId && num(e.hp) > 0);
   if (!enemy) return next;
   if (!enemy.acted) prepareEnemyAct(enemy);
-  const intent = enemy.intent;
+  const intent = intentOverride ?? enemy.intent;
   if (!intent) return next;
   if (isStrikeIntent(intent.kind)) {
-    if (intent.kind === 'attackDebuff' && intent.status && intent.statusStacks) {
+    if (intent.status && intent.statusStacks) {
       next.statuses = addStatus(next.statuses, intent.status, intent.statusStacks);
       pushFx(next, { kind: 'status', targetId: 'player', status: intent.status, amount: intent.statusStacks });
     }
     resolveDeaths(next);
     return next;
   }
-  enemyActs(next, enemy);
+  resolveIntent(next, enemy, intent);
+  resolveDeaths(next);
   return next;
 }
 
@@ -1690,9 +2122,8 @@ export function completeEnemyRound(state: CombatState, rng: Rng): CombatState {
   }
   for (const enemy of next.enemies) {
     if (num(enemy.hp) <= 0) continue;
-    const { intent, next: ni } = pickIntent(intentsOf(enemy), num(enemy.intentIndex));
-    enemy.intent = intent;
-    enemy.intentIndex = ni;
+    const { intent, next: ni } = pickIntent(intentsOf(enemy), num(enemy.intentIndex), skipAllyBuff(next, enemy));
+    assignIntent(enemy, intent, ni, num(next.turn, 1));
   }
   if (combatOutcome(next) !== 'ongoing') return next;
   next.playerTurnClosed = false;
@@ -1711,7 +2142,7 @@ export function applyPotion(
   rng: Rng,
 ): CombatState {
   const next = clone(state);
-  if (next.pendingChoiceBand || num(next.pendingDiscard) > 0) return next;
+  if (next.pendingChoiceBand || next.pendingOptionalDiscard || num(next.pendingDiscard) > 0) return next;
   const potionId = next.potions[slot];
   if (!potionId) return next;
   const def = getPotionDef(potionId);
@@ -1754,8 +2185,62 @@ export function confirmChoiceBand(state: CombatState, rng: Rng): CombatState {
   return next;
 }
 
+export function toggleOptionalDiscardCard(state: CombatState, instanceId: string): CombatState {
+  const next = clone(state);
+  if (!next.pendingOptionalDiscard) return next;
+  const card = next.hand.find((c) => c.instanceId === instanceId);
+  if (!card) return next;
+  if (next.optionalDiscardFilter && card.defId !== next.optionalDiscardFilter) return next;
+  const picks = new Set(next.optionalDiscardPicks ?? []);
+  if (picks.has(instanceId)) picks.delete(instanceId);
+  else picks.add(instanceId);
+  next.optionalDiscardPicks = [...picks];
+  return next;
+}
+
+export function confirmOptionalDiscard(state: CombatState, rng: Rng): CombatState {
+  const next = clone(state);
+  if (!next.pendingOptionalDiscard) return next;
+  const picks = new Set(next.optionalDiscardPicks ?? []);
+  const chosen = next.hand.filter((c) => picks.has(c.instanceId));
+  next.hand = next.hand.filter((c) => !picks.has(c.instanceId));
+  const exhaustPicks = !!next.optionalDiscardExhaust;
+  for (const inst of chosen) {
+    if (exhaustPicks) {
+      next.exhaustPile.push(inst);
+      onExhaust(next, rng);
+      routeExhaustedCard(next, inst, rng);
+      pushLog(next, `Exhausted ${resolveCard(inst).name}.`);
+    } else {
+      next.discardPile.push(inst);
+      resolveOnDiscard(next, inst, rng);
+      pushLog(next, `Discarded ${resolveCard(inst).name}.`);
+    }
+  }
+  const per = next.optionalDiscardPer ?? [];
+  if (per.length && chosen.length) {
+    const ctx = {
+      sourceType: 'grass',
+      targetId: next.selectedEnemyId ?? living(next)[0]?.id ?? null,
+      kind: 'attack',
+      cardId: next.optionalDiscardCardId ?? 'leaf-storm',
+    };
+    for (let i = 0; i < chosen.length; i += 1) {
+      applyEffects(next, per, rng, ctx);
+    }
+  }
+  next.optionalDiscardPicks = [];
+  next.optionalDiscardPer = [];
+  next.optionalDiscardFilter = null;
+  next.optionalDiscardExhaust = false;
+  next.optionalDiscardCardId = null;
+  next.pendingOptionalDiscard = false;
+  resolveDeaths(next);
+  return next;
+}
+
 export function canPlayCard(state: CombatState, instanceId: string): boolean {
-  if (state.pendingChoiceBand) return false;
+  if (state.pendingChoiceBand || state.pendingOptionalDiscard) return false;
   if (num(state.pendingDiscard) > 0 || num(state.pendingFreePick) > 0) return false;
   if ((state.pendingZeroCostOffer ?? []).length > 0) return false;
   const inst = state.hand.find((c) => c.instanceId === instanceId);

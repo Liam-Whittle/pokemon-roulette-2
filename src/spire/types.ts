@@ -50,13 +50,27 @@ export type EffectOp =
       healEqualToDamage?: boolean;
       perOtherZeroCost?: number;
       repeatIfUnblocked?: boolean;
+      unblockedBonus?: number;
       extraTimesPerChargeAdded?: boolean;
+      plusBlockIfStatus?: CombatStatus;
+      ifAnyStatus?: CombatStatus;
+      perGardenToken?: number;
     }
   | { op: 'damageIfStatus'; status: CombatStatus; amount: number; heal?: number }
+  | { op: 'statusIfStatus'; ifStatus: CombatStatus; status: CombatStatus; stacks: number }
+  | { op: 'statusIfX'; min: number; status: CombatStatus; stacks: number }
   | { op: 'block'; amount: number }
   | { op: 'draw'; amount: number; replayZeroCost?: boolean }
   | { op: 'gainEnergy'; amount: number }
-  | { op: 'status'; status: CombatStatus; stacks: number; all?: boolean; self?: boolean }
+  | {
+      op: 'status';
+      status: CombatStatus;
+      stacks: number;
+      all?: boolean;
+      self?: boolean;
+      timesFromX?: boolean;
+      plus?: number;
+    }
   | { op: 'strength'; amount: number; self?: boolean }
   | { op: 'dexterity'; amount: number }
   | { op: 'applyPower'; power: string; stacks?: number }
@@ -83,13 +97,17 @@ export type EffectOp =
   | { op: 'clearEnemyBlock'; all?: boolean }
   | { op: 'addZeroCostFromAnyClass'; mode: 'random' | 'choose' }
   | { op: 'addPetal'; amount: number }
+  | { op: 'addSeed'; amount: number }
+  | { op: 'discardAny'; thenPer?: EffectOp[]; filter?: string; exhaust?: boolean }
+  | { op: 'harvestSeeds'; healPer: number }
   | { op: 'freeNext'; kind: CardKind }
   | { op: 'statusIfNoBlock'; status: CombatStatus; stacks: number }
   | { op: 'toxicIfAlready'; apply: number; already: number | 'double' }
   | { op: 'toxicPerFive'; base: number; perFive: number }
-  | { op: 'gainMaxHpIfAttacking'; amount: number }
+  | { op: 'gainMaxHpIfAttacking'; amount: number; otherwise?: number; exhaust?: boolean }
   | { op: 'playExhaustedPetals'; all?: boolean; blockPerPetal?: number }
-  | { op: 'strengthNextTurn'; amount: number };
+  | { op: 'strengthNextTurn'; amount: number }
+  | { op: 'blockEqualToStatus'; status: CombatStatus };
 
 export interface CardDef {
   id: string;
@@ -105,6 +123,7 @@ export interface CardDef {
   exhaustOnDiscard?: boolean;
   token?: boolean;
   xCost?: boolean;
+  freeIfDiscardedThisTurn?: boolean;
   discardEnergy?: number;
   onDiscard?: EffectOp[];
   target?: 'enemy' | 'all' | 'self';
@@ -120,6 +139,7 @@ export interface CardDef {
       | 'target'
       | 'onDiscard'
       | 'xCost'
+      | 'freeIfDiscardedThisTurn'
       | 'discardEnergy'
     >
   >;
@@ -193,7 +213,9 @@ export interface EnemyTraits {
   curlUp?: number;
   thorns?: number;
   explodeOnDeath?: number;
+  blockLinksAttack?: boolean;
   enrageOnSkill?: number;
+  punishOnPower?: number;
   splitInto?: string[];
   metallicize?: number;
   phaseAtHp?: number;
@@ -282,6 +304,11 @@ export type LootRevealItem = {
   description: string;
 };
 
+export type AcquireItem =
+  | { type: 'card'; card: CardInstance }
+  | { type: 'relic'; id: string }
+  | { type: 'potion'; id: string };
+
 export type EventFollowup =
   | { kind: 'message'; title: string; body: string }
   | { kind: 'chooseCards'; pick: number; cards: CardInstance[]; selected: string[] }
@@ -300,17 +327,22 @@ export type CombatFxKind =
   | 'surf'
   | 'faint'
   | 'petal'
-  | 'flare';
+  | 'flare'
+  | 'relicGlow';
 
 export interface CombatFx {
   id: number;
   kind: CombatFxKind;
   targetId?: string;
   amount?: number;
+  hp?: number;
+  block?: number;
   chargeKind?: 'attack' | 'block';
   speciesId?: number;
   speciesName?: string;
+  defId?: string;
   cardId?: string;
+  relicId?: string;
   status?: CombatStatus;
 }
 
@@ -337,7 +369,9 @@ export interface CombatEnemy {
   maxHp: number;
   block: number;
   strength: number;
+  enrageStrength?: number;
   intent: EnemyIntentPattern;
+  extraIntents?: EnemyIntentPattern[];
   intentIndex: number;
   statuses: Partial<Record<CombatStatus, number>>;
   traits?: EnemyTraits;
@@ -383,6 +417,13 @@ export interface CombatState {
   turn: number;
   log: string[];
   pendingDiscard: number;
+  pendingOptionalDiscard: boolean;
+  optionalDiscardPicks: string[];
+  optionalDiscardPer: EffectOp[];
+  optionalDiscardFilter: string | null;
+  optionalDiscardExhaust: boolean;
+  optionalDiscardCardId: string | null;
+  discardedThisTurn: number;
   pendingFreePick: number;
   freePlayIds: string[];
   freeNextKind: CardKind | null;
@@ -468,6 +509,8 @@ export interface SpireRun {
   smithUsed: boolean;
   smithedCardId: string | null;
   restHealUsed: boolean;
+  restDexUsed: boolean;
+  restStrUsed: boolean;
   hallwayTheme: 1 | 2 | 3 | null;
   permStrength: number;
   permDexterity: number;
@@ -478,8 +521,10 @@ export interface SpireRun {
   blessingFollowup: BlessingFollowup | null;
   lastMonsterEncounterId: string | null;
   lastEliteEncounterId: string | null;
+  pendingAcquire: AcquireItem[] | null;
+  actRareTaken: boolean;
 }
 
 export type CombatOutcome = 'ongoing' | 'win' | 'lose';
 
-export type BlessingId = 'train' | 'gold' | 'relic' | 'card';
+export type BlessingId = 'train' | 'gold' | 'potion' | 'card';

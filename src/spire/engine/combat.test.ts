@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { classPowerDefs, resolveCard } from '../data/cards';
-import { getEnemyDef } from '../data/enemies';
+import { getEncounterDef, getEnemyDef } from '../data/enemies';
 import {
   applyPotion,
   applyEnemyIntentRest,
@@ -10,8 +10,10 @@ import {
   completeEnemyRound,
   combatOutcome,
   confirmChoiceBand,
+  confirmOptionalDiscard,
   createCombat,
   displayedIntentAmount,
+  energyCostToPlay,
   endTurn,
   incomingAttackDamage,
   liveCardDescription,
@@ -22,6 +24,7 @@ import {
   previewEnemyActions,
   resolveEnemyTurn,
   toggleChoiceBandCard,
+  toggleOptionalDiscardCard,
 } from './combat';
 import { mulberry32 } from './rng';
 import { pickupGoldFor } from '../data/relics';
@@ -97,6 +100,30 @@ describe('spire combat', () => {
     state = endTurn(state, rng);
     const incoming = getEnemyDef('pidgey').intents[0]!.amount;
     expect(hpBefore - state.playerHp).toBe(Math.max(0, incoming - block));
+  });
+
+  it('playing a block skill emits a blockGain cue', () => {
+    let { state, rng } = start(
+      ['protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze'],
+      'pidgey',
+    );
+    const card = state.hand.find((c) => c.defId === 'protect-blaze')!;
+    state = playCard(state, card.instanceId, undefined, rng);
+    expect(state.playerBlock).toBeGreaterThan(0);
+    expect(state.combatFx.some((fx) => fx.kind === 'blockGain' && fx.targetId === 'player')).toBe(true);
+  });
+
+  it('enemy block intent emits a blockGain cue', () => {
+    const { state } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'pidgey',
+      [],
+      3,
+    );
+    const enemy = state.enemies[0]!;
+    const next = applyEnemyIntentRest(state, enemy.id, { kind: 'block', amount: 5 });
+    expect(next.enemies[0]!.block).toBe(5);
+    expect(next.combatFx.some((fx) => fx.kind === 'blockGain' && fx.targetId === enemy.id)).toBe(true);
   });
 
   it('exhaust cards go to the exhaust pile', () => {
@@ -212,7 +239,7 @@ describe('spire combat', () => {
     expect(state.waterCharges.attack).toBe(3);
     const reservoir = state.hand.find((c) => c.defId === 'reservoir')!;
     state = playCard(state, reservoir.instanceId, undefined, rng);
-    expect(state.powers.reservoir).toBe(2);
+    expect(state.powers.reservoir).toBe(1);
     const leftover = state.hand.find((c) => c.defId === 'bubble');
     expect(leftover).toBeTruthy();
     state = playCard(state, leftover!.instanceId, undefined, rng);
@@ -381,11 +408,12 @@ describe('spire combat', () => {
     expect(liveCardDescription(protect, buffed, foe)).toBe('Gain 8 Block.');
   });
 
-  it('upgraded X Attack grants Strength and Dexterity', () => {
+  it('upgraded X Attack grants Strength and costs 0', () => {
     const def = resolveCard({ instanceId: 'x+', defId: 'x-attack-card', upgraded: true });
     expect(def.name).toBe('X Attack+');
     expect(def.kind).toBe('power');
-    expect(def.description).toBe('Gain 1 Strength and 1 Dexterity.');
+    expect(def.cost).toBe(0);
+    expect(def.description).toBe('Gain 1 Strength.');
 
     let { state, rng } = start(
       ['x-attack-card', 'x-attack-card', 'x-attack-card', 'x-attack-card', 'x-attack-card', 'ember'],
@@ -397,7 +425,7 @@ describe('spire combat', () => {
     card.upgraded = true;
     state = playCard(state, card.instanceId, undefined, rng);
     expect(state.strength).toBe(1);
-    expect(state.dexterity).toBe(1);
+    expect(state.dexterity).toBe(0);
     expect(state.exhaustPile.some((c) => c.instanceId === card.instanceId)).toBe(true);
   });
 
@@ -446,19 +474,103 @@ describe('spire combat', () => {
     expect(state.enemies[0]!.curlUpUsed).toBe(true);
   });
 
-  it('explode-on-death damages the player', () => {
+  it('explode-on-death damages the player if an ally is still up', () => {
+    const rng = mulberry32(21);
+    let state = createCombat({
+      hp: 72,
+      maxHp: 72,
+      deck: deck(['blast-burn', 'blast-burn', 'blast-burn', 'blast-burn', 'blast-burn']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('voltorb'), getEnemyDef('rattata')],
+      playerTypes: ['fire'],
+      rng,
+    });
+    const hpBefore = state.playerHp;
+    const card = state.hand.find((c) => c.defId === 'blast-burn')!;
+    const voltorb = state.enemies.find((e) => e.defId === 'voltorb')!;
+    voltorb.hp = 22;
+    state = playCard(state, card.instanceId, voltorb.id, rng);
+    expect(state.enemies.find((e) => e.defId === 'voltorb')!.hp).toBe(0);
+    expect(state.enemies.find((e) => e.defId === 'rattata')!.hp).toBeGreaterThan(0);
+    expect(state.playerHp).toBe(hpBefore + 8 - 12);
+    expect(state.combatFx.some((fx) => fx.kind === 'hitPlayer')).toBe(true);
+  });
+
+  it('explode-on-death does nothing when the bomber is last', () => {
     let { state, rng } = start(
       ['blast-burn', 'blast-burn', 'blast-burn', 'blast-burn', 'blast-burn'],
       'voltorb',
       [],
       21,
     );
-    const hpBefore = state.playerHp;
+    state.playerHp = 50;
     const card = state.hand.find((c) => c.defId === 'blast-burn')!;
     state.enemies[0]!.hp = 22;
     state = playCard(state, card.instanceId, state.enemies[0]!.id, rng);
     expect(state.enemies[0]!.hp).toBe(0);
-    expect(state.playerHp).toBe(hpBefore + 8 - 12);
+    expect(state.playerHp).toBe(58);
+  });
+
+  it('explode-on-death does nothing after the ally has already fainted', () => {
+    const rng = mulberry32(21);
+    let state = createCombat({
+      hp: 72,
+      maxHp: 72,
+      deck: deck(['blast-burn', 'ember', 'blast-burn', 'blast-burn', 'blast-burn', 'blast-burn']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('voltorb'), getEnemyDef('rattata')],
+      playerTypes: ['fire'],
+      rng,
+    });
+    state = seat(state, 'ember', 'blast-burn');
+    const rattata = state.enemies.find((e) => e.defId === 'rattata')!;
+    rattata.hp = 1;
+    const ember = state.hand.find((c) => c.defId === 'ember')!;
+    state = playCard(state, ember.instanceId, rattata.id, rng);
+    expect(state.enemies.find((e) => e.defId === 'rattata')!.hp).toBe(0);
+    state.playerHp = 50;
+    const voltorb = state.enemies.find((e) => e.defId === 'voltorb')!;
+    voltorb.hp = 22;
+    state.energy = 3;
+    const burn = state.hand.find((c) => c.defId === 'blast-burn')!;
+    state = playCard(state, burn.instanceId, voltorb.id, rng);
+    expect(state.enemies.find((e) => e.defId === 'voltorb')!.hp).toBe(0);
+    expect(state.playerHp).toBe(58);
+  });
+
+  it('block intent can apply a linked status at the same time', () => {
+    let { state, rng } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'pidgey',
+      [],
+      3,
+    );
+    const enemy = state.enemies[0]!;
+    enemy.intent = { kind: 'block', amount: 5 };
+    enemy.extraIntents = [{ kind: 'status', amount: 0, status: 'weak', statusStacks: 1 }];
+    state = endTurn(state, rng);
+    expect(state.enemies[0]!.block).toBe(5);
+    expect(state.statuses.weak).toBe(1);
+  });
+
+  it('heal intent can swing with a weaker linked attack', () => {
+    let { state, rng } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'pidgey',
+      [],
+      3,
+    );
+    const enemy = state.enemies[0]!;
+    enemy.hp = enemy.maxHp - 20;
+    enemy.intent = { kind: 'heal', amount: 12 };
+    enemy.extraIntents = [{ kind: 'attack', amount: 4 }];
+    state.playerBlock = 0;
+    const hpBefore = state.playerHp;
+    state = endTurn(state, rng);
+    expect(state.enemies[0]!.hp).toBe(enemy.maxHp - 8);
+    expect(state.playerHp).toBe(hpBefore - 4);
   });
 
   it('split-on-death spawns smaller foes', () => {
@@ -477,16 +589,121 @@ describe('spire combat', () => {
     expect(living.every((e) => e.defId === 'magnemite')).toBe(true);
   });
 
-  it('enrage-on-skill gains strength when a skill is played', () => {
+  it('magneton does not intend to buff allies while it is alone', () => {
+    expect(getEnemyDef('magneton').intents.some((intent) => intent.kind === 'buffAlly')).toBe(true);
+    let { state, rng } = start(
+      [
+        'protect-blaze',
+        'protect-blaze',
+        'protect-blaze',
+        'protect-blaze',
+        'protect-blaze',
+        'protect-blaze',
+        'protect-blaze',
+      ],
+      'magneton',
+      [],
+      3,
+    );
+    expect(state.enemies).toHaveLength(1);
+    for (let i = 0; i < 6; i += 1) {
+      const magneton = state.enemies.find((e) => e.defId === 'magneton' && e.hp > 0);
+      expect(magneton).toBeTruthy();
+      expect(magneton!.intent.kind).not.toBe('buffAlly');
+      expect(magneton!.extraIntents?.some((intent) => intent.kind === 'buffAlly')).toBeFalsy();
+      state = endTurn(state, rng);
+    }
+  });
+
+  it('kadabra still intends to buff when an ally is present', () => {
+    const rng = mulberry32(8);
+    const state = createCombat({
+      hp: 72,
+      maxHp: 72,
+      deck: deck(['protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: ['kadabra', 'abra'].map(getEnemyDef),
+      playerTypes: ['fire'],
+      rng,
+    });
+    expect(state.enemies.map((e) => e.defId)).toEqual(['kadabra', 'abra']);
+    expect(state.enemies[0]!.intent.kind).toBe('buffAlly');
+  });
+
+  it('enrage-on-skill gains strength for this turn only', () => {
     let { state, rng } = start(
       ['protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze', 'protect-blaze'],
-      'clefairy',
+      'machoke',
       [],
       3,
     );
     const skill = state.hand.find((c) => c.defId === 'protect-blaze')!;
     state = playCard(state, skill.instanceId, undefined, rng);
-    expect(state.enemies[0]!.strength).toBe(2);
+    expect(state.enemies[0]!.strength).toBe(3);
+    expect(state.enemies[0]!.enrageStrength).toBe(3);
+    state = endTurn(state, rng);
+    expect(state.enemies[0]!.strength).toBe(0);
+    expect(state.enemies[0]!.enrageStrength).toBe(0);
+  });
+
+  it('weezing elite is flanked by toxic koffing adds', () => {
+    const encounter = getEncounterDef('e-weezing');
+    expect(encounter.enemyIds).toEqual(['koffing-add', 'weezing', 'koffing-add']);
+    expect(getEnemyDef('weezing').hp).toBe(90);
+    expect(getEnemyDef('weezing').intents.every((intent) => intent.kind === 'attack' || intent.kind === 'block')).toBe(
+      true,
+    );
+    expect(getEnemyDef('weezing').intents.some((intent) => intent.status)).toBe(false);
+    expect(getEnemyDef('koffing-add').hp).toBe(30);
+    expect(getEnemyDef('koffing-add').intents).toEqual([
+      { kind: 'status', amount: 0, status: 'toxic', statusStacks: 2 },
+    ]);
+    const rng = mulberry32(8);
+    const state = createCombat({
+      hp: 72,
+      maxHp: 72,
+      deck: deck(['ember', 'ember', 'ember', 'ember', 'ember', 'ember']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: encounter.enemyIds.map(getEnemyDef),
+      playerTypes: ['fire'],
+      rng,
+    });
+    expect(state.enemies.map((e) => e.defId)).toEqual(['koffing-add', 'weezing', 'koffing-add']);
+    expect(state.enemies.filter((e) => e.defId === 'koffing-add').every((e) => e.intent.kind === 'status')).toBe(true);
+  });
+
+  it('weezing can swing on a block turn without applying toxic', () => {
+    let { state, rng } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'weezing',
+      [],
+      3,
+    );
+    const enemy = state.enemies[0]!;
+    enemy.intent = { kind: 'block', amount: 12 };
+    enemy.extraIntents = [{ kind: 'attack', amount: 8 }];
+    state.playerBlock = 0;
+    const hpBefore = state.playerHp;
+    state = endTurn(state, rng);
+    expect(state.enemies[0]!.block).toBe(12);
+    expect(state.playerHp).toBe(hpBefore - 8);
+    expect(state.statuses.toxic ?? 0).toBe(0);
+  });
+
+  it('pinsir punishes playing a power', () => {
+    let { state, rng } = start(
+      ['heat-up', 'heat-up', 'heat-up', 'heat-up', 'heat-up', 'heat-up'],
+      'pinsir',
+      [],
+      3,
+    );
+    expect(state.enemies[0]!.traits?.punishOnPower).toBe(6);
+    const hpBefore = state.playerHp;
+    const power = state.hand.find((c) => c.defId === 'heat-up')!;
+    state = playCard(state, power.instanceId, undefined, rng);
+    expect(state.playerHp).toBe(hpBefore - 6);
   });
 
   it('multi-attack hits several times through block', () => {
@@ -500,6 +717,24 @@ describe('spire combat', () => {
     expect(displayedIntentAmount(state, state.enemies[0]!)).toBe(4);
     const preview = previewEnemyActions(state);
     expect(preview[0]!.playerDamage).toBe(12);
+  });
+
+  it('kangaskhan cub faint cry uses Cubone even if the combat copy is stale', () => {
+    let { state, rng } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'kangaskhan-cub',
+    );
+    const cub = state.enemies[0]!;
+    cub.speciesId = 115;
+    cub.name = 'Cub';
+    cub.hp = 1;
+    const ember = state.hand.find((c) => c.defId === 'ember');
+    expect(ember).toBeTruthy();
+    state = playCard(state, ember!.instanceId, cub.id, rng);
+    const faint = state.combatFx.find((fx) => fx.kind === 'faint' && fx.targetId === cub.id);
+    expect(faint?.defId).toBe('kangaskhan-cub');
+    expect(faint?.speciesId).toBe(104);
+    expect(faint?.speciesName).toBe('Cubone');
   });
 
   it('summon intent brings in an add', () => {
@@ -833,10 +1068,12 @@ describe('spire combat', () => {
 
   it('tide leftover upgrades stay explicit', () => {
     const rain = resolveCard({ instanceId: 'rd+', defId: 'rain-dance', upgraded: true });
-    expect(rain.description).toBe('Gain 5 Block. Add 2 Block Charges.');
+    expect(rain.cost).toBe(0);
+    expect(rain.description).toBe('Gain 4 Block. Deal 4 damage. Apply 1 Weak.');
     expect(rain.effects).toEqual([
-      { op: 'block', amount: 5 },
-      { op: 'addCharge', amount: 2, kind: 'block' },
+      { op: 'block', amount: 4 },
+      { op: 'damage', amount: 4 },
+      { op: 'status', status: 'weak', stacks: 1 },
     ]);
 
     const ring = resolveCard({ instanceId: 'ar+', defId: 'aqua-ring', upgraded: true });
@@ -844,7 +1081,7 @@ describe('spire combat', () => {
     expect(ring.effects).toEqual([{ op: 'applyPower', power: 'aqua-ring', stacks: 4 }]);
 
     const drizzle = resolveCard({ instanceId: 'dz+', defId: 'rain-lord', upgraded: true });
-    expect(drizzle.cost).toBe(2);
+    expect(drizzle.cost).toBe(3);
     expect(drizzle.description).toBe('Charges trigger twice at the end of your turn.');
     expect(drizzle.effects).toEqual([{ op: 'applyPower', power: 'rain-lord', stacks: 1 }]);
 
@@ -965,13 +1202,13 @@ describe('spire combat', () => {
     state.energy = 3;
     const pump = state.hand.find((c) => c.defId === 'hydro-pump')!;
     state = playCard(state, pump.instanceId, undefined, rng);
-    expect(state.powers.focus).toBe(2);
-    expect(chargePotency(state)).toBe(6);
+    expect(state.powers.focus).toBe(1);
+    expect(chargePotency(state)).toBe(5);
     const bubble = state.hand.find((c) => c.defId === 'bubble')!;
     state = playCard(state, bubble.instanceId, undefined, rng);
     const hpBefore = state.enemies[0]!.hp;
     state = endTurn(state, rng);
-    expect(state.enemies[0]!.hp).toBe(hpBefore - 6);
+    expect(state.enemies[0]!.hp).toBe(hpBefore - 5);
   });
 
   it('aqua jet scales all aqua jets this combat', () => {
@@ -1003,11 +1240,28 @@ describe('spire combat', () => {
     const hp = state.enemies[0]!.hp;
     const card = state.hand[0]!;
     state = playCard(state, card.instanceId, state.enemies[0]!.id, rng);
-    expect(state.enemies[0]!.hp).toBe(hp - 60);
+    expect(state.enemies[0]!.hp).toBe(hp - 45);
     expect(state.exhaustPile.some((c) => c.defId === 'hydro-cannon')).toBe(true);
   });
 
-  it('upgraded hydro cannon does not exhaust', () => {
+  it('hydro cannon does not repeat when the enemy has Block', () => {
+    let { state, rng } = start(
+      ['hydro-cannon', 'withdraw', 'withdraw', 'withdraw', 'withdraw'],
+      'beedrill',
+      [],
+      37,
+    );
+    state = seat(state, 'hydro-cannon');
+    state.energy = 3;
+    state.enemies[0]!.block = 10;
+    const hp = state.enemies[0]!.hp;
+    const card = state.hand[0]!;
+    state = playCard(state, card.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 20);
+    expect(state.enemies[0]!.block).toBe(0);
+  });
+
+  it('upgraded hydro cannon still exhausts and costs 2', () => {
     const rng = mulberry32(39);
     let state = createCombat({
       hp: 76,
@@ -1020,12 +1274,14 @@ describe('spire combat', () => {
       rng,
     });
     state = seat(state, 'hydro-cannon');
-    state.energy = 3;
+    state.energy = 2;
     const card = state.hand[0]!;
     expect(card.upgraded).toBe(true);
+    expect(resolveCard(card).cost).toBe(2);
+    expect(resolveCard(card).exhaust).toBe(true);
     state = playCard(state, card.instanceId, state.enemies[0]!.id, rng);
-    expect(state.exhaustPile.some((c) => c.defId === 'hydro-cannon')).toBe(false);
-    expect(state.discardPile.some((c) => c.defId === 'hydro-cannon')).toBe(true);
+    expect(state.exhaustPile.some((c) => c.defId === 'hydro-cannon')).toBe(true);
+    expect(state.discardPile.some((c) => c.defId === 'hydro-cannon')).toBe(false);
   });
 
   it('whirlpool plus strips block then hits everyone', () => {
@@ -1108,7 +1364,31 @@ describe('spire combat', () => {
     expect(drawnZero.every((c) => (c.replay ?? 0) >= 1)).toBe(true);
   });
 
-  it('torrent focus echoes an attack charge for each block charge', () => {
+  it('dive prep bonus damage lasts only this turn', () => {
+    const rng = mulberry32(46);
+    let state = createCombat({
+      hp: 76,
+      maxHp: 76,
+      deck: deck(['surf-prep', 'aqua-jet', 'withdraw', 'withdraw', 'withdraw', 'withdraw']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('pidgey')],
+      playerTypes: ['water'],
+      rng,
+    });
+    state = seat(state, 'surf-prep', 'aqua-jet');
+    state.energy = 3;
+    state = playCard(state, state.hand.find((c) => c.defId === 'surf-prep')!.instanceId, undefined, rng);
+    expect(state.powers.zeroCostDamageThisTurn).toBe(2);
+    const jet = state.hand.find((c) => c.defId === 'aqua-jet')!;
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, jet.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 5);
+    state = endTurn(state, rng);
+    expect(state.powers.zeroCostDamageThisTurn).toBeUndefined();
+  });
+
+  it('torrent focus adds a block charge and draws', () => {
     const rng = mulberry32(47);
     let state = createCombat({
       hp: 76,
@@ -1121,11 +1401,12 @@ describe('spire combat', () => {
       rng,
     });
     state = seat(state, 'focus-power');
-    state.energy = 3;
+    state.energy = 2;
+    const handBefore = state.hand.length;
     state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
-    expect(state.powers.torrentEcho).toBe(1);
-    expect(state.chargeQueue.filter((k) => k === 'block').length).toBeGreaterThan(0);
-    expect(state.chargeQueue.filter((k) => k === 'attack').length).toBeGreaterThan(0);
+    expect(state.powers.torrentEcho).toBeUndefined();
+    expect(state.chargeQueue.filter((k) => k === 'block').length).toBe(1);
+    expect(state.hand.length).toBe(handBefore);
   });
 
   it('petals exhaust when played and never appear as rewards', () => {
@@ -1151,6 +1432,64 @@ describe('spire combat', () => {
     expect(state.enemies[0]!.hp).toBe(hp - 5);
     expect(state.exhaustPile.some((c) => c.instanceId === petal.instanceId)).toBe(true);
     expect(state.discardPile.some((c) => c.instanceId === petal.instanceId)).toBe(false);
+  });
+
+  it('blooming stops petals when the targeted enemy faints', () => {
+    const rng = mulberry32(54);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(['blooming', 'vine-whip', 'synthesis', 'poison-powder', 'leech-seed', 'wrap']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('weedle'), getEnemyDef('pidgey')],
+      playerTypes: ['grass'],
+      rng,
+    });
+    state = seat(state, 'blooming');
+    state.energy = 2;
+    state.exhaustPile = Array.from({ length: 10 }, (_, i) => ({
+      instanceId: `petal-${i}`,
+      defId: 'petal',
+      upgraded: false,
+    }));
+    const targetId = state.enemies[0]!.id;
+    const otherId = state.enemies[1]!.id;
+    state.enemies[0]!.hp = 8;
+    const otherHp = state.enemies[1]!.hp;
+    state = playCard(state, state.hand[0]!.instanceId, targetId, rng);
+    expect(state.enemies.find((e) => e.id === targetId)!.hp).toBe(0);
+    expect(state.enemies.find((e) => e.id === otherId)!.hp).toBe(otherHp);
+    const hits = state.combatFx.filter((fx) => fx.kind === 'petal');
+    expect(hits.every((fx) => fx.targetId === targetId)).toBe(true);
+    expect(hits).toHaveLength(2);
+  });
+
+  it('blooming records a petal hit snapshot for each exhausted petal', () => {
+    const rng = mulberry32(52);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(['blooming', 'vine-whip', 'synthesis', 'poison-powder', 'leech-seed', 'wrap']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('pidgey')],
+      playerTypes: ['grass'],
+      rng,
+    });
+    state = seat(state, 'blooming');
+    state.energy = 2;
+    state.exhaustPile = [
+      { instanceId: 'petal-a', defId: 'petal', upgraded: false },
+      { instanceId: 'petal-b', defId: 'petal', upgraded: false },
+      { instanceId: 'petal-c', defId: 'petal', upgraded: false },
+    ];
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand[0]!.instanceId, state.enemies[0]!.id, rng);
+    const hits = state.combatFx.filter((fx) => fx.kind === 'petal');
+    expect(hits).toHaveLength(3);
+    expect(hits.map((fx) => fx.hp)).toEqual([hp - 5, hp - 10, hp - 15]);
+    expect(state.enemies[0]!.hp).toBe(hp - 15);
   });
 
   it('vine whip deals 7 total if the enemy is toxic', () => {
@@ -1196,7 +1535,7 @@ describe('spire combat', () => {
     state = playCard(state, state.hand.find((c) => c.defId === 'poison-powder')!.instanceId, state.enemies[0]!.id, rng);
     const before = state.playerBlock;
     state = discardFromHand(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, rng);
-    expect(state.playerBlock).toBe(before + 8);
+    expect(state.playerBlock).toBe(before + 7);
     expect(state.discardPile.some((c) => c.defId === 'synthesis')).toBe(true);
   });
 
@@ -1206,9 +1545,9 @@ describe('spire combat', () => {
       'pidgey',
     );
     const synth = seat(state, 'synthesis').hand[0]!;
-    expect(liveCardDescription(synth, state)).toBe('Gain 5 Block. If this is discarded, gain 8 Block.');
+    expect(liveCardDescription(synth, state)).toBe('Gain 5 Block. If this is discarded, gain 7 Block.');
     const buffed = { ...state, dexterity: 3 };
-    expect(liveCardDescription(synth, buffed)).toBe('Gain 8 Block. If this is discarded, gain 11 Block.');
+    expect(liveCardDescription(synth, buffed)).toBe('Gain 8 Block. If this is discarded, gain 10 Block.');
   });
 
   it('synthesis leftover at end of turn does not grant discard block', () => {
@@ -1304,10 +1643,33 @@ describe('spire combat', () => {
     state = seat(state, 'frenzy-plant', 'vine-whip');
     state.energy = 10;
     state = playCard(state, state.hand.find((c) => c.defId === 'frenzy-plant')!.instanceId, undefined, rng);
-    expect(state.powers['frenzy-plant']).toBe(4);
+    expect(state.powers['frenzy-plant']).toBe(3);
     const hp = state.enemies[0]!.hp;
     state = playCard(state, state.hand.find((c) => c.defId === 'vine-whip')!.instanceId, state.enemies[0]!.id, rng);
-    expect(state.enemies[0]!.hp).toBe(hp - 2 - 4);
+    expect(state.enemies[0]!.hp).toBe(hp - 2 - 3);
+  });
+
+  it('frenzy plant does not trigger thorns and ignores Strength', () => {
+    const rng = mulberry32(60);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(['frenzy-plant', 'synthesis', 'synthesis', 'wrap', 'wrap', 'wrap']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('muk')],
+      playerTypes: ['grass'],
+      rng,
+    });
+    state = seat(state, 'frenzy-plant', 'synthesis');
+    state.energy = 10;
+    state.strength = 10;
+    state = playCard(state, state.hand.find((c) => c.defId === 'frenzy-plant')!.instanceId, undefined, rng);
+    const hp = state.playerHp;
+    const foeHp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, undefined, rng);
+    expect(state.enemies[0]!.hp).toBe(foeHp - 3);
+    expect(state.playerHp).toBe(hp);
   });
 
   it('forest curse adds 5 toxic per 5 already on the enemy', () => {
@@ -1347,7 +1709,7 @@ describe('spire combat', () => {
     state.hand[0]!.upgraded = true;
     state.playerHp = 40;
     state = playCard(state, state.hand[0]!.instanceId, undefined, rng2);
-    expect(state.playerHp).toBe(49);
+    expect(state.playerHp).toBe(48);
     expect(state.playerMaxHp).toBe(74);
   });
 
@@ -1362,11 +1724,12 @@ describe('spire combat', () => {
     );
     state = seat(state, 'x-defend-card');
     state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
-    expect(state.dexterity).toBe(2);
+    expect(state.dexterity).toBe(1);
     expect(state.exhaustPile.some((c) => c.defId === 'x-defend-card')).toBe(true);
 
     const plus = resolveCard({ instanceId: 'xd', defId: 'x-defend-card', upgraded: true });
-    expect(plus.description).toBe('Gain 5 Block. Gain 2 Dexterity.');
+    expect(plus.cost).toBe(0);
+    expect(plus.description).toBe('Gain 1 Dexterity.');
   });
 
   it('poke flute adds a 0-cost class power', () => {
@@ -1404,18 +1767,21 @@ describe('spire combat', () => {
     expect(state.playerBlock).toBe(10);
   });
 
-  it('rare candy plus does not exhaust', () => {
+  it('rare candy costs 1 and the upgrade costs 2 and still exhausts', () => {
+    expect(resolveCard({ instanceId: 'rc', defId: 'rare-candy-card', upgraded: false }).cost).toBe(1);
+    const plus = resolveCard({ instanceId: 'rc+', defId: 'rare-candy-card', upgraded: true });
+    expect(plus.cost).toBe(2);
+    expect(plus.exhaust).toBe(true);
     let { state, rng } = start(
       ['rare-candy-card', 'ember', 'ember', 'ember', 'ember', 'ember'],
       'pidgey',
     );
     state = seat(state, 'rare-candy-card');
     state.hand[0]!.upgraded = true;
-    state.energy = 0;
+    state.energy = 2;
     state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
     expect(state.energy).toBe(2);
-    expect(state.exhaustPile.some((c) => c.defId === 'rare-candy-card')).toBe(false);
-    expect(state.discardPile.some((c) => c.defId === 'rare-candy-card')).toBe(true);
+    expect(state.exhaustPile.some((c) => c.defId === 'rare-candy-card')).toBe(true);
   });
 
   it('poke doll grants energy from the discard pile', () => {
@@ -1462,29 +1828,30 @@ describe('spire combat', () => {
     expect(state.playerBlock).toBe(24);
   });
 
-  it('full restore heals half max HP and the upgrade heals to full', () => {
-    let { state, rng } = start(
-      ['full-restore-card', 'ember', 'ember', 'ember', 'ember', 'ember'],
+  it('guard spec live text scales the block number with dexterity', () => {
+    const { state } = start(
+      ['guard-spec', 'ember', 'ember', 'ember', 'ember', 'ember'],
       'pidgey',
     );
-    state = seat(state, 'full-restore-card');
-    state.energy = 4;
-    state.playerHp = 10;
-    state.statuses = { weak: 1 };
-    state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
-    expect(state.playerHp).toBe(46);
-    expect(state.statuses.weak).toBeUndefined();
+    const seated = seat(state, 'guard-spec');
+    const card = seated.hand[0]!;
+    expect(liveCardDescription(card, seated)).toBe('Gain 6 Block X times.');
+    const buffed = { ...seated, dexterity: 2 };
+    expect(liveCardDescription(card, buffed)).toBe('Gain 8 Block X times.');
+  });
 
-    state = start(['full-restore-card', 'ember', 'ember', 'ember', 'ember', 'ember'], 'pidgey').state;
-    rng = mulberry32(10);
-    state = seat(state, 'full-restore-card');
-    state.hand[0]!.upgraded = true;
-    state.energy = 5;
-    state.playerHp = 10;
-    state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
-    expect(state.playerMaxHp).toBe(77);
-    expect(state.playerHp).toBe(77);
-    expect(state.playerBlock).toBe(10);
+  it('baneful bunker gains Block equal to enemy Toxic', () => {
+    let { state, rng } = start(
+      ['baneful-bunker', 'wrap', 'wrap', 'wrap', 'wrap', 'wrap'],
+      'pidgey',
+    );
+    state = seat(state, 'baneful-bunker');
+    state.energy = 2;
+    state.enemies[0]!.statuses = { toxic: 7 };
+    state = playCard(state, state.hand[0]!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.playerBlock).toBe(7);
+    expect(state.exhaustPile.some((c) => c.defId === 'baneful-bunker')).toBe(true);
+    expect(resolveCard({ instanceId: 'bb+', defId: 'baneful-bunker', upgraded: true }).cost).toBe(1);
   });
 });
 
@@ -1517,7 +1884,7 @@ describe('spire relics', () => {
     expect(state.strength).toBe(1);
   });
 
-  it("king's rock grants 4 Block on the second Attack each turn", () => {
+  it("king's rock grants 2 Block on the second Attack each turn", () => {
     let { state, rng } = start(
       ['scratch', 'scratch', 'scratch', 'scratch', 'scratch', 'scratch'],
       'pidgey',
@@ -1529,7 +1896,7 @@ describe('spire relics', () => {
     state = playCard(state, first.instanceId, state.enemies[0]!.id, rng);
     expect(state.playerBlock).toBe(0);
     state = playCard(state, second.instanceId, state.enemies[0]!.id, rng);
-    expect(state.playerBlock).toBe(4);
+    expect(state.playerBlock).toBe(2);
   });
 
   it('scope lens reduces each multi-attack hit by 1', () => {
@@ -1754,6 +2121,28 @@ describe('spire relics', () => {
     expect(state.enemies[0]!.hp).toBe(kickHp - 21);
   });
 
+  it('life orb saps 1 hp and deals a flat 4 that ignores strength', () => {
+    let { state, rng } = start(
+      ['ember', 'ember', 'ember', 'ember', 'ember', 'ember'],
+      'pidgey',
+      ['life-orb'],
+    );
+    state = seat(state, 'ember');
+    state.strength = 5;
+    const hp = state.enemies[0]!.hp;
+    const playerHp = state.playerHp;
+    state = playCard(state, state.hand[0]!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.playerHp).toBe(playerHp - 1);
+    expect(state.enemies[0]!.hp).toBe(hp - 9 - 4);
+    expect(state.log).toContain('Life Orb saps 1 HP.');
+    expect(state.log).toContain(`Life Orb: 4 damage to ${state.enemies[0]!.name}.`);
+    expect(state.combatFx.some((fx) => fx.kind === 'relicGlow' && fx.relicId === 'life-orb')).toBe(true);
+    const sapAt = state.log.indexOf('Life Orb saps 1 HP.');
+    const hitAt = state.log.findIndex((line) => line.startsWith('Life Orb: 4 damage'));
+    expect(sapAt).toBeGreaterThan(-1);
+    expect(hitAt).toBeGreaterThan(sapAt);
+  });
+
   it('petals ignore strength but still get spore', () => {
     let { state, rng } = start(
       ['petal-dance', 'spore', 'ember', 'ember', 'ember', 'ember'],
@@ -1815,15 +2204,15 @@ describe('spire relics', () => {
     expect(state.enemies[0]!.hp).toBe(enemy.maxHp - 8);
   });
 
-  it('forest curse plus does not exhaust', () => {
+  it('forest curse plus still exhausts and costs 1', () => {
     const plus = resolveCard({ instanceId: 'fc+', defId: 'forest-curse', upgraded: true });
-    expect(plus.exhaust).toBe(false);
-    expect(plus.cost).toBe(2);
+    expect(plus.exhaust).toBe(true);
+    expect(plus.cost).toBe(1);
   });
 
   it('poke flute and aqua tail use the new costs', () => {
-    expect(resolveCard({ instanceId: 'pf', defId: 'poke-flute', upgraded: false }).cost).toBe(3);
-    expect(resolveCard({ instanceId: 'pf+', defId: 'poke-flute', upgraded: true }).cost).toBe(2);
+    expect(resolveCard({ instanceId: 'pf', defId: 'poke-flute', upgraded: false }).cost).toBe(2);
+    expect(resolveCard({ instanceId: 'pf+', defId: 'poke-flute', upgraded: true }).cost).toBe(1);
     expect(resolveCard({ instanceId: 'at', defId: 'aqua-tail', upgraded: false }).cost).toBe(3);
     expect(resolveCard({ instanceId: 'at+', defId: 'aqua-tail', upgraded: true }).cost).toBe(2);
   });
@@ -1883,12 +2272,455 @@ describe('spire relics', () => {
     expect(state.discardPile.some((c) => c.defId === 'growth')).toBe(false);
   });
 
-  it('giga drain exhausts and toxic plus applies 15', () => {
-    expect(resolveCard({ instanceId: 'gd', defId: 'giga-drain', upgraded: false }).exhaust).toBe(true);
-    expect(resolveCard({ instanceId: 'gd+', defId: 'giga-drain', upgraded: true }).exhaust).toBe(true);
+  it('giga drain plus exhausts only when the enemy is attacking', () => {
+    expect(resolveCard({ instanceId: 'gd', defId: 'giga-drain', upgraded: false }).exhaust).toBeFalsy();
+    expect(resolveCard({ instanceId: 'gd+', defId: 'giga-drain', upgraded: true }).exhaust).toBeFalsy();
+    const rng = mulberry32(77);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: [{ instanceId: 'gd+', defId: 'giga-drain', upgraded: true }, ...deck(['wrap', 'wrap', 'wrap', 'wrap'])],
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('pidgey')],
+      playerTypes: ['grass'],
+      rng,
+    });
+    state = seat(state, 'giga-drain');
+    state.energy = 3;
+    state.enemies[0]!.intent = { kind: 'attack', amount: 6 };
+    state = playCard(state, state.hand[0]!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.playerMaxHp).toBe(77);
+    expect(state.exhaustPile.some((c) => c.defId === 'giga-drain')).toBe(true);
     const toxic = resolveCard({ instanceId: 'tx+', defId: 'toxic-bloom', upgraded: true });
-    expect(toxic.description).toBe('Apply 6 Toxic. If the enemy is already Toxic, Apply 15 instead.');
+    expect(toxic.description).toBe('Apply 2 Toxic. If the enemy is already Toxic, apply 10 instead.');
     const beam = resolveCard({ instanceId: 'sb+', defId: 'solar-beam', upgraded: true });
-    expect(beam.description).toBe('Deal 13 damage. If the enemy is Frail, deal 33 damage instead.');
+    expect(beam.description).toBe(
+      'Deal 20 damage. Costs 0 if you discarded a card this turn. If the enemy is Frail, deal 28 damage instead.',
+    );
+    const frenzy = resolveCard({ instanceId: 'fp+', defId: 'frenzy-plant', upgraded: true });
+    expect(frenzy.cost).toBe(2);
+    expect(frenzy.effects).toEqual([{ op: 'applyPower', power: 'frenzy-plant', stacks: 3 }]);
+  });
+
+  function bloomFight(cardIds: string[], enemyId = 'pidgey', seed = 61) {
+    const rng = mulberry32(seed);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(cardIds),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef(enemyId)],
+      playerTypes: ['grass', 'poison'],
+      characterId: 'bloom',
+      rng,
+    });
+    return { state, rng };
+  }
+
+  it('bullet seed hits three times', () => {
+    let { state, rng } = bloomFight(['bullet-seed', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip']);
+    state = seat(state, 'bullet-seed');
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand[0]!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 9);
+  });
+
+  it('seed bomb spends the enemy block snapshot when they are frail', () => {
+    let { state, rng } = bloomFight(
+      ['seed-bomb', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip'],
+      'geodude',
+    );
+    state = seat(state, 'seed-bomb');
+    const enemy = state.enemies[0]!;
+    expect(enemy.block).toBe(8);
+    const hp = enemy.hp;
+    state = playCard(state, state.hand[0]!.instanceId, enemy.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp);
+    expect(state.enemies[0]!.block).toBe(1);
+
+    state.hand = [{ instanceId: 'sb2', defId: 'seed-bomb', upgraded: false }];
+    state.energy = 1;
+    state.enemies[0]!.block = 8;
+    state.enemies[0]!.statuses = { frail: 1 };
+    state = playCard(state, 'sb2', state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 7);
+    expect(state.enemies[0]!.block).toBe(0);
+  });
+
+  it('worry seed discards then draws', () => {
+    let { state, rng } = bloomFight([
+      'worry-seed',
+      'synthesis',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'wrap',
+    ]);
+    state = seat(state, 'worry-seed', 'synthesis');
+    state.drawPile = [
+      { instanceId: 'd1', defId: 'vine-whip', upgraded: false },
+      { instanceId: 'd2', defId: 'wrap', upgraded: false },
+    ];
+    state = playCard(state, state.hand.find((c) => c.defId === 'worry-seed')!.instanceId, undefined, rng);
+    expect(state.pendingDiscard).toBe(1);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, rng);
+    expect(state.hand).toHaveLength(2);
+    expect(state.playerBlock).toBe(7);
+  });
+
+  it('magical leaf and natural gift pay off when discarded', () => {
+    let { state, rng } = bloomFight([
+      'poison-powder',
+      'magical-leaf',
+      'natural-gift',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'poison-powder', 'magical-leaf');
+    state = playCard(state, state.hand.find((c) => c.defId === 'poison-powder')!.instanceId, state.enemies[0]!.id, rng);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'magical-leaf')!.instanceId, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBe(6);
+
+    state.hand = [{ instanceId: 'ng', defId: 'natural-gift', upgraded: false }];
+    state.drawPile = [{ instanceId: 'drawn', defId: 'vine-whip', upgraded: false }];
+    state.pendingDiscard = 1;
+    state.energy = 0;
+    state = discardFromHand(state, 'ng', rng);
+    expect(state.energy).toBe(0);
+    expect(state.hand.some((c) => c.instanceId === 'drawn')).toBe(true);
+  });
+
+  it('grassy glide deals more after a discarded skill', () => {
+    let { state, rng } = bloomFight([
+      'grassy-glide',
+      'synthesis',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'grassy-glide', 'synthesis');
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'grassy-glide')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 8);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 14);
+  });
+
+  it('cotton spore and horn leech add seeds', () => {
+    let { state, rng } = bloomFight([
+      'cotton-spore',
+      'horn-leech',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'cotton-spore', 'horn-leech');
+    state.playerHp = 60;
+    state = playCard(state, state.hand.find((c) => c.defId === 'cotton-spore')!.instanceId, undefined, rng);
+    expect(state.hand.filter((c) => c.defId === 'seed')).toHaveLength(2);
+    expect(state.playerBlock).toBe(5);
+    state = playCard(state, state.hand.find((c) => c.defId === 'horn-leech')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.playerHp).toBe(63);
+    expect(state.hand.filter((c) => c.defId === 'seed')).toHaveLength(3);
+  });
+
+  it('seeds heal when played and apply toxic when discarded', () => {
+    let { state, rng } = bloomFight(['cotton-spore', 'poison-powder', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip']);
+    state = seat(state, 'cotton-spore', 'poison-powder');
+    state.playerHp = 60;
+    state = playCard(state, state.hand.find((c) => c.defId === 'cotton-spore')!.instanceId, undefined, rng);
+    const seed = state.hand.find((c) => c.defId === 'seed')!;
+    state = playCard(state, seed.instanceId, undefined, rng);
+    expect(state.playerHp).toBe(62);
+    expect(state.exhaustPile.some((c) => c.instanceId === seed.instanceId)).toBe(true);
+
+    state = playCard(state, state.hand.find((c) => c.defId === 'poison-powder')!.instanceId, state.enemies[0]!.id, rng);
+    const leftover = state.hand.find((c) => c.defId === 'seed')!;
+    state = discardFromHand(state, leftover.instanceId, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBe(4);
+  });
+
+  it('strength sap discarded adds seeds instead of healing', () => {
+    let { state, rng } = bloomFight([
+      'poison-powder',
+      'strength-sap',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'poison-powder', 'strength-sap');
+    state.playerHp = 60;
+    state = playCard(state, state.hand.find((c) => c.defId === 'poison-powder')!.instanceId, state.enemies[0]!.id, rng);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'strength-sap')!.instanceId, rng);
+    expect(state.playerHp).toBe(60);
+    expect(state.hand.filter((c) => c.defId === 'seed')).toHaveLength(2);
+    expect(state.enemies[0]!.statuses.weak).toBeUndefined();
+  });
+
+  it('root network turns card heals into toxic', () => {
+    let { state, rng } = bloomFight([
+      'root-network',
+      'horn-leech',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'root-network', 'horn-leech');
+    state.playerHp = 60;
+    state = playCard(state, state.hand.find((c) => c.defId === 'root-network')!.instanceId, undefined, rng);
+    state = playCard(state, state.hand.find((c) => c.defId === 'horn-leech')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBe(1);
+  });
+
+  it('root network plus does not trigger when you are already full', () => {
+    let { state, rng } = bloomFight([
+      'root-network',
+      'horn-leech',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'root-network', 'horn-leech');
+    state.hand.find((c) => c.defId === 'root-network')!.upgraded = true;
+    state = playCard(state, state.hand.find((c) => c.defId === 'root-network')!.instanceId, undefined, rng);
+    expect(state.powers.rootNetworkBlock).toBe(2);
+    state = playCard(state, state.hand.find((c) => c.defId === 'horn-leech')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBeUndefined();
+    expect(state.playerBlock).toBe(0);
+  });
+
+  it('grassy terrain and chlorophyll trigger at the start of the next turn', () => {
+    let { state, rng } = bloomFight([
+      'grassy-terrain',
+      'chlorophyll',
+      'synthesis',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'grassy-terrain', 'chlorophyll');
+    state.energy = 3;
+    state = playCard(state, state.hand.find((c) => c.defId === 'grassy-terrain')!.instanceId, undefined, rng);
+    state = playCard(state, state.hand.find((c) => c.defId === 'chlorophyll')!.instanceId, undefined, rng);
+    state = endTurn(state, rng);
+    expect(state.hand.some((c) => c.defId === 'seed')).toBe(true);
+    expect(state.pendingDiscard).toBe(1);
+  });
+
+  it('leaf storm discards the chosen cards then hits once per card', () => {
+    let { state, rng } = bloomFight([
+      'leaf-storm',
+      'magical-leaf',
+      'synthesis',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'leaf-storm', 'magical-leaf', 'synthesis');
+    state.energy = 3;
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'leaf-storm')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.pendingOptionalDiscard).toBe(true);
+    expect(state.exhaustPile.some((c) => c.defId === 'leaf-storm')).toBe(true);
+    const leaf = state.hand.find((c) => c.defId === 'magical-leaf')!;
+    const synth = state.hand.find((c) => c.defId === 'synthesis')!;
+    state = toggleOptionalDiscardCard(state, leaf.instanceId);
+    state = toggleOptionalDiscardCard(state, synth.instanceId);
+    state = confirmOptionalDiscard(state, rng);
+    expect(state.pendingOptionalDiscard).toBe(false);
+    expect(state.enemies[0]!.hp).toBe(hp - 10);
+    expect(state.enemies[0]!.statuses.toxic).toBe(7);
+    expect(state.playerBlock).toBe(7);
+  });
+
+  it('harvest plays seeds from hand and discard', () => {
+    let { state, rng } = bloomFight(['harvest', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip']);
+    state = seat(state, 'harvest');
+    state.playerHp = 50;
+    state.hand.push(
+      { instanceId: 's1', defId: 'seed', upgraded: false },
+      { instanceId: 's2', defId: 'seed', upgraded: false },
+    );
+    state.discardPile.push({ instanceId: 's3', defId: 'seed', upgraded: false });
+    state.energy = 2;
+    state = playCard(state, state.hand.find((c) => c.defId === 'harvest')!.instanceId, undefined, rng);
+    expect(state.playerHp).toBe(62);
+    expect(state.hand.some((c) => c.defId === 'seed')).toBe(false);
+    expect(state.discardPile.some((c) => c.defId === 'seed')).toBe(false);
+    expect(state.exhaustPile.filter((c) => c.defId === 'seed')).toHaveLength(3);
+    expect(state.exhaustPile.some((c) => c.defId === 'harvest')).toBe(true);
+  });
+
+  it('solar beam costs 0 after a discard and no longer deals 13 for free', () => {
+    let { state, rng } = bloomFight([
+      'solar-beam',
+      'poison-powder',
+      'synthesis',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'solar-beam', 'poison-powder', 'synthesis');
+    const beam = state.hand.find((c) => c.defId === 'solar-beam')!;
+    expect(energyCostToPlay(state, beam)).toBe(1);
+    state = playCard(state, state.hand.find((c) => c.defId === 'poison-powder')!.instanceId, state.enemies[0]!.id, rng);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, rng);
+    expect(energyCostToPlay(state, state.hand.find((c) => c.defId === 'solar-beam')!)).toBe(0);
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'solar-beam')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 16);
+  });
+
+  it('stun spore is a free frail setup and absorb applies toxic from a discarded skill', () => {
+    let { state, rng } = bloomFight([
+      'stun-spore',
+      'absorb',
+      'synthesis',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'stun-spore', 'absorb', 'synthesis');
+    state.playerHp = 60;
+    state = playCard(state, state.hand.find((c) => c.defId === 'stun-spore')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.statuses.frail).toBe(1);
+    expect(state.energy).toBe(3);
+    state = playCard(state, state.hand.find((c) => c.defId === 'absorb')!.instanceId, undefined, rng);
+    state = discardFromHand(state, state.hand.find((c) => c.defId === 'synthesis')!.instanceId, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBe(2);
+    expect(state.playerHp).toBe(63);
+  });
+
+  it('effect spore converts frail into toxic and overgrow buffs attacks at low hp', () => {
+    let { state, rng } = bloomFight([
+      'effect-spore',
+      'overgrow',
+      'sleep-powder',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'effect-spore', 'overgrow', 'sleep-powder', 'vine-whip');
+    state.energy = 4;
+    state = playCard(state, state.hand.find((c) => c.defId === 'effect-spore')!.instanceId, undefined, rng);
+    state = playCard(state, state.hand.find((c) => c.defId === 'sleep-powder')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.statuses.frail).toBe(1);
+    expect(state.enemies[0]!.statuses.toxic).toBe(2);
+    state = playCard(state, state.hand.find((c) => c.defId === 'overgrow')!.instanceId, undefined, rng);
+    state.playerHp = 20;
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'vine-whip')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 13);
+  });
+
+  it('toxic spikes trigger when an enemy gains block', () => {
+    let { state, rng } = bloomFight(
+      ['toxic-spikes', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip'],
+      'geodude',
+    );
+    state = seat(state, 'toxic-spikes');
+    state.energy = 2;
+    state = playCard(state, state.hand[0]!.instanceId, undefined, rng);
+    const enemy = state.enemies[0]!;
+    enemy.intent = { kind: 'block', amount: 6 };
+    state = applyEnemyIntentRest(state, enemy.id);
+    expect(state.enemies[0]!.statuses.toxic).toBe(1);
+  });
+
+  it('petal blizzard and sludge wave hit every enemy', () => {
+    const rng = mulberry32(77);
+    let state = createCombat({
+      hp: 74,
+      maxHp: 74,
+      deck: deck(['petal-blizzard', 'sludge-wave', 'vine-whip', 'vine-whip', 'vine-whip', 'vine-whip']),
+      relics: [],
+      potions: [null, null, null],
+      enemyDefs: [getEnemyDef('pidgey'), getEnemyDef('pidgey')],
+      playerTypes: ['grass', 'poison'],
+      characterId: 'bloom',
+      rng,
+    });
+    state = seat(state, 'petal-blizzard', 'sludge-wave');
+    state.energy = 3;
+    state.enemies[0]!.statuses = { frail: 1 };
+    const hpA = state.enemies[0]!.hp;
+    const hpB = state.enemies[1]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'petal-blizzard')!.instanceId, undefined, rng);
+    expect(state.enemies[0]!.hp).toBe(hpA - 11);
+    expect(state.enemies[1]!.hp).toBe(hpB - 11);
+    state = playCard(state, state.hand.find((c) => c.defId === 'sludge-wave')!.instanceId, undefined, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBe(3);
+    expect(state.enemies[1]!.statuses.weak).toBe(1);
+    expect(state.exhaustPile.some((c) => c.defId === 'sludge-wave')).toBe(true);
+  });
+
+  it('power whip scales with tokens and seed flare exhausts chosen seeds', () => {
+    let { state, rng } = bloomFight([
+      'power-whip',
+      'seed-flare',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'power-whip', 'seed-flare', 'vine-whip');
+    state.hand.push(
+      { instanceId: 's1', defId: 'seed', upgraded: false },
+      { instanceId: 's2', defId: 'petal', upgraded: false },
+    );
+    state.energy = 4;
+    const hp = state.enemies[0]!.hp;
+    state = playCard(state, state.hand.find((c) => c.defId === 'power-whip')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.hp).toBe(hp - 18);
+    state.hand.push({ instanceId: 's3', defId: 'seed', upgraded: false });
+    state = playCard(state, state.hand.find((c) => c.defId === 'seed-flare')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.pendingOptionalDiscard).toBe(true);
+    expect(state.optionalDiscardExhaust).toBe(true);
+    const seed = state.hand.find((c) => c.defId === 'seed')!;
+    const vine = state.hand.find((c) => c.defId === 'vine-whip');
+    if (vine) state = toggleOptionalDiscardCard(state, vine.instanceId);
+    state = toggleOptionalDiscardCard(state, seed.instanceId);
+    const after = state.enemies[0]!.hp;
+    state = confirmOptionalDiscard(state, rng);
+    expect(state.enemies[0]!.hp).toBe(after - 8);
+    expect(state.enemies[0]!.statuses.toxic).toBe(2);
+    expect(state.exhaustPile.some((c) => c.instanceId === seed.instanceId)).toBe(true);
+    expect(state.hand.some((c) => c.defId === 'vine-whip')).toBe(true);
+  });
+
+  it('bloom doom spends X on toxic and frail, pollen puff and aromatherapy heal', () => {
+    let { state, rng } = bloomFight([
+      'bloom-doom',
+      'pollen-puff',
+      'aromatherapy',
+      'vine-whip',
+      'vine-whip',
+      'vine-whip',
+    ]);
+    state = seat(state, 'bloom-doom', 'pollen-puff', 'aromatherapy');
+    state.playerHp = 50;
+    state.statuses = { weak: 2 };
+    state.energy = 3;
+    state = playCard(state, state.hand.find((c) => c.defId === 'bloom-doom')!.instanceId, state.enemies[0]!.id, rng);
+    expect(state.enemies[0]!.statuses.toxic).toBe(9);
+    expect(state.enemies[0]!.statuses.frail).toBe(2);
+    expect(state.energy).toBe(0);
+    state.energy = 2;
+    state = playCard(state, state.hand.find((c) => c.defId === 'pollen-puff')!.instanceId, undefined, rng);
+    expect(state.playerHp).toBe(54);
+    expect(state.hand.some((c) => c.defId === 'petal')).toBe(true);
+    state = playCard(state, state.hand.find((c) => c.defId === 'aromatherapy')!.instanceId, undefined, rng);
+    expect(state.statuses.weak).toBeUndefined();
+    expect(state.playerHp).toBe(60);
+    expect(state.exhaustPile.some((c) => c.defId === 'aromatherapy')).toBe(true);
   });
 });

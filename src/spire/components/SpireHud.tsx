@@ -46,7 +46,7 @@ export function RelicIcon({ id, name }: { id: string; name: string }) {
   );
 }
 
-export function RelicBar({ relics }: { relics: string[] }) {
+export function RelicBar({ relics, flashId }: { relics: string[]; flashId?: string | null }) {
   return (
     <div className="spire-relics">
       {relics.map((id, i) => {
@@ -54,7 +54,11 @@ export function RelicBar({ relics }: { relics: string[] }) {
         if (!def) return null;
         return (
           <SpireTip key={`${id}-${i}`} title={def.name} body={def.description} side="bottom">
-            <span className="spire-relic" tabIndex={0} aria-label={def.name}>
+            <span
+              className={`spire-relic${flashId === id ? ' is-flash' : ''}`}
+              tabIndex={0}
+              aria-label={def.name}
+            >
               <RelicIcon id={id} name={def.name} />
             </span>
           </SpireTip>

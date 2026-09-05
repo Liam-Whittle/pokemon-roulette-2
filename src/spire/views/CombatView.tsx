@@ -4,10 +4,11 @@ import { createPortal } from 'react-dom';
 import { Confetti } from '../../components/Confetti';
 import { TypeBadge } from '../../components/TypeBadge';
 import { battleGifOnError, localBattleGif } from '../../utils/localAssets';
-import { playPokemonCry, playSfx } from '../../utils/sound';
+import { playPokemonCry, playSfx, preloadSpireCombatSfx } from '../../utils/sound';
 import { useGameStore } from '../../store/useGameStore';
 import { CHARACTERS } from '../data/characters';
 import { cardNeedsTarget, resolveCard } from '../data/cards';
+import { STATUS_TIPS } from '../data/keywordTips';
 import { ENEMIES } from '../data/enemies';
 import { CardFlightLayer } from '../components/CardFlightLayer';
 import {
@@ -28,7 +29,7 @@ import { SpireTip } from '../components/SpireTip';
 import { canPlayCard, chargePotency, chargeSlots, displayedIntentAmount, liveCardDescription, previewEnemyActions } from '../engine/combat';
 import { mulberry32, shuffle } from '../engine/rng';
 import { useSpireStore } from '../store/useSpireStore';
-import type { CardInstance, CombatEnemy, CombatFx, CombatState, EnemyIntentKind, EnemyIntentPattern } from '../types';
+import type { CardDef, CardInstance, CombatEnemy, CombatFx, CombatState, EnemyIntentKind, EnemyIntentPattern } from '../types';
 import { handArchDrop, handFanPose } from './handFan';
 
 type PileKind = 'draw' | 'discard' | 'exhaust';
@@ -41,13 +42,38 @@ const INTENT: Record<EnemyIntentKind, { icon: string; label: (n: number, intent?
   buff: { icon: '↑', label: (n) => `Buff +${n}` },
   buffAlly: { icon: '↑', label: (n) => `Buff allies +${n}` },
   heal: { icon: '✚', label: (n) => `Heal ${n}` },
-  status: { icon: '☠', label: () => 'Status' },
+  status: {
+    icon: '☠',
+    label: (_n, intent) => {
+      const name = intent?.status ? intent.status[0]!.toUpperCase() + intent.status.slice(1) : 'Status';
+      const stacks = intent?.statusStacks;
+      return stacks ? `${name} ${stacks}` : name;
+    },
+  },
   summon: { icon: '+', label: () => 'Summon' },
 };
 
 const ACTION_GAP_MS = 720;
 const ACTION_WINDUP_MS = 220;
 const seenCombatFxIds = new Set<number>();
+
+type FoeVitals = { hp: number; block: number };
+
+function isEnemyHitFx(cue: CombatFx): boolean {
+  return cue.kind === 'hitEnemy' || cue.kind === 'petal' || cue.kind === 'flare';
+}
+
+function cueDelay(cue: CombatFx): number {
+  if (cue.kind === 'surf') return 420;
+  if (cue.kind === 'faint') return 360;
+  if (cue.kind === 'petal') return 200;
+  if (cue.kind === 'relicGlow') return 80;
+  return 160;
+}
+
+function foeVitalsOf(enemy: CombatEnemy): FoeVitals {
+  return { hp: enemy.hp, block: enemy.block };
+}
 
 interface DragState {
   card: CardInstance;
@@ -69,6 +95,10 @@ function enemyFromPoint(x: number, y: number): string | null {
   return el?.closest<HTMLElement>('[data-enemy-id]')?.dataset.enemyId ?? null;
 }
 
+function skillGrantsBlock(def: CardDef): boolean {
+  return def.effects.some((e) => e.op === 'block' || e.op === 'blockTimes' || e.op === 'blockEqualToStatus');
+}
+
 function pointInCombatDock(x: number, y: number): boolean {
   const dock = document.querySelector<HTMLElement>('[data-spire-dock]');
   if (!dock) return false;
@@ -85,9 +115,10 @@ function traitPills(enemy: CombatEnemy): { key: string; label: string; body: str
   if (!t) return [];
   const out: { key: string; label: string; body: string }[] = [];
   if (t.curlUp) out.push({ key: 'curl', label: `Curl Up ${t.curlUp}`, body: 'The first unblocked hit this combat grants Block.' });
-  if (t.explodeOnDeath) out.push({ key: 'boom', label: `Explodes ${t.explodeOnDeath}`, body: 'Deals damage to you when it faints.' });
+  if (t.explodeOnDeath) out.push({ key: 'boom', label: `Explodes ${t.explodeOnDeath}`, body: 'Deals damage to you when it faints, but only if another foe is still standing.' });
   if (t.thorns) out.push({ key: 'thorns', label: `Thorns ${t.thorns}`, body: 'Damages you when it takes HP damage.' });
-  if (t.enrageOnSkill) out.push({ key: 'enrage', label: `Enrage ${t.enrageOnSkill}`, body: 'Gains Strength whenever you play a Skill.' });
+  if (t.enrageOnSkill) out.push({ key: 'enrage', label: `Enrage ${t.enrageOnSkill}`, body: 'Gains Strength this turn whenever you play a Skill. The bonus fades next turn.' });
+  if (t.punishOnPower) out.push({ key: 'punish', label: `Punish ${t.punishOnPower}`, body: 'Deals damage to you whenever you play a Power.' });
   if (t.splitInto?.length) out.push({ key: 'split', label: 'Splits', body: 'Splits into smaller foes when it faints.' });
   if (t.startBlock) out.push({ key: 'shell', label: `Shell ${t.startBlock}`, body: 'Begins combat with Block.' });
   if (t.metallicize) out.push({ key: 'metal', label: `Metallicize ${t.metallicize}`, body: 'Gains Block at the start of its turn.' });
@@ -178,6 +209,37 @@ const PILE_COPY: Record<PileKind, { label: string; detail: string; empty: string
     empty: 'Nothing has been exhausted.',
   },
 };
+
+function CombatLog({ lines }: { lines: string[] }) {
+  const listRef = useRef<HTMLUListElement>(null);
+  const stickToEnd = useRef(true);
+
+  useLayoutEffect(() => {
+    const el = listRef.current;
+    if (!el || !stickToEnd.current) return;
+    el.scrollTop = el.scrollHeight;
+  }, [lines]);
+
+  return (
+    <aside className="spire-log" aria-label="Combat log">
+      <p className="spire-log__title">Log</p>
+      <ul
+        ref={listRef}
+        className="spire-log__lines"
+        onScroll={() => {
+          const el = listRef.current;
+          if (!el) return;
+          stickToEnd.current = el.scrollHeight - el.scrollTop - el.clientHeight < 16;
+        }}
+        onWheel={(event) => event.stopPropagation()}
+      >
+        {lines.map((line, i) => (
+          <li key={`${i}-${line}`}>{line}</li>
+        ))}
+      </ul>
+    </aside>
+  );
+}
 
 function CombatPile({
   kind,
@@ -297,8 +359,14 @@ export function CombatView() {
   const discardForPending = useSpireStore((s) => s.discardForPending);
   const toggleChoiceBand = useSpireStore((s) => s.toggleChoiceBand);
   const confirmChoiceBand = useSpireStore((s) => s.confirmChoiceBand);
+  const toggleOptionalDiscard = useSpireStore((s) => s.toggleOptionalDiscard);
+  const confirmOptionalDiscard = useSpireStore((s) => s.confirmOptionalDiscard);
   const muted = useGameStore((s) => s.muted);
   const combat = run?.combat;
+
+  useEffect(() => {
+    preloadSpireCombatSfx();
+  }, []);
   const character = run?.characterId ? CHARACTERS[run.characterId] : null;
   const [drag, setDrag] = useState<DragState | null>(null);
   const [hoverEnemy, setHoverEnemy] = useState<string | null>(null);
@@ -310,6 +378,9 @@ export function CombatView() {
   const [enemyHitId, setEnemyHitId] = useState<string | null>(null);
   const [specialFx, setSpecialFx] = useState<{ kind: 'surf' | 'petal' | 'flare' | 'charge'; targetId?: string; chargeKind?: 'attack' | 'block' } | null>(null);
   const [fxBusy, setFxBusy] = useState(false);
+  const [flashRelic, setFlashRelic] = useState<string | null>(null);
+  const [shownFoe, setShownFoe] = useState<Record<string, FoeVitals>>({});
+  const foeSnapRef = useRef<Map<string, FoeVitals>>(new Map());
   const [revealResult, setRevealResult] = useState(false);
   const [floats, setFloats] = useState<FloatHit[]>([]);
   const [openPile, setOpenPile] = useState<PileKind | null>(null);
@@ -367,6 +438,11 @@ export function CombatView() {
         toggleChoiceBand(card.instanceId);
         return;
       }
+      if (combat.pendingOptionalDiscard) {
+        playSfx('click', muted);
+        toggleOptionalDiscard(card.instanceId);
+        return;
+      }
       if (pendingDiscard) {
         recordCardOrigin(card);
         playSfx('click', muted);
@@ -382,15 +458,17 @@ export function CombatView() {
       if (cardNeedsTarget(def)) {
         if (!enemyId) return;
         recordCardOrigin(card);
-        if (def.kind !== 'attack') playSfx('buff', muted);
+        if (def.kind === 'skill' && !skillGrantsBlock(def)) playSfx('skill', muted);
+        else if (def.kind === 'power') playSfx('power', muted);
         playCard(card.instanceId, enemyId);
         return;
       }
       recordCardOrigin(card);
-      if (def.kind !== 'attack') playSfx('buff', muted);
+      if (def.kind === 'skill' && !skillGrantsBlock(def)) playSfx('skill', muted);
+      else if (def.kind === 'power') playSfx('power', muted);
       playCard(card.instanceId);
     },
-    [combat, discardForPending, locked, muted, playCard, recordCardOrigin, selectFreePick, toggleChoiceBand],
+    [combat, discardForPending, locked, muted, playCard, recordCardOrigin, selectFreePick, toggleChoiceBand, toggleOptionalDiscard],
   );
 
   const onFlightComplete = useCallback((id: string) => {
@@ -443,7 +521,12 @@ export function CombatView() {
       const inDock = pointInCombatDock(event.clientX, event.clientY);
       const def = resolveCard(current.card);
       cancelDrag();
-      if ((combat?.pendingDiscard ?? 0) > 0 || (combat?.pendingFreePick ?? 0) > 0 || combat?.pendingChoiceBand) {
+      if (
+        (combat?.pendingDiscard ?? 0) > 0 ||
+        (combat?.pendingFreePick ?? 0) > 0 ||
+        combat?.pendingChoiceBand ||
+        combat?.pendingOptionalDiscard
+      ) {
         tryPlay(current.card);
         return;
       }
@@ -467,7 +550,7 @@ export function CombatView() {
       window.removeEventListener('pointercancel', onUp);
       window.removeEventListener('contextmenu', onContextMenu);
     };
-  }, [combat?.pendingChoiceBand, combat?.pendingDiscard, combat?.pendingFreePick, drag, tryPlay]);
+  }, [combat?.pendingChoiceBand, combat?.pendingDiscard, combat?.pendingFreePick, combat?.pendingOptionalDiscard, drag, tryPlay]);
 
   useEffect(() => () => clearTimers(), [clearTimers]);
 
@@ -487,6 +570,13 @@ export function CombatView() {
         if (cue.targetId) {
           setEnemyHitId(cue.targetId);
           window.setTimeout(() => setEnemyHitId((id) => (id === cue.targetId ? null : id)), 220);
+          if (typeof cue.hp === 'number') {
+            const targetId = cue.targetId;
+            setShownFoe((prev) => ({
+              ...prev,
+              [targetId]: { hp: cue.hp!, block: cue.block ?? prev[targetId]?.block ?? 0 },
+            }));
+          }
         }
         if (cue.kind === 'petal' || cue.kind === 'flare') {
           setSpecialFx({ kind: cue.kind, targetId: cue.targetId });
@@ -500,20 +590,27 @@ export function CombatView() {
         if ((cue.amount ?? 0) > 0) {
           setFloats((prev) => [...prev, { id: cue.id, text: `-${cue.amount}` }]);
         }
+      } else if (cue.kind === 'relicGlow' && cue.relicId) {
+        playSfx('item', muted);
+        setFlashRelic(cue.relicId);
+        window.setTimeout(() => setFlashRelic((id) => (id === cue.relicId ? null : id)), 720);
       } else if (cue.kind === 'blockGain') {
-        playSfx('buff', muted);
+        playSfx('block', muted);
       } else if (cue.kind === 'status') {
-        playSfx('buff', muted);
+        playSfx('statusHit', muted);
       } else if (cue.kind === 'chargeEvoke') {
-        playSfx(cue.chargeKind === 'block' ? 'buff' : 'item', muted);
+        playSfx(cue.chargeKind === 'block' ? 'block' : 'item', muted);
         setSpecialFx({ kind: 'charge', chargeKind: cue.chargeKind });
         window.setTimeout(() => setSpecialFx(null), 360);
       } else if (cue.kind === 'surf') {
         playSfx('hit', muted);
         setSpecialFx({ kind: 'surf' });
         window.setTimeout(() => setSpecialFx(null), 700);
-      } else if (cue.kind === 'faint' && cue.speciesId) {
-        playPokemonCry({ id: cue.speciesId, speciesName: cue.speciesName }, muted);
+      } else if (cue.kind === 'faint') {
+        const cryDef = cue.defId ? ENEMIES[cue.defId] : undefined;
+        const speciesId = cryDef?.speciesId ?? cue.speciesId;
+        const speciesName = cryDef?.name ?? cue.speciesName;
+        if (speciesId) playPokemonCry({ id: speciesId, speciesName }, muted);
       }
     },
     [muted],
@@ -529,14 +626,16 @@ export function CombatView() {
     }
     let cancelled = false;
     const timers: number[] = [];
-    const locksHand = cues.some((cue) => cue.kind !== 'status' && cue.kind !== 'blockGain');
+    const locksHand = cues.some(
+      (cue) => cue.kind !== 'status' && cue.kind !== 'blockGain' && cue.kind !== 'relicGlow',
+    );
     if (locksHand) setFxBusy(true);
     const runFx = async () => {
       for (const cue of cues) {
         if (cancelled) return;
         playCue(cue);
         await new Promise<void>((resolve) => {
-          const delay = cue.kind === 'surf' ? 420 : cue.kind === 'faint' ? 360 : 160;
+          const delay = cueDelay(cue);
           timers.push(window.setTimeout(resolve, delay));
         });
         if (!cancelled) seenCombatFxIds.add(cue.id);
@@ -552,6 +651,20 @@ export function CombatView() {
       setFxBusy(false);
     };
   }, [clearCombatFx, combat?.combatFx, playCue]);
+
+  useLayoutEffect(() => {
+    if (!combat) {
+      foeSnapRef.current = new Map();
+      setShownFoe((prev) => (Object.keys(prev).length ? {} : prev));
+      return;
+    }
+    const pendingHits = (combat.combatFx ?? []).some((cue) => isEnemyHitFx(cue) && !seenCombatFxIds.has(cue.id));
+    if (pendingHits || fxBusy) return;
+    const next = new Map<string, FoeVitals>();
+    for (const enemy of combat.enemies) next.set(enemy.id, foeVitalsOf(enemy));
+    foeSnapRef.current = next;
+    setShownFoe((prev) => (Object.keys(prev).length ? {} : prev));
+  }, [combat, fxBusy]);
 
   useEffect(() => {
     if (!result) {
@@ -576,7 +689,15 @@ export function CombatView() {
   }, [acknowledgeCombatResult, combat?.combatFx, flights.length, fxBusy, muted, result]);
 
   const startEnemyPhase = useCallback(() => {
-    if (!combat || locked || endingRef.current || combat.pendingDiscard > 0 || (combat.pendingFreePick ?? 0) > 0) return;
+    if (
+      !combat ||
+      locked ||
+      endingRef.current ||
+      combat.pendingDiscard > 0 ||
+      (combat.pendingFreePick ?? 0) > 0 ||
+      combat.pendingChoiceBand ||
+      combat.pendingOptionalDiscard
+    ) return;
     if ((combat.pendingZeroCostOffer ?? []).length > 0) return;
     if (combat.pendingChoiceBand) return;
     endingRef.current = true;
@@ -612,19 +733,25 @@ export function CombatView() {
         const live = useSpireStore.getState().run?.combat;
         const enemy = live?.enemies.find((item) => item.id === action.enemyId);
         if (!live || !enemy || enemy.hp <= 0) continue;
-        setActingId(action.enemyId);
-        setActingKind(action.kind);
-        if (isAttackKind(action.kind)) {
-          const hits = action.kind === 'multiAttack' ? Math.max(1, enemy.intent?.times ?? 2) : 1;
-          for (let i = 0; i < hits; i += 1) {
-            applyEnemyHit(action.enemyId);
+        const intents = [enemy.intent, ...(enemy.extraIntents ?? [])].filter(Boolean);
+        for (const intent of intents) {
+          const still = useSpireStore.getState().run?.combat?.enemies.find((item) => item.id === action.enemyId);
+          if (!still || still.hp <= 0) break;
+          setActingId(action.enemyId);
+          setActingKind(intent.kind);
+          if (isAttackKind(intent.kind)) {
+            const hits = intent.kind === 'multiAttack' ? Math.max(1, intent.times ?? 2) : 1;
+            for (let i = 0; i < hits; i += 1) {
+              applyEnemyHit(action.enemyId, intent);
+              await wait(ACTION_GAP_MS);
+            }
+            applyEnemyIntentRest(action.enemyId, intent);
+          } else {
+            applyEnemyIntentRest(action.enemyId, intent);
+            if (intent.kind === 'heal') playSfx('heal', muted);
+            else if (intent.kind !== 'block') playSfx('buff', muted);
             await wait(ACTION_GAP_MS);
           }
-          applyEnemyIntentRest(action.enemyId);
-        } else {
-          applyEnemyIntentRest(action.enemyId);
-          playSfx(action.kind === 'heal' ? 'heal' : action.kind === 'block' ? 'buff' : 'buff', muted);
-          await wait(ACTION_GAP_MS);
         }
       }
       setActingId(null);
@@ -727,10 +854,11 @@ export function CombatView() {
   };
 
   const pendingChoiceBand = !!combat.pendingChoiceBand;
+  const pendingOptionalDiscard = !!combat.pendingOptionalDiscard;
   const pendingDiscard = (combat.pendingDiscard ?? 0) > 0;
   const pendingFree = (combat.pendingFreePick ?? 0) > 0;
   const pendingZeroCost = (combat.pendingZeroCostOffer ?? []).length > 0;
-  const pending = pendingDiscard || pendingFree || pendingZeroCost || pendingChoiceBand;
+  const pending = pendingDiscard || pendingFree || pendingZeroCost || pendingChoiceBand || pendingOptionalDiscard;
   const focusStacks = (combat.powers?.focus ?? 0) + (combat.tempFocus ?? 0);
   const focusTarget =
     combat.enemies.find((enemy) => enemy.id === (hoverEnemy ?? combat.selectedEnemyId) && enemy.hp > 0)
@@ -740,7 +868,7 @@ export function CombatView() {
 
   return (
     <div
-      className={`spire-view spire-view--combat${drag?.dragging ? ' is-targeting' : ''}${enemyPhase ? ' is-enemy-turn' : ''}${pendingDiscard ? ' is-discard-pick' : ''}${pendingChoiceBand || pendingFree ? ' is-hand-confirm' : ''}`}
+      className={`spire-view spire-view--combat${drag?.dragging ? ' is-targeting' : ''}${enemyPhase ? ' is-enemy-turn' : ''}${pendingDiscard ? ' is-discard-pick' : ''}${pendingChoiceBand || pendingOptionalDiscard || pendingFree ? ' is-hand-confirm' : ''}`}
     >
       <header className="spire-hud">
         <div className="spire-hud__start">
@@ -749,12 +877,12 @@ export function CombatView() {
             <strong>{character.name}</strong>
           </div>
         </div>
-        <RelicBar relics={combat.relics} />
+        <RelicBar relics={combat.relics} flashId={flashRelic} />
         <div className="spire-hud__end">
           <PotionBar
             potions={combat.potions}
             onUse={(slot) => {
-              if (locked || pendingChoiceBand || pendingDiscard) return;
+              if (locked || pendingChoiceBand || pendingOptionalDiscard || pendingDiscard) return;
               playSfx('item', muted);
               drinkPotion(slot, combat.selectedEnemyId ?? undefined);
             }}
@@ -775,6 +903,7 @@ export function CombatView() {
               key={enemy.id}
               enemy={enemy}
               combat={combat}
+              display={prefersReducedMotion() ? undefined : shownFoe[enemy.id] ?? foeSnapRef.current.get(enemy.id)}
               selected={combat.selectedEnemyId === enemy.id}
               dropTarget={hoverEnemy === enemy.id && !!drag?.dragging}
               acting={actingId === enemy.id}
@@ -806,6 +935,16 @@ export function CombatView() {
                 : ''}
             </p>
           )}
+          {pendingOptionalDiscard && (
+            <p className="spire-banner">
+              {combat.optionalDiscardExhaust
+                ? `Select any number of ${combat.optionalDiscardFilter === 'seed' ? 'Seeds' : 'cards'} to Exhaust.`
+                : 'Select any number of cards to discard.'}
+              {(combat.optionalDiscardPicks ?? []).length > 0
+                ? ` ${combat.optionalDiscardPicks.length} selected.`
+                : ''}
+            </p>
+          )}
           {pendingFree && <p className="spire-banner">Choose a card to set to 0 this turn.</p>}
           {pendingZeroCost && <p className="spire-banner">Choose a 0-cost card to add to your hand.</p>}
           {!pending && !enemyPhase && !result && (
@@ -826,9 +965,18 @@ export function CombatView() {
             {combat.hand.map((card, index) => {
               const picked =
                 (pendingChoiceBand && (combat.choiceBandPicks ?? []).includes(card.instanceId)) ||
+                (pendingOptionalDiscard && (combat.optionalDiscardPicks ?? []).includes(card.instanceId)) ||
                 (pendingFree && combat.freePickSelected === card.instanceId);
               const inbound = arriving.has(card.instanceId);
-              const playable = !locked && !inbound && (pending || canPlayCard(combat, card.instanceId));
+              const filterLocked =
+                pendingOptionalDiscard &&
+                !!combat.optionalDiscardFilter &&
+                card.defId !== combat.optionalDiscardFilter;
+              const playable =
+                !locked &&
+                !inbound &&
+                !filterLocked &&
+                (pending || canPlayCard(combat, card.instanceId));
               const { fan, lift } = handFanPose(index, combat.hand.length);
               const isGhost = drag?.card.instanceId === card.instanceId && drag.dragging;
               return (
@@ -942,17 +1090,7 @@ export function CombatView() {
           </div>
         </div>
 
-        {createPortal(
-          <aside className="spire-log" aria-label="Combat log">
-            <p className="spire-log__title">Log</p>
-            <ul className="spire-log__lines">
-              {combat.log.slice(-6).map((line, i) => (
-                <li key={`${combat.turn}-${combat.log.length}-${i}`}>{line}</li>
-              ))}
-            </ul>
-          </aside>,
-          document.body,
-        )}
+        {createPortal(<CombatLog lines={combat.log} />, document.body)}
 
         <div className="spire-combat-right">
           {pendingChoiceBand ? (
@@ -968,6 +1106,22 @@ export function CombatView() {
               {(combat.choiceBandPicks ?? []).length > 0
                 ? `Discard ${combat.choiceBandPicks.length}`
                 : 'Keep hand'}
+            </button>
+          ) : pendingOptionalDiscard ? (
+            <button
+              type="button"
+              className="btn btn--primary spire-end-turn"
+              disabled={locked}
+              onClick={() => {
+                playSfx('click', muted);
+                confirmOptionalDiscard();
+              }}
+            >
+              {(combat.optionalDiscardPicks ?? []).length > 0
+                ? `${combat.optionalDiscardExhaust ? 'Exhaust' : 'Discard'} ${combat.optionalDiscardPicks.length}`
+                : combat.optionalDiscardExhaust
+                  ? 'Exhaust none'
+                  : 'Discard none'}
             </button>
           ) : pendingFree ? (
             <button
@@ -1002,7 +1156,7 @@ export function CombatView() {
         )}
       </footer>
 
-      {(pendingDiscard || pendingChoiceBand || pendingFree) &&
+      {(pendingDiscard || pendingChoiceBand || pendingOptionalDiscard || pendingFree) &&
         createPortal(<div className="spire-discard-veil" aria-hidden="true" />, document.body)}
 
       {showArrow && drag && (
@@ -1135,6 +1289,7 @@ function ChargeOrbs({ combat }: { combat: CombatState }) {
 function EnemyCard({
   enemy,
   combat,
+  display,
   selected,
   dropTarget,
   acting,
@@ -1144,6 +1299,7 @@ function EnemyCard({
 }: {
   enemy: CombatEnemy;
   combat: CombatState;
+  display?: FoeVitals;
   selected: boolean;
   dropTarget: boolean;
   acting: boolean;
@@ -1151,16 +1307,10 @@ function EnemyCard({
   hit?: boolean;
   onSelect: () => void;
 }) {
-  const dead = enemy.hp <= 0;
-  const intent = enemy.intent;
-  const meta = intent ? INTENT[intent.kind] : undefined;
-  const shown = displayedIntentAmount(combat, enemy);
-  const raw = intent
-    ? (intent.kind === 'attack' || intent.kind === 'attackDebuff' || intent.kind === 'multiAttack'
-        ? intent.amount + enemy.strength
-        : intent.amount)
-    : 0;
-  const modified = shown !== raw;
+  const shownHp = display?.hp ?? enemy.hp;
+  const shownBlock = display?.block ?? enemy.block;
+  const dead = shownHp <= 0;
+  const intents = [enemy.intent, ...(enemy.extraIntents ?? [])].filter(Boolean);
   const speciesId = enemy.speciesId ?? ENEMIES[enemy.defId]?.speciesId ?? 16;
   const types = enemy.types?.length ? enemy.types : (ENEMIES[enemy.defId]?.types ?? []);
   const striking = acting && actKind != null && isAttackKind(actKind);
@@ -1176,13 +1326,26 @@ function EnemyCard({
         disabled={dead}
         onClick={onSelect}
       >
-        {intent && meta && (
-          <span
-            className={`spire-enemy__intent spire-enemy__intent--${intent.kind}${modified ? (shown < raw ? ' is-reduced' : ' is-increased') : ''}`}
-          >
-            <span aria-hidden="true">{meta.icon}</span> {meta.label(shown, intent)}
-          </span>
-        )}
+        <span className="spire-enemy__intents">
+          {intents.map((intent, i) => {
+            const meta = INTENT[intent.kind];
+            if (!meta) return null;
+            const shown = displayedIntentAmount(combat, enemy, intent);
+            const raw =
+              intent.kind === 'attack' || intent.kind === 'attackDebuff' || intent.kind === 'multiAttack'
+                ? intent.amount + enemy.strength
+                : intent.amount;
+            const modified = shown !== raw;
+            return (
+              <span
+                key={`${intent.kind}-${i}`}
+                className={`spire-enemy__intent spire-enemy__intent--${intent.kind}${modified ? (shown < raw ? ' is-reduced' : ' is-increased') : ''}`}
+              >
+                <span aria-hidden="true">{meta.icon}</span> {meta.label(shown, intent)}
+              </span>
+            );
+          })}
+        </span>
         <img
           src={localBattleGif(speciesId)}
           alt={enemy.name}
@@ -1195,9 +1358,9 @@ function EnemyCard({
           ))}
         </div>
         <HpBar
-          hp={enemy.hp}
+          hp={shownHp}
           max={enemy.maxHp}
-          block={enemy.block}
+          block={shownBlock}
           toxic={enemy.statuses?.toxic ?? 0}
           tone="foe"
         />
@@ -1213,14 +1376,6 @@ function EnemyCard({
     </div>
   );
 }
-
-const STATUS_TIPS: Record<string, { title: string; body: string }> = {
-  weak: { title: 'Weak', body: 'Attacks deal 25% less damage. Loses 1 stack at the end of this Pokémon’s turn.' },
-  frail: { title: 'Frail', body: 'Attacks ignore 50% of Block — half the damage goes through to HP, and the other half is applied to Block. Loses 1 stack at the end of this Pokémon’s turn.' },
-  vulnerable: { title: 'Vulnerable', body: 'Takes 50% more attack damage. Loses 1 stack at the end of this Pokémon’s turn.' },
-  burn: { title: 'Burn', body: 'Takes damage equal to its stacks at the end of its turn, then loses 1 stack.' },
-  toxic: { title: 'Toxic', body: 'Takes damage equal to its stacks as soon as you end your turn, before this Pokémon acts. Hits HP directly and ignores Block, then loses 1 stack.' },
-};
 
 function StatusRow({
   statuses,

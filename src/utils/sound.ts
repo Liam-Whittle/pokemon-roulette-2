@@ -310,11 +310,40 @@ export function preloadBattleBallSfx(): void {
   void loadAudioBuffer('sounds/battle_pokeball_open.mp3');
 }
 
+/** Warm the Slay the Spire-style Block clunk so the first Defend isn't waiting on decode. */
+export function preloadSpireCombatSfx(): void {
+  void loadAudioBuffer('sounds/pokespire/block.mp3');
+  void loadAudioBuffer('sounds/pokespire/block.wav');
+}
+
 function synthHit() {
   playTone(90, 0.14, 'sine', 0.36);
   playTone(160, 0.1, 'triangle', 0.26);
   playNoise(0.09, 0.44, 1400);
   setTimeout(() => playTone(70, 0.08, 'sine', 0.19), 35);
+}
+
+/** Hollow wooden shield tock — fallback if the Slay the Spire-style clip is missing. */
+function synthBlock() {
+  playTone(196, 0.12, 'sine', 0.16);
+  playTone(294, 0.09, 'triangle', 0.1);
+  playTone(620, 0.05, 'sine', 0.12);
+  playNoise(0.045, 0.14, 1800);
+  setTimeout(() => playTone(1680, 0.04, 'sine', 0.05), 12);
+}
+
+/** pret/pokeemerald `SE_HARDEN` — rising metallic squares. */
+function synthHarden() {
+  playTone(392, 0.05, 'square', 0.09);
+  setTimeout(() => playTone(523, 0.06, 'square', 0.1), 40);
+  setTimeout(() => playTone(659, 0.1, 'square', 0.09), 85);
+}
+
+/** pret/pokeemerald `SE_M_DOUBLE_TEAM` — quick shimmering copies. */
+function synthDoubleTeam() {
+  playTone(880, 0.04, 'square', 0.08);
+  setTimeout(() => playTone(1175, 0.05, 'square', 0.08), 30);
+  setTimeout(() => playTone(1480, 0.07, 'triangle', 0.07), 70);
 }
 
 /** Metallic blade *shing* fallback if the Mixkit clip fails to play. */
@@ -410,6 +439,30 @@ export const sfx = {
       playTone(523, 0.1, 'sine', 0.1);
       setTimeout(() => playTone(659, 0.12, 'sine', 0.1), 50);
       setTimeout(() => playTone(784, 0.16, 'sine', 0.08), 100);
+    }
+  },
+    /** Official STS2 Block Gain (Hit + Whoosh) — player and enemy Block. */
+  block: () => {
+    if (!playBattleSample('pokespire/block')) synthBlock();
+  },
+  /** Short utility chirp for skills that are not a Block gain. */
+  skill: () => {
+    synthDoubleTeam();
+  },
+  /** Gen 3 Ruby/Sapphire stat-up SE — same clip as swords-dance / bulk-up. */
+  power: () => {
+    if (!playBattleSample('battle_buff')) {
+      playTone(523, 0.1, 'sine', 0.1);
+      setTimeout(() => playTone(659, 0.12, 'sine', 0.1), 50);
+      setTimeout(() => playTone(784, 0.16, 'sine', 0.08), 100);
+    }
+  },
+  /** Gen 3 "Gotcha!" / item-get fanfare when a card, relic, or potion is obtained. */
+  acquire: () => {
+    if (!playBattleSample('pokemon_caught')) {
+      playTone(523, 0.15, 'sine', 0.12);
+      setTimeout(() => playTone(659, 0.15, 'sine', 0.12), 120);
+      setTimeout(() => playTone(784, 0.25, 'sine', 0.12), 240);
     }
   },
   statusHit: () => {

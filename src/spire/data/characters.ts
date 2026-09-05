@@ -44,6 +44,6 @@ export const CHARACTER_IDS: CharacterId[] = ['blaze', 'tide', 'bloom'];
 export const BLESSINGS: { id: BlessingId; name: string; description: string }[] = [
   { id: 'train', name: 'Intense Training', description: 'Upgrade 1 starter card of your choice, then remove 1 card of your choice.' },
   { id: 'gold', name: 'Grant Money', description: 'Gain 100 gold.' },
-  { id: 'relic', name: "Oak's Parcel", description: 'Obtain a random relic.' },
+  { id: 'potion', name: "Oak's Parcel", description: 'Obtain a random potion.' },
   { id: 'card', name: 'Extra Training', description: 'Add a random uncommon card to your deck.' },
 ];

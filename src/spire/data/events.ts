@@ -8,9 +8,9 @@ export const EVENTS: Record<string, EventDef> = {
     choices: [
       { label: 'Pray', description: 'Heal 14 HP.', result: { type: 'heal', amount: 14 } },
       {
-        label: 'Take the relic',
-        description: 'Lose 8 HP. Gain a relic.',
-        result: { type: 'combo', results: [{ type: 'damage', amount: 8 }, { type: 'relic' }] },
+        label: 'Take the offering',
+        description: 'Lose 8 HP. Gain 80 gold.',
+        result: { type: 'combo', results: [{ type: 'damage', amount: 8 }, { type: 'gold', amount: 80 }] },
       },
     ],
   },

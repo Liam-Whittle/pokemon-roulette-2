@@ -7,8 +7,9 @@ const ROWS = 7;
 const REST_COLUMN = 12;
 const BOSS_COLUMN = 13;
 const TREASURE_COLUMN = 9;
+const NO_REPEAT: NodeKind[] = ['shop', 'rest', 'elite'];
 
-function kindFor(column: number, rng: Rng): NodeKind {
+function rollKind(column: number, rng: Rng): NodeKind {
   if (column === 0) return 'start';
   if (column === BOSS_COLUMN) return 'boss';
   if (column === REST_COLUMN) return 'rest';
@@ -26,6 +27,52 @@ function kindFor(column: number, rng: Rng): NodeKind {
   if (roll < 0.76) return 'event';
   if (roll < 0.88) return 'shop';
   return 'rest';
+}
+
+function kindFor(column: number, rng: Rng, banned: Set<NodeKind>): NodeKind {
+  let kind = rollKind(column, rng);
+  if (column === 0 || column === BOSS_COLUMN || column === REST_COLUMN || column === TREASURE_COLUMN) {
+    return kind;
+  }
+  let tries = 0;
+  while (NO_REPEAT.includes(kind) && banned.has(kind) && tries < 8) {
+    kind = rollKind(column, rng);
+    tries += 1;
+  }
+  if (NO_REPEAT.includes(kind) && banned.has(kind)) {
+    return rng() < 0.65 ? 'monster' : 'event';
+  }
+  return kind;
+}
+
+function nearbyBanned(prev: MapNode[], row: number): Set<NodeKind> {
+  const banned = new Set<NodeKind>();
+  for (const node of prev) {
+    if (Math.abs(node.row - row) <= 2 && NO_REPEAT.includes(node.kind)) banned.add(node.kind);
+  }
+  return banned;
+}
+
+function isForcedKind(node: MapNode): boolean {
+  return (
+    node.kind === 'start' ||
+    node.kind === 'boss' ||
+    node.kind === 'treasure' ||
+    node.column === REST_COLUMN
+  );
+}
+
+function breakRepeatEdges(nodes: MapNode[]): void {
+  const byId = new Map(nodes.map((node) => [node.id, node]));
+  for (const node of nodes) {
+    for (const nextId of node.nextIds) {
+      const next = byId.get(nextId);
+      if (!next || node.kind !== next.kind || !NO_REPEAT.includes(node.kind)) continue;
+      const fallback: NodeKind = node.kind === 'monster' ? 'event' : 'monster';
+      if (!isForcedKind(next)) next.kind = fallback;
+      else if (!isForcedKind(node)) node.kind = fallback;
+    }
+  }
 }
 
 const CENTER_ROW = Math.floor(ROWS / 2);
@@ -55,11 +102,12 @@ export function generateActMap(act: 1 | 2 | 3, biomeId: string, rng: Rng, bossPo
   for (let col = 0; col < COLUMNS; col += 1) {
     const count = col === 0 || col === BOSS_COLUMN ? 1 : col === REST_COLUMN || col === TREASURE_COLUMN ? 2 : intBetween(rng, 3, 4);
     const rows = centeredRows(count);
+    const prev = byColumn[col - 1] ?? [];
     const colNodes: MapNode[] = rows.map((row, i) => ({
       id: `n-${act}-${col}-${i}`,
       column: col,
       row,
-      kind: kindFor(col, rng),
+      kind: kindFor(col, rng, nearbyBanned(prev, row)),
       nextIds: [],
     }));
     byColumn.push(colNodes);
@@ -90,6 +138,8 @@ export function generateActMap(act: 1 | 2 | 3, biomeId: string, rng: Rng, bossPo
       }
     }
   }
+
+  breakRepeatEdges(nodes);
 
   const start = byColumn[0]![0]!;
   const boss = byColumn[BOSS_COLUMN]![0]!;

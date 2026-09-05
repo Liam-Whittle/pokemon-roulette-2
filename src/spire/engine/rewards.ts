@@ -1,4 +1,4 @@
-import { cardsForCharacter, colorlessCards } from '../data/cards';
+import { cardsForCharacter, colorlessCards, getCardDef } from '../data/cards';
 import { CHARACTERS } from '../data/characters';
 import { allObtainableRelics, findRelicDef, relicsByRarity } from '../data/relics';
 import { POTION_IDS } from '../data/potions';
@@ -7,24 +7,64 @@ import type { Rng } from './rng';
 import { chance, pickOne, shuffle } from './rng';
 
 const STARTER_CARD_IDS = new Set(Object.values(CHARACTERS).flatMap((c) => c.starterDeck));
+const SHOP_EXCLUDED_RELICS = new Set(['amulet-coin']);
+const ONE_RARE_CHANCE = 0.05;
+const ELITE_RELIC_CHANCE = 0.2;
+const SHOP_CARD_COUNT = 6;
+
+type CardPoolMode = 'class' | 'colorless' | 'mixed';
 
 export function isRewardCard(def: CardDef): boolean {
   return !def.token && def.rarity !== 'starter' && !STARTER_CARD_IDS.has(def.id);
 }
 
-export function rollRarity(rng: Rng): Exclude<CardRarity, 'starter'> {
-  const r = rng();
-  if (r < 0.6) return 'common';
-  if (r < 0.9) return 'uncommon';
-  return 'rare';
+export function isColorlessCard(def: CardDef): boolean {
+  return !def.character;
+}
+
+export function rollRarity(rng: Rng): Exclude<CardRarity, 'starter' | 'rare'> {
+  return rng() < 0.67 ? 'common' : 'uncommon';
+}
+
+function uniqueById(list: CardDef[]): CardDef[] {
+  return list.filter((c, i, all) => all.findIndex((x) => x.id === c.id) === i);
+}
+
+function classPool(characterId: CharacterId, rarity: Exclude<CardRarity, 'starter'>, used: string[]): CardDef[] {
+  return cardsForCharacter(characterId, rarity)
+    .filter(isRewardCard)
+    .filter((c) => c.character === characterId && !used.includes(c.id));
+}
+
+function colorPool(rarity: Exclude<CardRarity, 'starter'>, used: string[]): CardDef[] {
+  return colorlessCards(rarity).filter(isRewardCard).filter((c) => !used.includes(c.id));
+}
+
+function pickCardId(
+  characterId: CharacterId,
+  rng: Rng,
+  rarity: Exclude<CardRarity, 'starter'>,
+  mode: CardPoolMode,
+  used: string[],
+): string | undefined {
+  const own = classPool(characterId, rarity, used);
+  const colorless = colorPool(rarity, used);
+  const mixed = uniqueById([...own, ...colorless]);
+  let pool =
+    mode === 'class' ? own : mode === 'colorless' ? colorless : chance(rng, 0.5) ? own : colorless;
+  if (pool.length === 0) {
+    pool = mode === 'class' ? own : mode === 'colorless' ? colorless : mixed;
+  }
+  if (pool.length === 0) return undefined;
+  return pickOne(rng, pool).id;
 }
 
 export function rollCardDefId(characterId: CharacterId, rng: Rng, rarity?: CardRarity): string {
   const r = rarity && rarity !== 'starter' ? rarity : rollRarity(rng);
-  const pool = (chance(rng, 0.7) ? cardsForCharacter(characterId, r) : colorlessCards(r)).filter(isRewardCard);
-  const fallback = [...cardsForCharacter(characterId), ...colorlessCards()].filter(isRewardCard);
-  const list = pool.length > 0 ? pool : fallback;
-  return pickOne(rng, list).id;
+  const id = pickCardId(characterId, rng, r, 'class', []);
+  if (id) return id;
+  const fallback = cardsForCharacter(characterId).filter(isRewardCard).filter((c) => c.character === characterId);
+  return pickOne(rng, fallback).id;
 }
 
 export function makeCard(defId: string, seq: { n: number }): CardInstance {
@@ -38,7 +78,7 @@ export function rollCardRewards(
   seq: { n: number },
   count = 3,
 ): CardInstance[] {
-  return rollCardOffer(characterId, rng, seq, count, {});
+  return rollCardOffer(characterId, rng, seq, count, { pool: 'class', oneRareChance: ONE_RARE_CHANCE });
 }
 
 export function rollCardOffer(
@@ -46,20 +86,52 @@ export function rollCardOffer(
   rng: Rng,
   seq: { n: number },
   count: number,
-  opts: { rarity?: Exclude<CardRarity, 'starter'>; colorlessOnly?: boolean },
+  opts: {
+    rarity?: Exclude<CardRarity, 'starter'>;
+    pool?: CardPoolMode;
+    colorlessOnly?: boolean;
+    classOnly?: boolean;
+    oneRareChance?: number;
+    maxColorless?: number;
+    allowRare?: boolean;
+  },
 ): CardInstance[] {
   const ids: string[] = [];
   let guard = 0;
+  const mode: CardPoolMode = opts.colorlessOnly
+    ? 'colorless'
+    : opts.classOnly || opts.pool === 'class'
+      ? 'class'
+      : opts.pool ?? 'class';
+  const forcedRare = opts.rarity === 'rare';
+  const includeOneRare =
+    opts.allowRare !== false && !forcedRare && !opts.rarity && chance(rng, opts.oneRareChance ?? 0);
+  const rareSlot = includeOneRare ? Math.min(count - 1, Math.floor(rng() * count)) : -1;
   while (ids.length < count && guard < 80) {
     guard += 1;
-    if (opts.colorlessOnly) {
-      const pool = colorlessCards(opts.rarity).filter(isRewardCard).filter((c) => !ids.includes(c.id));
-      if (pool.length === 0) break;
-      ids.push(pickOne(rng, pool).id);
+    const colorlessCount = ids.filter((id) => isColorlessCard(getCardDef(id))).length;
+    const rollMode: CardPoolMode =
+      mode === 'mixed'
+        ? opts.maxColorless != null && colorlessCount >= opts.maxColorless
+          ? 'class'
+          : chance(rng, 0.22)
+            ? 'colorless'
+            : 'class'
+        : mode;
+    const rarity =
+      forcedRare || ids.length === rareSlot
+        ? 'rare'
+        : opts.rarity && opts.rarity !== 'rare'
+          ? opts.rarity
+          : rollRarity(rng);
+    const id = pickCardId(characterId, rng, rarity, rollMode, ids);
+    if (id && !ids.includes(id)) {
+      ids.push(id);
       continue;
     }
-    const id = rollCardDefId(characterId, rng, opts.rarity);
-    if (!ids.includes(id)) ids.push(id);
+    const fallbackRarity = rarity === 'rare' ? rollRarity(rng) : rarity;
+    const fallback = pickCardId(characterId, rng, fallbackRarity, rollMode, ids);
+    if (fallback && !ids.includes(fallback)) ids.push(fallback);
   }
   return ids.map((id) => makeCard(id, seq));
 }
@@ -71,11 +143,16 @@ function relicRarity(rng: Rng): Exclude<CardRarity, 'starter'> {
   return 'rare';
 }
 
-export function rollRelicId(rng: Rng, owned: string[]): string | undefined {
-  const rarity = relicRarity(rng);
-  const pool = relicsByRarity(rarity, owned);
+export function rollRelicId(
+  rng: Rng,
+  owned: string[],
+  opts?: { rarity?: Exclude<CardRarity, 'starter'>; exclude?: string[] },
+): string | undefined {
+  const blocked = new Set([...(opts?.exclude ?? []), ...owned]);
+  const rarity = opts?.rarity ?? relicRarity(rng);
+  const pool = relicsByRarity(rarity, [...blocked]);
   if (pool.length > 0) return pickOne(rng, pool).id;
-  const any = allObtainableRelics(owned);
+  const any = allObtainableRelics([...blocked]);
   return any.length > 0 ? pickOne(rng, any).id : undefined;
 }
 
@@ -121,27 +198,51 @@ export function buildCombatRewards(opts: {
   potions: (string | null)[];
   source: RewardOffer['source'];
   upgradeCards?: boolean;
+  allowRare?: boolean;
 }): RewardOffer {
+  const bossCards = opts.source === 'boss';
   const offer: RewardOffer = {
     gold: opts.gold,
     cards:
       opts.source === 'treasure'
         ? []
-        : rollCardRewards(opts.characterId, opts.rng, opts.seq).map((card) =>
-            opts.upgradeCards ? { ...card, upgraded: true } : card,
-          ),
+        : rollCardOffer(opts.characterId, opts.rng, opts.seq, 3, {
+            rarity: bossCards ? 'rare' : undefined,
+            pool: 'class',
+            oneRareChance: bossCards ? 0 : ONE_RARE_CHANCE,
+            allowRare: bossCards || opts.allowRare !== false,
+          }).map((card) => (opts.upgradeCards ? { ...card, upgraded: true } : card)),
     source: opts.source,
     cardPicked: opts.source === 'treasure',
     relicTaken: true,
     potionTaken: true,
   };
   if (offer.cards.length === 0) offer.cardPicked = true;
-  if (opts.source === 'elite' || opts.source === 'boss' || opts.source === 'treasure') {
+
+  if (opts.source === 'boss') {
+    offer.relicId = rollRelicId(opts.rng, opts.relics, { rarity: 'rare' });
+    offer.relicTaken = !offer.relicId;
+  } else if (opts.source === 'treasure') {
     offer.relicId = rollRelicId(opts.rng, opts.relics);
     offer.relicTaken = !offer.relicId;
+  } else if (opts.source === 'elite') {
+    if (chance(opts.rng, ELITE_RELIC_CHANCE)) {
+      offer.relicId = rollRelicId(opts.rng, opts.relics);
+      offer.relicTaken = !offer.relicId;
+    } else {
+      offer.potionId = rollPotionId(opts.rng);
+      offer.potionTaken = false;
+    }
   }
+
   const emptySlot = opts.potions.some((p) => p === null);
-  if (emptySlot && opts.source !== 'treasure' && chance(opts.rng, 0.18)) {
+  if (
+    emptySlot &&
+    opts.source !== 'treasure' &&
+    opts.source !== 'elite' &&
+    !offer.potionId &&
+    chance(opts.rng, 0.18)
+  ) {
     offer.potionId = rollPotionId(opts.rng);
     offer.potionTaken = false;
   }
@@ -155,9 +256,9 @@ export function cardPrice(rarity: CardRarity): number {
 }
 
 export function relicPrice(rarity: CardRarity): number {
-  if (rarity === 'rare') return 280;
-  if (rarity === 'uncommon') return 200;
-  return 150;
+  if (rarity === 'rare') return 350;
+  if (rarity === 'uncommon') return 300;
+  return 250;
 }
 
 export function buildShopStock(
@@ -165,11 +266,17 @@ export function buildShopStock(
   rng: Rng,
   seq: { n: number },
   ownedRelics: string[],
+  opts?: { allowRare?: boolean },
 ): ShopStock {
-  const cards = rollCardRewards(characterId, rng, seq, 3);
+  const cards = rollCardOffer(characterId, rng, seq, SHOP_CARD_COUNT, {
+    pool: 'mixed',
+    oneRareChance: ONE_RARE_CHANCE,
+    maxColorless: 2,
+    allowRare: opts?.allowRare !== false,
+  });
   const relics: string[] = [];
   for (let i = 0; i < 2; i += 1) {
-    const id = rollRelicId(rng, [...ownedRelics, ...relics]);
+    const id = rollRelicId(rng, [...ownedRelics, ...relics], { exclude: [...SHOP_EXCLUDED_RELICS] });
     if (id) relics.push(id);
   }
   const potions = shuffle(rng, [...POTION_IDS]).slice(0, 2);

@@ -4,6 +4,7 @@ import { CharacterSelectView } from './views/CharacterSelectView';
 import { BlessingView } from './views/BlessingView';
 import { MapView } from './views/MapView';
 import { CombatView } from './views/CombatView';
+import { AcquireModal } from './components/AcquireModal';
 import { EventView, RestView, RewardsView, RunOverView, ShopView, TreasureView } from './views/MetaViews';
 import { useGameStore } from '../store/useGameStore';
 import { playSfx } from '../utils/sound';
@@ -26,6 +27,11 @@ export function SpireScreen() {
   useEffect(() => {
     if (!run) startNewRun();
   }, [run, startNewRun]);
+
+  useEffect(() => {
+    document.body.classList.toggle('spire-map-preview-open', mapOpen);
+    return () => document.body.classList.remove('spire-map-preview-open');
+  }, [mapOpen]);
 
   const view = run?.view ?? 'select';
   const showMapBtn =
@@ -80,6 +86,7 @@ export function SpireScreen() {
           <MapView preview />
         </div>
       )}
+      <AcquireModal />
     </motion.div>
   );
 }

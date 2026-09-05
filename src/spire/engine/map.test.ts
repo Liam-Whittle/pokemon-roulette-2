@@ -44,4 +44,18 @@ describe('spire map', () => {
     const start = map.nodes.find((n) => n.id === map.startId)!;
     expect(start.nextIds.length).toBeGreaterThan(0);
   });
+
+  it('does not place shop, rest, or elite nodes back to back on a path', () => {
+    const repeats = new Set(['shop', 'rest', 'elite']);
+    for (const seed of [1, 2, 7, 11, 21, 42, 99, 128, 256, 512]) {
+      const map = generateActMap(1, biomesForAct(1)[0]!.id, mulberry32(seed));
+      for (const node of map.nodes) {
+        for (const nextId of node.nextIds) {
+          const next = map.nodes.find((n) => n.id === nextId);
+          if (!next) continue;
+          if (repeats.has(node.kind)) expect(next.kind).not.toBe(node.kind);
+        }
+      }
+    }
+  });
 });

@@ -14,8 +14,10 @@ export type CardTextKind =
   | 'focus'
   | 'hp'
   | 'petal'
+  | 'seed'
   | 'charge'
   | 'replay'
+  | 'discard'
   | 'draw'
   | 'energy'
   | 'attack'
@@ -30,7 +32,7 @@ export interface CardTextToken {
 }
 
 const TOKEN_RE =
-  /\b(?:0-cost|Charge slots?|Max HP|Exhausted|Exhaust|Vulnerable|Strength|Dexterity|Toxic|Burn|Weak|Frail|Replay|Petals?|Focus|Charges?|Charge)\b|\d+%?/gi;
+  /\b(?:0-cost|Charge slots?|Max HP|Exhausted|Exhaust|Vulnerable|Strength|Dexterity|Toxic|Burn|Weak|Frail|Replay|Petals?|Seeds?|Focus|Charges?|Charge|Discarded|Discard)\b|\d+%?/gi;
 
 function keywordKind(token: string): CardTextKind {
   const t = token.toLowerCase();
@@ -47,7 +49,9 @@ function keywordKind(token: string): CardTextKind {
   if (t === 'weak') return 'weak';
   if (t === 'frail') return 'frail';
   if (t === 'replay') return 'replay';
+  if (t === 'discarded' || t === 'discard') return 'discard';
   if (t.startsWith('petal')) return 'petal';
+  if (t.startsWith('seed')) return 'seed';
   if (t === 'focus' || t === 'max hp') return t === 'focus' ? 'focus' : 'hp';
   return 'num';
 }
@@ -68,6 +72,7 @@ function classifyNumber(before: string, after: string): CardTextKind {
   if (/^(dexterity)\b/.test(ahead)) return 'dexterity';
   if (/^(focus)\b/.test(ahead)) return 'focus';
   if (/^(petals?)\b/.test(ahead)) return 'petal';
+  if (/^(seeds?)\b/.test(ahead)) return 'seed';
   if (/^(block)\b/.test(ahead) || /of the enemy'?s block/.test(ahead)) return 'block';
   if (/^(max hp|hp)\b/.test(ahead)) return 'hp';
   if (/^(damage|more|extra damage)\b/.test(ahead)) return 'damage';

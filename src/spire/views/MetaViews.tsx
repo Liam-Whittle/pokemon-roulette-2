@@ -49,102 +49,142 @@ export function RewardsView() {
   const continueRewards = useSpireStore((s) => s.continueRewards);
   const muted = useGameStore((s) => s.muted);
   const offer = run?.pendingRewards;
+  const [previewUpgrades, setPreviewUpgrades] = useState(false);
 
   if (!run || !offer) return null;
 
   const ready = rewardsReady(run);
+  const showCards = !offer.cardPicked && offer.cards.length > 0;
+  const showRelic = offer.cardPicked && !offer.relicTaken && !!offer.relicId;
+  const showPotion = offer.cardPicked && offer.relicTaken && !offer.potionTaken && !!offer.potionId;
 
   return (
     <div className="spire-view spire-view--rewards">
-      <header className="spire-panel spire-panel--title">
-        <p className="spire-kicker">Spoils of battle</p>
-        <h2>Rewards</h2>
-        <p className="spire-rewards-gold">
-          You pocketed <span>¥{offer.gold}</span>
-        </p>
-      </header>
+      <div className="spire-rewards">
+        <header className="spire-rewards__head">
+          <p className="spire-kicker">Spoils of battle</p>
+          <h2>Rewards</h2>
+          <p className="spire-rewards-gold">
+            You pocketed <span>¥{offer.gold}</span>
+          </p>
+        </header>
 
-      {!offer.cardPicked && offer.cards.length > 0 && (
-        <section className="spire-reward-stage">
-          <p className="spire-reward-stage__title">Choose 1 card to add to your deck</p>
-          <div className="spire-card-row spire-card-row--pick">
-            {offer.cards.map((card) => (
-              <SpireCard
-                key={card.instanceId}
-                card={card}
+        {showCards && (
+          <section className="spire-rewards__stage">
+            <p className="spire-reward-stage__title">Choose 1 card to add to your deck</p>
+            <div className="spire-card-row spire-card-row--pick">
+              {offer.cards.map((card) => (
+                <SpireCard
+                  key={card.instanceId}
+                  card={card}
+                  upgradePreview={previewUpgrades && !card.upgraded}
+                  onClick={() => {
+                    playSfx('item', muted);
+                    pickCardReward(card.instanceId);
+                  }}
+                />
+              ))}
+            </div>
+            <div className="spire-rewards__actions">
+              <button
+                type="button"
+                className={previewUpgrades ? 'btn btn--primary' : 'btn'}
+                aria-pressed={previewUpgrades}
                 onClick={() => {
-                  playSfx('item', muted);
-                  pickCardReward(card.instanceId);
+                  playSfx('click', muted);
+                  setPreviewUpgrades((on) => !on);
                 }}
-              />
-            ))}
-          </div>
-          <button type="button" className="btn btn--ghost" onClick={() => skipCardReward()}>
-            Skip card
+              >
+                {previewUpgrades ? 'Show current' : 'Preview upgrades'}
+              </button>
+              <button type="button" className="btn btn--ghost" onClick={() => skipCardReward()}>
+                Skip card
+              </button>
+            </div>
+          </section>
+        )}
+
+        {showRelic && offer.relicId && (
+          <RewardTake
+            kind="Relic"
+            id={offer.relicId}
+            takeLabel="Take relic"
+            onTake={() => {
+              playSfx('item', muted);
+              takeRelicReward();
+            }}
+            onSkip={skipRelicReward}
+          />
+        )}
+
+        {showPotion && offer.potionId && (
+          <RewardTake
+            kind="Potion"
+            id={offer.potionId}
+            takeLabel="Take potion"
+            onTake={() => takePotionReward()}
+            onSkip={skipPotionReward}
+          />
+        )}
+
+        {ready && (
+          <button
+            type="button"
+            className="btn btn--primary"
+            onClick={() => {
+              playSfx('click', muted);
+              continueRewards();
+            }}
+          >
+            Continue
           </button>
-        </section>
-      )}
-
-      {offer.cardPicked && !offer.relicTaken && offer.relicId && (
-        <RelicChoice
-          id={offer.relicId}
-          onTake={() => {
-            playSfx('item', muted);
-            takeRelicReward();
-          }}
-          onSkip={skipRelicReward}
-        />
-      )}
-
-      {offer.cardPicked && offer.relicTaken && !offer.potionTaken && offer.potionId && (
-        <div className="spire-choice-card spire-choice-card--reward">
-          <p className="spire-kicker">Potion</p>
-          <h3>{getPotionDef(offer.potionId).name}</h3>
-          <p>{getPotionDef(offer.potionId).description}</p>
-          <div className="spire-choice-row">
-            <button type="button" className="btn btn--primary" onClick={() => takePotionReward()}>
-              Take potion
-            </button>
-            <button type="button" className="btn btn--ghost" onClick={() => skipPotionReward()}>
-              Skip
-            </button>
-          </div>
-        </div>
-      )}
-
-      {ready && (
-        <button
-          type="button"
-          className="btn btn--primary"
-          onClick={() => {
-            playSfx('click', muted);
-            continueRewards();
-          }}
-        >
-          Continue
-        </button>
-      )}
+        )}
+      </div>
     </div>
   );
 }
 
-function RelicChoice({ id, onTake, onSkip }: { id: string; onTake: () => void; onSkip: () => void }) {
-  const def = getRelicDef(id);
+function RewardTake({
+  kind,
+  id,
+  takeLabel,
+  onTake,
+  onSkip,
+}: {
+  kind: 'Relic' | 'Potion';
+  id: string;
+  takeLabel: string;
+  onTake: () => void;
+  onSkip: () => void;
+}) {
+  const relic = kind === 'Relic' ? getRelicDef(id) : null;
+  const potion = kind === 'Potion' ? getPotionDef(id) : null;
+  const name = relic?.name ?? potion?.name ?? '';
+  const description = relic?.description ?? potion?.description ?? '';
   return (
-    <div className="spire-choice-card spire-choice-card--reward">
-      <p className="spire-kicker">Relic</p>
-      <h3>{def.name}</h3>
-      <p>{def.description}</p>
-      <div className="spire-choice-row">
+    <section className="spire-rewards__stage spire-rewards__stage--item">
+      <p className="spire-kicker">{kind}</p>
+      {relic && (
+        <span className="spire-rewards__icon" aria-hidden="true">
+          <RelicIcon id={id} name={relic.name} />
+        </span>
+      )}
+      <h3>{name}</h3>
+      <p>{description}</p>
+      <div className="spire-rewards__actions">
         <button type="button" className="btn btn--primary" onClick={onTake}>
-          Take relic
+          {takeLabel}
         </button>
         <button type="button" className="btn btn--ghost" onClick={onSkip}>
           Skip
         </button>
       </div>
-    </div>
+    </section>
   );
+}
+
+function RelicChoice({ id, onTake, onSkip }: { id: string; onTake: () => void; onSkip: () => void }) {
+  return <RewardTake kind="Relic" id={id} takeLabel="Take relic" onTake={onTake} onSkip={onSkip} />;
 }
 
 export function TreasureView() {
@@ -191,6 +231,7 @@ export function ShopView() {
   const leaveShop = useSpireStore((s) => s.leaveShop);
   const muted = useGameStore((s) => s.muted);
   const stock = run?.shopStock;
+  const [previewUpgrades, setPreviewUpgrades] = useState(false);
   if (!run || !stock) return null;
 
   return (
@@ -215,8 +256,21 @@ export function ShopView() {
 
       <div className="spire-shop-grid">
         <section className="spire-shop-shelf">
-          <h3>Moves</h3>
-          <div className="spire-card-row">
+          <div className="spire-shop-shelf__head">
+            <h3>Moves</h3>
+            <button
+              type="button"
+              className={previewUpgrades ? 'btn btn--primary btn--sm' : 'btn btn--sm'}
+              aria-pressed={previewUpgrades}
+              onClick={() => {
+                playSfx('click', muted);
+                setPreviewUpgrades((on) => !on);
+              }}
+            >
+              {previewUpgrades ? 'Show current' : 'Preview upgrades'}
+            </button>
+          </div>
+          <div className="spire-card-row spire-card-row--shop">
             {stock.cards.map((card) => {
               const price = cardPrice(getCardDef(card.defId).rarity);
               return (
@@ -224,6 +278,7 @@ export function ShopView() {
                   key={card.instanceId}
                   card={card}
                   price={price}
+                  upgradePreview={previewUpgrades && !card.upgraded}
                   disabled={run.gold < price}
                   onClick={() => {
                     playSfx('item', muted);
@@ -354,8 +409,10 @@ export function RestView() {
     ? run.deck.find((card) => card.instanceId === pendingSmithId)
     : undefined;
   const many = relicHasHook(run.relics, 'restAny');
-  const canTrainDex = relicHasHook(run.relics, 'restPermDex') && run.evioliteUses < 3;
-  const canTrainStr = relicHasHook(run.relics, 'restPermStr') && run.megaStoneUses < 3;
+  const canTrainDex =
+    relicHasHook(run.relics, 'restPermDex') && !run.restDexUsed && run.evioliteUses < 3;
+  const canTrainStr =
+    relicHasHook(run.relics, 'restPermStr') && !run.restStrUsed && run.megaStoneUses < 3;
   const canTrade = relicHasHook(run.relics, 'restTrade');
   const tradeable = run.relics.filter((id) => !findRelicDef(id)?.starter);
 
@@ -638,13 +695,14 @@ export function EventView() {
   const eventTradeRelic = useSpireStore((s) => s.eventTradeRelic);
   const eventAck = useSpireStore((s) => s.eventAck);
   const muted = useGameStore((s) => s.muted);
+  const [previewUpgrades, setPreviewUpgrades] = useState(false);
   if (!run?.currentEventId) return null;
   const event = getEventDef(run.currentEventId);
   const follow = run.eventFollowup;
   const tradeable = run.relics.filter((id) => !findRelicDef(id)?.starter);
 
   return (
-    <div className="spire-view spire-view--story spire-view--rest">
+    <div className="spire-view spire-view--story spire-view--event">
       <article className="spire-panel spire-story">
         <p className="spire-kicker">
           A fork in the path · {run.hp}/{run.maxHp} HP · ¥{run.gold}
@@ -707,6 +765,7 @@ export function EventView() {
                   card={card}
                   compact={follow.cards.length > 5}
                   selected={follow.selected.includes(card.instanceId)}
+                  upgradePreview={previewUpgrades && !card.upgraded}
                   onClick={() => {
                     playSfx('click', muted);
                     eventSelectOfferCard(card.instanceId);
@@ -714,6 +773,17 @@ export function EventView() {
                 />
               ))}
             </div>
+            <button
+              type="button"
+              className={previewUpgrades ? 'btn btn--primary btn--sm' : 'btn btn--sm'}
+              aria-pressed={previewUpgrades}
+              onClick={() => {
+                playSfx('click', muted);
+                setPreviewUpgrades((on) => !on);
+              }}
+            >
+              {previewUpgrades ? 'Show current' : 'Preview upgrades'}
+            </button>
             {follow.pick > 1 && (
               <button
                 type="button"

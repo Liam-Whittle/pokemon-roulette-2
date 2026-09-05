@@ -67,6 +67,7 @@
 
 .spire-screen .btn,
 .spire-pile-modal .btn,
+.spire-acquire-modal .btn,
 .spire-combat-overlay .btn {
   background: rgba(16, 20, 32, 0.92);
   color: #fde68a;
@@ -76,6 +77,7 @@
 
 .spire-screen .btn:hover:not(:disabled),
 .spire-pile-modal .btn:hover:not(:disabled),
+.spire-acquire-modal .btn:hover:not(:disabled),
 .spire-combat-overlay .btn:hover:not(:disabled) {
   background: rgba(253, 230, 138, 0.16);
   color: #fff6d4;
@@ -84,6 +86,7 @@
 
 .spire-screen .btn--primary,
 .spire-pile-modal .btn--primary,
+.spire-acquire-modal .btn--primary,
 .spire-combat-overlay .btn--primary {
   background: linear-gradient(135deg, var(--accent), #dc2626);
   color: #fff;
@@ -93,6 +96,7 @@
 
 .spire-screen .btn--primary:hover:not(:disabled),
 .spire-pile-modal .btn--primary:hover:not(:disabled),
+.spire-acquire-modal .btn--primary:hover:not(:disabled),
 .spire-combat-overlay .btn--primary:hover:not(:disabled) {
   box-shadow: 0 6px 24px rgba(239, 68, 68, 0.6);
 }
@@ -158,6 +162,11 @@
 .spire-view--rewards {
   align-items: center;
   justify-content: center;
+  overflow: auto;
+}
+
+.spire-view--event {
+  padding-bottom: 12vh;
 }
 
 .spire-view--select {
@@ -182,7 +191,7 @@
 }
 
 .spire-view--shop {
-  max-width: 1080px;
+  max-width: 1180px;
   overflow: auto;
   gap: 0.65rem;
 }
@@ -235,6 +244,22 @@
   letter-spacing: 0.08em;
   text-transform: uppercase;
   color: #fde68a;
+}
+
+.spire-shop-shelf__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  margin-bottom: 0.55rem;
+}
+
+.spire-shop-shelf__head h3 {
+  margin: 0;
+}
+
+.spire-shop-shelf__head .btn {
+  white-space: nowrap;
 }
 
 .spire-shop-shelf--remove .spire-card-row {
@@ -294,6 +319,11 @@
 @media (max-width: 860px) {
   .spire-shop-grid {
     grid-template-columns: 1fr;
+  }
+
+  .spire-view--shop .spire-card-row--shop {
+    grid-template-columns: repeat(2, minmax(0, 138px));
+    justify-content: center;
   }
 }
 
@@ -1169,6 +1199,15 @@
   box-shadow: 0 0 8px rgba(147, 197, 253, 0.8);
 }
 
+.spire-enemy__intents {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.22rem;
+  min-height: 1.4rem;
+}
+
 .spire-enemy__intent {
   font-size: 0.72rem;
   font-weight: 800;
@@ -1547,6 +1586,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   background: linear-gradient(90deg, #16a34a, #86efac);
+  transition: width 0.16s ease;
 }
 
 .spire-hp--foe .spire-hp__fill {
@@ -1557,6 +1597,7 @@
   position: absolute;
   inset: 0 auto 0 0;
   background: rgba(186, 230, 253, 0.58);
+  transition: width 0.16s ease;
 }
 
 .spire-hp__block-extra {
@@ -1564,6 +1605,24 @@
   top: 0;
   bottom: 0;
   background: #bae6fd;
+  transition: left 0.16s ease, width 0.16s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spire-hp__fill,
+  .spire-hp__block-overlay,
+  .spire-hp__block-extra {
+    transition: none;
+  }
+
+  .spire-kwtips.is-ready {
+    animation: none;
+  }
+
+  .spire-relic.is-flash {
+    animation: none;
+    box-shadow: 0 0 12px rgba(244, 114, 182, 0.7);
+  }
 }
 
 .spire-hp__toxic {
@@ -1716,6 +1775,71 @@
   color: rgba(255, 255, 255, 0.8);
 }
 
+.spire-kwtips {
+  position: fixed;
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  width: 228px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.spire-kwtips.is-ready {
+  opacity: 1;
+  animation: spire-kwtips-in 0.16s ease-out;
+}
+
+@keyframes spire-kwtips-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.spire-kwtip {
+  padding: 0.48rem 0.58rem 0.52rem;
+  border-radius: 10px;
+  background: rgba(10, 14, 24, 0.95);
+  border: 1px solid rgba(253, 230, 138, 0.28);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.45);
+  color: #f6f3ea;
+}
+
+.spire-kwtip strong {
+  display: block;
+  font-size: 0.78rem;
+  margin-bottom: 0.16rem;
+}
+
+.spire-kwtip p {
+  margin: 0;
+  font-size: 0.72rem;
+  line-height: 1.35;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.spire-kwtip--seed strong { color: #a3e635; }
+.spire-kwtip--petal strong { color: #4ade80; }
+.spire-kwtip--toxic strong { color: #e879f9; }
+.spire-kwtip--burn strong { color: #fb923c; }
+.spire-kwtip--frail strong { color: #fda4af; }
+.spire-kwtip--weak strong { color: #c4b5fd; }
+.spire-kwtip--vulnerable strong { color: #f87171; }
+.spire-kwtip--charge strong,
+.spire-kwtip--energy strong { color: #7dd3fc; }
+.spire-kwtip--focus strong { color: #67e8f9; }
+.spire-kwtip--replay strong { color: #93c5fd; }
+.spire-kwtip--strength strong { color: #fb7185; }
+.spire-kwtip--dexterity strong { color: #34d399; }
+.spire-kwtip--exhaust strong { color: #a8a29e; }
+.spire-kwtip--discard strong { color: #fcd34d; }
+
 
 .spire-map-tip {
   position: absolute;
@@ -1787,6 +1911,29 @@
   cursor: default;
 }
 
+.spire-relic.is-flash {
+  border-color: #f9a8d4;
+  animation: spire-relic-flash 0.72s ease-out;
+}
+
+@keyframes spire-relic-flash {
+  0% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(244, 114, 182, 0.9);
+    background: rgba(244, 114, 182, 0.35);
+  }
+  45% {
+    transform: scale(1.18);
+    box-shadow: 0 0 18px 4px rgba(244, 114, 182, 0.85);
+    background: rgba(244, 114, 182, 0.28);
+  }
+  100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(244, 114, 182, 0);
+    background: rgba(0, 0, 0, 0.22);
+  }
+}
+
 .spire-relic__icon {
   width: 100%;
   height: 100%;
@@ -1820,6 +1967,15 @@
   flex-wrap: wrap;
   gap: 0.5rem;
   justify-content: center;
+}
+
+.spire-card-row--shop {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 138px));
+  justify-content: center;
+  justify-items: center;
+  width: 100%;
+  gap: 0.55rem;
 }
 
 .spire-hand .spire-card {
@@ -1951,6 +2107,22 @@
 .spire-card--poison { border-color: #a040a0; }
 .spire-card--power { box-shadow: inset 0 0 0 1px rgba(167, 139, 250, 0.5); }
 
+.spire-card--power-warn {
+  border-color: #f97316;
+  box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.85), 0 0 14px rgba(251, 146, 60, 0.55);
+  animation: spire-power-warn 1.15s ease-in-out infinite;
+}
+
+@keyframes spire-power-warn {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(249, 115, 22, 0.75), 0 0 10px rgba(251, 146, 60, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 2px rgba(253, 186, 116, 0.95), 0 0 18px rgba(251, 146, 60, 0.75);
+  }
+}
+
 .spire-card__kind {
   align-self: flex-end;
   font-size: 0.6rem;
@@ -2022,8 +2194,10 @@
 .spire-card__kw--focus { color: #67e8f9; }
 .spire-card__kw--hp { color: #86efac; }
 .spire-card__kw--petal { color: #4ade80; }
+.spire-card__kw--seed { color: #a3e635; }
 .spire-card__kw--charge { color: #fde68a; }
 .spire-card__kw--replay { color: #93c5fd; }
+.spire-card__kw--discard { color: #fcd34d; }
 .spire-card__kw--draw { color: #fde68a; }
 .spire-card__kw--energy { color: #7dd3fc; }
 .spire-card__kw--attack { color: #fdba74; }
@@ -2179,11 +2353,23 @@
   display: flex;
   flex-direction: column;
   gap: 0.18rem;
-  max-height: 9.5rem;
-  overflow: auto;
+  max-height: min(42vh, 18rem);
+  overflow-y: auto;
+  overscroll-behavior: contain;
   font-size: 0.7rem;
   line-height: 1.35;
   color: rgba(244, 241, 234, 0.78);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(253, 230, 138, 0.45) transparent;
+}
+
+.spire-log__lines::-webkit-scrollbar {
+  width: 6px;
+}
+
+.spire-log__lines::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(253, 230, 138, 0.4);
 }
 
 .spire-log__lines li {
@@ -2232,6 +2418,67 @@
   color: #fecaca;
   animation: spire-float 0.7s ease-out forwards;
   pointer-events: none;
+}
+
+.spire-acquire-modal {
+  z-index: 120;
+}
+
+.spire-acquire-modal__panel {
+  width: min(720px, 96vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  text-align: center;
+}
+
+.spire-acquire-modal__head h2 {
+  margin: 0.15rem 0 0;
+}
+
+.spire-acquire-modal__items {
+  display: grid;
+  justify-content: center;
+  justify-items: center;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.spire-acquire-item {
+  width: min(260px, 100%);
+  margin-inline: auto;
+  padding: 0.9rem 0.95rem 1rem;
+  border-radius: 16px;
+  background: rgba(16, 22, 36, 0.92);
+  border: 1px solid rgba(253, 230, 138, 0.22);
+  text-align: center;
+}
+
+.spire-acquire-item h3 {
+  margin: 0.15rem 0 0.35rem;
+}
+
+.spire-acquire-item p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.82rem;
+}
+
+.spire-acquire-item__icon {
+  display: grid;
+  place-items: center;
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 0.45rem;
+  border-radius: 14px;
+  background: rgba(253, 230, 138, 0.08);
+}
+
+.spire-acquire-item__icon .spire-relic__icon,
+.spire-acquire-item__icon .spire-relic__fallback {
+  width: 40px;
+  height: 40px;
 }
 
 .spire-pile-modal {
@@ -2382,6 +2629,10 @@
   margin: 0;
 }
 
+.spire-event-followup > .btn {
+  white-space: nowrap;
+}
+
 .spire-event-followup p {
   margin: 0;
   text-align: center;
@@ -2511,14 +2762,107 @@
   width: min(100%, 720px);
 }
 
+.spire-rewards {
+  width: min(720px, 100%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1.1rem;
+  padding: 1.2rem 1.25rem 1.3rem;
+  border-radius: 22px;
+  background: rgba(10, 14, 24, 0.72);
+  backdrop-filter: blur(18px);
+  border: 1px solid rgba(253, 230, 138, 0.2);
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.36);
+  text-align: center;
+}
+
+.spire-rewards__head h2 {
+  margin: 0.2rem 0 0.45rem;
+  font-size: 1.7rem;
+  letter-spacing: -0.02em;
+}
+
+.spire-rewards__stage {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.85rem;
+  width: 100%;
+}
+
+.spire-rewards__stage--item {
+  width: min(100%, 360px);
+  margin-inline: auto;
+  padding: 0.85rem 1rem 1rem;
+  border-radius: 18px;
+  background: rgba(10, 14, 24, 0.88);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(253, 230, 138, 0.2);
+  box-shadow: 0 14px 36px rgba(0, 0, 0, 0.32);
+}
+
+.spire-rewards__stage--item h3 {
+  margin: 0;
+  font-size: 1.2rem;
+}
+
+.spire-rewards__stage--item p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+
+.spire-rewards__icon {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  border-radius: 18px;
+  background: rgba(253, 230, 138, 0.1);
+  border: 1px solid rgba(253, 230, 138, 0.22);
+}
+
+.spire-rewards__icon .spire-relic__icon,
+.spire-rewards__icon .spire-relic__fallback {
+  width: 40px;
+  height: 40px;
+}
+
 .spire-reward-stage__title,
 .spire-rewards-gold {
   margin: 0;
   font-weight: 700;
 }
 
+.spire-rewards-gold {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.28rem 0.7rem;
+  border-radius: 999px;
+  background: rgba(251, 191, 36, 0.12);
+  border: 1px solid rgba(251, 191, 36, 0.28);
+}
+
 .spire-rewards-gold span {
   color: #fbbf24;
+}
+
+.spire-reward-stage__actions,
+.spire-rewards__actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.55rem;
+  width: min(100%, 420px);
+}
+
+.spire-rewards__actions .btn,
+.spire-reward-stage__actions .btn {
+  width: 100%;
+  min-height: 42px;
+  white-space: nowrap;
 }
 
 .spire-card-row--pick .spire-card {

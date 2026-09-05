@@ -5,7 +5,7 @@ import { BLESSINGS, CHARACTERS } from '../data/characters';
 import { getCardDef } from '../data/cards';
 import { findEncounterDef, getEncounterDef, getEnemyDef, rollActBossPool } from '../data/enemies';
 import { getEventDef } from '../data/events';
-import { allObtainableRelics, findRelicDef, getRelicDef, pickupGoldFor, relicHasHook } from '../data/relics';
+import { allObtainableRelics, findRelicDef, getRelicDef, relicHasHook } from '../data/relics';
 import {
   applyEnemyHit as applyCombatEnemyHit,
   applyEnemyIntentRest as applyCombatEnemyIntentRest,
@@ -14,6 +14,7 @@ import {
   combatOutcome,
   completeEnemyRound as completeCombatEnemyRound,
   confirmChoiceBand as confirmChoiceBandCombat,
+  confirmOptionalDiscard as confirmOptionalDiscardCombat,
   confirmFreePick as confirmFreePickCombat,
   createCombat,
   discardFromHand,
@@ -28,11 +29,12 @@ import {
   selectFreePick as selectFreePickCombat,
   takeCombatFx,
   toggleChoiceBandCard,
+  toggleOptionalDiscardCard,
 } from '../engine/combat';
-import { applyEventResult, finishEvent, resolveEventTrade } from '../engine/events';
+import { grantCard, grantPotion, grantRelic } from '../engine/acquire';
+import { applyEventResult, finishEvent, pickEventId, resolveEventTrade } from '../engine/events';
 import { generateActMap, getNode } from '../engine/map';
 import {
-  addPotion,
   buildCombatRewards,
   buildShopStock,
   cardPrice,
@@ -41,12 +43,13 @@ import {
   relicPrice,
   restHealBonus,
   rollCardDefId,
-  rollRelicId,
+  rollPotionId,
 } from '../engine/rewards';
 import { mulberry32, nextSeed, pickIndex, pickN, pickOne } from '../engine/rng';
 import type {
   BlessingId,
   CharacterId,
+  EnemyIntentPattern,
   SpireRun,
 } from '../types';
 
@@ -81,6 +84,8 @@ function freshRun(seed: number): SpireRun {
     smithUsed: false,
     smithedCardId: null,
     restHealUsed: false,
+    restDexUsed: false,
+    restStrUsed: false,
     hallwayTheme: null,
     permStrength: 0,
     permDexterity: 0,
@@ -91,6 +96,8 @@ function freshRun(seed: number): SpireRun {
     blessingFollowup: null,
     lastMonsterEncounterId: null,
     lastEliteEncounterId: null,
+    pendingAcquire: null,
+    actRareTaken: false,
   };
 }
 
@@ -99,12 +106,6 @@ export function hasActiveSpireRun(run: SpireRun | null): boolean {
   if (run.view === 'victory' || run.view === 'defeat') return false;
   if (run.view === 'select' && !run.characterId) return false;
   return true;
-}
-
-function addRelic(run: SpireRun, id: string): void {
-  if (run.relics.includes(id)) return;
-  run.relics.push(id);
-  run.gold += pickupGoldFor(id);
 }
 
 function restAllowsMany(run: SpireRun): boolean {
@@ -130,6 +131,7 @@ function beginAct(run: SpireRun, act: 1 | 2 | 3, rng: ReturnType<typeof mulberry
   const biomes = biomesForAct(act);
   const biome = pickOne(rng, biomes);
   run.act = act;
+  run.actRareTaken = false;
   run.map = generateActMap(act, biome.id, rng, rollActBossPool(act, rng));
   run.currentNodeId = run.map.startId;
   run.visitedNodeIds = [run.map.startId];
@@ -184,9 +186,7 @@ function resolveCombat(run: SpireRun, rng: ReturnType<typeof mulberry32>): void 
   const finalBoss = run.act >= 3 && (encounter?.kind === 'boss' || node?.kind === 'boss');
   if (finalBoss) {
     run.pendingRewards = null;
-    run.combat = null;
-    run.combatResult = null;
-    run.view = 'victory';
+    run.combatResult = 'win';
     return;
   }
   if (!encounter) {
@@ -205,6 +205,7 @@ function resolveCombat(run: SpireRun, rng: ReturnType<typeof mulberry32>): void 
     potions: run.potions,
     source: encounter.kind,
     upgradeCards: !!run.combat.upgradeCardRewards,
+    allowRare: encounter.kind === 'boss' || !run.actRareTaken,
   });
   commitSeq(run, seq);
   run.combatResult = 'win';
@@ -218,8 +219,16 @@ function acknowledgeCombat(run: SpireRun): void {
     run.combatResult = null;
     return;
   }
+  const encounter = findEncounterDef(run.activeEncounterId);
+  const node = run.currentNodeId && run.map ? getNode(run.map, run.currentNodeId) : undefined;
+  const finalBoss = run.act >= 3 && (encounter?.kind === 'boss' || node?.kind === 'boss');
   run.combat = null;
   run.combatResult = null;
+  if (finalBoss) {
+    run.pendingRewards = null;
+    run.view = 'victory';
+    return;
+  }
   run.view = run.pendingRewards ? 'rewards' : 'map';
 }
 
@@ -251,8 +260,8 @@ interface SpireStore {
   pickZeroCostCard: (instanceId: string) => void;
   closePlayerTurn: () => void;
   resolveEnemyTurn: () => void;
-  applyEnemyHit: (enemyId: string) => void;
-  applyEnemyIntentRest: (enemyId: string) => void;
+  applyEnemyHit: (enemyId: string, intent?: EnemyIntentPattern) => void;
+  applyEnemyIntentRest: (enemyId: string, intent?: EnemyIntentPattern) => void;
   completeEnemyRound: () => void;
   clearCombatFx: () => void;
   endTurn: () => void;
@@ -262,6 +271,8 @@ interface SpireStore {
   discardForPending: (instanceId: string) => void;
   toggleChoiceBand: (instanceId: string) => void;
   confirmChoiceBand: () => void;
+  toggleOptionalDiscard: (instanceId: string) => void;
+  confirmOptionalDiscard: () => void;
   pickCardReward: (instanceId: string) => void;
   skipCardReward: () => void;
   takeRelicReward: () => void;
@@ -289,6 +300,7 @@ interface SpireStore {
   eventConfirmRemove: () => void;
   eventTradeRelic: (givingId: string) => void;
   eventAck: () => void;
+  ackAcquire: () => void;
   blessingPickCard: (instanceId: string) => void;
   takeTreasure: () => void;
   skipTreasure: () => void;
@@ -349,13 +361,12 @@ export const useSpireStore = create<SpireStore>()(
               return;
             }
             if (id === 'gold') run.gold += 100;
-            if (id === 'relic') {
-              const relic = rollRelicId(rng, run.relics);
-              if (relic) addRelic(run, relic);
+            if (id === 'potion') {
+              grantPotion(run, rollPotionId(rng));
             }
             if (id === 'card' && run.characterId) {
               const seq = seqOf(run);
-              run.deck.push(makeCard(rollCardDefId(run.characterId, rng, 'uncommon'), seq));
+              grantCard(run, makeCard(rollCardDefId(run.characterId, rng, 'uncommon'), seq));
               commitSeq(run, seq);
             }
             beginAct(run, 1, rng);
@@ -390,6 +401,8 @@ export const useSpireStore = create<SpireStore>()(
             run.smithUsed = false;
             run.smithedCardId = null;
             run.restHealUsed = false;
+            run.restDexUsed = false;
+            run.restStrUsed = false;
             run.restTrade = null;
             run.eventFollowup = null;
             const biome = getBiomeDef(run.map.biomeId);
@@ -412,7 +425,9 @@ export const useSpireStore = create<SpireStore>()(
             }
             if (node.kind === 'shop') {
               const seq = seqOf(run);
-              run.shopStock = buildShopStock(run.characterId, rng, seq, run.relics);
+              run.shopStock = buildShopStock(run.characterId, rng, seq, run.relics, {
+                allowRare: !run.actRareTaken,
+              });
               commitSeq(run, seq);
               run.view = 'shop';
               return;
@@ -422,7 +437,7 @@ export const useSpireStore = create<SpireStore>()(
               return;
             }
             if (node.kind === 'event') {
-              run.currentEventId = pickOne(rng, biome.events);
+              run.currentEventId = pickEventId(biome.events, rng, !run.actRareTaken);
               run.view = 'event';
               return;
             }
@@ -487,16 +502,16 @@ export const useSpireStore = create<SpireStore>()(
             resolveCombat(run, rng);
           }),
 
-        applyEnemyHit: (enemyId) =>
+        applyEnemyHit: (enemyId, intent) =>
           update((run) => {
             if (!run.combat || run.combatResult) return;
-            run.combat = applyCombatEnemyHit(run.combat, enemyId);
+            run.combat = applyCombatEnemyHit(run.combat, enemyId, intent);
           }),
 
-        applyEnemyIntentRest: (enemyId) =>
+        applyEnemyIntentRest: (enemyId, intent) =>
           update((run) => {
             if (!run.combat || run.combatResult) return;
-            run.combat = applyCombatEnemyIntentRest(run.combat, enemyId);
+            run.combat = applyCombatEnemyIntentRest(run.combat, enemyId, intent);
           }),
 
         completeEnemyRound: () =>
@@ -532,7 +547,13 @@ export const useSpireStore = create<SpireStore>()(
 
         drinkPotion: (slot, enemyId) =>
           patch((run, rng) => {
-            if (!run.combat || run.combatResult || run.combat.pendingChoiceBand || (run.combat.pendingDiscard ?? 0) > 0) return;
+            if (
+              !run.combat ||
+              run.combatResult ||
+              run.combat.pendingChoiceBand ||
+              run.combat.pendingOptionalDiscard ||
+              (run.combat.pendingDiscard ?? 0) > 0
+            ) return;
             run.combat = applyPotion(run.combat, slot, enemyId, rng);
             run.potions = run.combat.potions;
             resolveCombat(run, rng);
@@ -558,13 +579,26 @@ export const useSpireStore = create<SpireStore>()(
             run.combat = confirmChoiceBandCombat(run.combat, rng);
           }),
 
+        toggleOptionalDiscard: (instanceId) =>
+          update((run) => {
+            if (!run.combat) return;
+            run.combat = toggleOptionalDiscardCard(run.combat, instanceId);
+          }),
+
+        confirmOptionalDiscard: () =>
+          patch((run, rng) => {
+            if (!run.combat) return;
+            run.combat = confirmOptionalDiscardCombat(run.combat, rng);
+            resolveCombat(run, rng);
+          }),
+
         pickCardReward: (instanceId) =>
           update((run) => {
             const offer = run.pendingRewards;
             if (!offer) return;
             const card = offer.cards.find((c) => c.instanceId === instanceId);
             if (!card) return;
-            run.deck.push(card);
+            grantCard(run, card);
             offer.cardPicked = true;
           }),
 
@@ -577,7 +611,7 @@ export const useSpireStore = create<SpireStore>()(
           update((run) => {
             const offer = run.pendingRewards;
             if (!offer?.relicId) return;
-            addRelic(run, offer.relicId);
+            grantRelic(run, offer.relicId);
             offer.relicTaken = true;
           }),
 
@@ -590,7 +624,7 @@ export const useSpireStore = create<SpireStore>()(
           update((run) => {
             const offer = run.pendingRewards;
             if (!offer?.potionId) return;
-            run.potions = addPotion(run.potions, offer.potionId);
+            grantPotion(run, offer.potionId);
             offer.potionTaken = true;
           }),
 
@@ -614,7 +648,7 @@ export const useSpireStore = create<SpireStore>()(
             const price = cardPrice(getCardDef(card.defId).rarity);
             if (run.gold < price) return;
             run.gold -= price;
-            run.deck.push(card);
+            grantCard(run, card);
             stock.cards = stock.cards.filter((c) => c.instanceId !== instanceId);
           }),
 
@@ -625,7 +659,7 @@ export const useSpireStore = create<SpireStore>()(
             const price = relicPrice(getRelicDef(id).rarity);
             if (run.gold < price) return;
             run.gold -= price;
-            addRelic(run, id);
+            grantRelic(run, id);
             stock.relics = stock.relics.filter((r) => r !== id);
           }),
 
@@ -636,7 +670,7 @@ export const useSpireStore = create<SpireStore>()(
             if (run.gold < 50) return;
             if (!run.potions.includes(null)) return;
             run.gold -= 50;
-            run.potions = addPotion(run.potions, id);
+            grantPotion(run, id);
             stock.potions = stock.potions.filter((p) => p !== id);
           }),
 
@@ -678,18 +712,20 @@ export const useSpireStore = create<SpireStore>()(
         restTrainDex: () =>
           update((run) => {
             if (!relicHasHook(run.relics, 'restPermDex')) return;
-            if (run.evioliteUses >= 3) return;
+            if (run.restDexUsed || run.evioliteUses >= 3) return;
             run.permDexterity += 1;
             run.evioliteUses += 1;
+            run.restDexUsed = true;
             finishRestAction(run);
           }),
 
         restTrainStr: () =>
           update((run) => {
             if (!relicHasHook(run.relics, 'restPermStr')) return;
-            if (run.megaStoneUses >= 3) return;
+            if (run.restStrUsed || run.megaStoneUses >= 3) return;
             run.permStrength += 1;
             run.megaStoneUses += 1;
+            run.restStrUsed = true;
             finishRestAction(run);
           }),
 
@@ -710,7 +746,7 @@ export const useSpireStore = create<SpireStore>()(
             const trade = run.restTrade;
             if (!trade || !trade.choices.includes(id)) return;
             run.relics = run.relics.filter((r) => r !== trade.givingId);
-            addRelic(run, id);
+            grantRelic(run, id);
             run.restTrade = null;
             finishRestAction(run);
           }),
@@ -748,7 +784,7 @@ export const useSpireStore = create<SpireStore>()(
             if (!follow.cards.some((c) => c.instanceId === instanceId)) return;
             if (follow.pick <= 1) {
               const card = follow.cards.find((c) => c.instanceId === instanceId);
-              if (card) run.deck.push(card);
+              if (card) grantCard(run, card);
               finishEvent(run);
               return;
             }
@@ -765,7 +801,7 @@ export const useSpireStore = create<SpireStore>()(
             if (follow.selected.length !== follow.pick) return;
             for (const id of follow.selected) {
               const card = follow.cards.find((c) => c.instanceId === id);
-              if (card) run.deck.push(card);
+              if (card) grantCard(run, card);
             }
             finishEvent(run);
           }),
@@ -808,10 +844,15 @@ export const useSpireStore = create<SpireStore>()(
             finishEvent(run);
           }),
 
+        ackAcquire: () =>
+          update((run) => {
+            run.pendingAcquire = null;
+          }),
+
         takeTreasure: () =>
           patch((run, rng) => {
             const offer = run.pendingRewards;
-            if (offer?.relicId) addRelic(run, offer.relicId);
+            if (offer?.relicId) grantRelic(run, offer.relicId);
             finishRewardsFlow(run, rng);
           }),
 
@@ -836,6 +877,7 @@ export const useSpireStore = create<SpireStore>()(
         const run = saved?.run
           ? {
               ...saved.run,
+              actRareTaken: saved.run.actRareTaken ?? false,
               combatResult: saved.run.combatResult ?? null,
               hallwayTheme: saved.run.hallwayTheme ?? null,
               combat: saved.run.combat
@@ -876,6 +918,13 @@ export const useSpireStore = create<SpireStore>()(
                     powersPlayedThisTurn: saved.run.combat.powersPlayedThisTurn ?? 0,
                     pendingChoiceBand: saved.run.combat.pendingChoiceBand ?? false,
                     choiceBandPicks: saved.run.combat.choiceBandPicks ?? [],
+                    pendingOptionalDiscard: saved.run.combat.pendingOptionalDiscard ?? false,
+                    optionalDiscardPicks: saved.run.combat.optionalDiscardPicks ?? [],
+                    optionalDiscardPer: saved.run.combat.optionalDiscardPer ?? [],
+                    optionalDiscardFilter: saved.run.combat.optionalDiscardFilter ?? null,
+                    optionalDiscardExhaust: saved.run.combat.optionalDiscardExhaust ?? false,
+                    optionalDiscardCardId: saved.run.combat.optionalDiscardCardId ?? null,
+                    discardedThisTurn: saved.run.combat.discardedThisTurn ?? 0,
                     playerTurnClosed: saved.run.combat.playerTurnClosed ?? false,
                     relicsUsedThisTurn: saved.run.combat.relicsUsedThisTurn ?? [],
                     activePowers: saved.run.combat.activePowers ?? [],
@@ -884,6 +933,8 @@ export const useSpireStore = create<SpireStore>()(
                   }
                 : saved.run.combat,
               restHealUsed: saved.run.restHealUsed ?? false,
+              restDexUsed: saved.run.restDexUsed ?? false,
+              restStrUsed: saved.run.restStrUsed ?? false,
               permStrength: saved.run.permStrength ?? 0,
               permDexterity: saved.run.permDexterity ?? 0,
               evioliteUses: saved.run.evioliteUses ?? 0,
@@ -893,6 +944,7 @@ export const useSpireStore = create<SpireStore>()(
               blessingFollowup: saved.run.blessingFollowup ?? null,
               lastMonsterEncounterId: saved.run.lastMonsterEncounterId ?? null,
               lastEliteEncounterId: saved.run.lastEliteEncounterId ?? null,
+              pendingAcquire: saved.run.pendingAcquire ?? null,
               map: saved.run.map
                 ? { ...saved.run.map, bossPool: saved.run.map.bossPool ?? [] }
                 : saved.run.map,

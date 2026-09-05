@@ -245,6 +245,10 @@ body {
   gap: 0.5rem;
 }
 
+body.spire-map-preview-open .app-controls {
+  display: none;
+}
+
 .sound-toggle {
   background: var(--bg-card);
   border: 1px solid var(--border);
